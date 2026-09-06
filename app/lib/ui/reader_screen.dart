@@ -117,7 +117,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   itemBuilder: (context, i) => CachedNetworkImage(
                     imageUrl: urls[i],
                     fit: BoxFit.fitWidth,
-                    httpHeaders: widget.runtime.source.headers, // 防盗链源常要求 Referer/UA
+                    // 防盗链：源 headers + 内容规则尾部 @Header（Referer 等）
+                    httpHeaders: {
+                      ...widget.runtime.source.headers,
+                      ...widget.runtime.imageRequestHeaders,
+                    },
                     fadeInDuration: const Duration(milliseconds: 120),
                     placeholder: (_, _) => const SizedBox(
                         height: 240,

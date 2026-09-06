@@ -9,12 +9,18 @@ import 'models/content.dart';
 import 'net/fetcher.dart';
 import 'net/request.dart';
 
+/// JS 取图钩子：由应用层注入 JS 执行环境（如 flutter_js），引擎保持纯 Dart。
+/// [code] 为 JS 源码；[env] 预置变量（html/result = 页面文本、baseUrl 等）。
+/// 返回 JS 求值结果（图片 URL 列表：换行分隔或 JSON 数组）；失败返回 null。
+typedef JsHook = Future<String?> Function(String code, Map<String, dynamic> env);
+
 /// 源运行时：把一个 [ComicSource] + [Fetcher] 变成可搜索、可阅读的接口。
 class SourceRuntime {
-  SourceRuntime({required this.source, required this.fetcher});
+  SourceRuntime({required this.source, required this.fetcher, this.jsHook});
 
   final ComicSource source;
   final Fetcher fetcher;
+  final JsHook? jsHook;
   final _eval = const RuleEvaluator();
 
   static const _defaultUa =
@@ -25,6 +31,17 @@ class SourceRuntime {
         'User-Agent': _defaultUa,
         ...source.headers,
       };
+
+  /// 内容规则是否为 JS 形态（`$` 前缀、getImgList、@js: 尾缀）。
+  /// 注意排除 jsonpath（`$.` 开头）与 Dart/JS 模板插值形态。
+  static bool _looksLikeJs(String rule) {
+    final r = rule.trim();
+    if (r.startsWith(r'$.') || r.startsWith('\${')) return false;
+    return r.startsWith(r'$') ||
+        r.contains('getImgList') ||
+        r.startsWith('@js:') ||
+        r.startsWith('{{');
+  }
 
   String _absUrl(String base, String v) {
     final u = v.trim();
@@ -44,6 +61,10 @@ class SourceRuntime {
   Future<dynamic> _fetchDoc(SourceRequest req) async {
     final bytes = await fetcher.send(req);
     final text = utf8.decode(bytes, allowMalformed: true);
+    return _parseDoc(text);
+  }
+
+  dynamic _parseDoc(String text) {
     final trimmed = text.trimLeft();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       return jsonDecode(text);
@@ -183,20 +204,87 @@ class SourceRuntime {
   }
 
   /// 章节图片列表（跟随 contentUrlNext 翻页）。
+  /// 内容规则为 JS 形态且注入了 [jsHook] 时，规则求值失败会回退 JS 执行。
   Future<List<String>> images(String chapterUrl, {int maxPages = 10}) async {
     final r = source.rules;
     if (r.contentUrl.isEmpty) return const [];
     final out = <String>[];
     var url = chapterUrl;
     for (var i = 0; i < maxPages && url.isNotEmpty; i++) {
-      final doc = await _fetchDoc(_request(url));
+      final req = _request(url);
+      final bytes = await fetcher.send(req);
+      final text = utf8.decode(bytes, allowMalformed: true);
+      final doc = _parseDoc(text);
       final urls = _eval.eval(doc, RuleAnalyzer(r.contentUrl).parse());
-      out.addAll(urls.map((u) => _absUrl(url, u)));
+      var page = urls.map((u) => _absUrl(url, u)).toList();
+      if (page.isEmpty && jsHook != null && _looksLikeJs(r.contentUrl)) {
+        page = await _evalJsImages(r.contentUrl, text, url);
+      }
+      out.addAll(page);
       if (r.contentUrlNext.isEmpty) break;
       final next = _eval.evalFirst(doc, RuleAnalyzer(r.contentUrlNext).parse()) ?? '';
       url = _absUrl(url, next.trim());
     }
     return out;
+  }
+
+  /// 执行 JS 取图规则：剥掉 `$`/`@js:` 前缀与 `@Header:{...}` 尾缀后交给钩子；
+  /// ppcat 契约：全局变量 `html`/`result` 为页面文本，若定义了 getImgList
+  /// 但代码未显式调用，则补 `getImgList(html)` 调用；结果按换行/JSON 数组解析。
+  Future<List<String>> _evalJsImages(String rule, String pageText, String baseUrl) async {
+    var code = rule.trim();
+    if (code.startsWith('@js:')) code = code.substring(4);
+    if (code.startsWith(r'$') && !code.startsWith(r'$.') && !code.startsWith('\${')) {
+      code = code.substring(1);
+    }
+    final headerM = RegExp(r'@Header:\s*(\{[\s\S]*\})\s*$').firstMatch(code);
+    if (headerM != null) code = code.substring(0, headerM.start).trim();
+    if (RegExp(r'function\s+getImgList\s*\(').hasMatch(code) &&
+        !RegExp(r'getImgList\s*\([^)]*\)\s*;?\s*$').hasMatch(code)) {
+      code = '$code\ngetImgList(html);';
+    }
+    String? result;
+    try {
+      result = await jsHook!(code, {
+        'html': pageText,
+        'result': pageText,
+        'baseUrl': baseUrl,
+        'key': '',
+        'page': '',
+      });
+    } catch (_) {
+      return const [];
+    }
+    if (result == null || result.trim().isEmpty) return const [];
+    final s = result.trim();
+    final raw = <String>[];
+    if (s.startsWith('[') || s.startsWith('{')) {
+      try {
+        final j = jsonDecode(s);
+        if (j is List) {
+          raw.addAll(j.map((e) => e is Map ? (e['url'] ?? e['src'] ?? '').toString() : e.toString()));
+        } else if (j is Map) {
+          raw.add((j['url'] ?? j['src'] ?? '').toString());
+        }
+      } catch (_) {}
+    }
+    if (raw.isEmpty) {
+      raw.addAll(s
+          .split(RegExp(r'[\n\r]+'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty));
+    }
+    return raw.map((u) => _absUrl(baseUrl, u)).where((u) => u.isNotEmpty).toList();
+  }
+
+  /// 内容规则尾部 `@Header:{...}` 解析出的图片请求头（防盗链源用）。
+  /// 空表 = 未指定；`Referer:none` 语义为不带 Referer，交给调用方处理。
+  Map<String, String> get imageRequestHeaders {
+    final m = RegExp(r'@Header:\s*(\{[\s\S]*\})\s*$').firstMatch(source.rules.contentUrl);
+    if (m == null) return const {};
+    final h = RuleAnalyzer.lenientJsonMap(m.group(1)!);
+    h.removeWhere((k, v) => v.toLowerCase() == 'none');
+    return h;
   }
 
   static final _tplHole = RegExp(r'\{\$([^{}]+)\}');

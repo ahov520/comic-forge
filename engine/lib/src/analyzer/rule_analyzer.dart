@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'js_lite.dart';
 
 /// 单条选段规则：从上一步结果（节点/字符串）中继续提取。
@@ -207,6 +209,32 @@ class RuleAnalyzer {
       if (e >= out.length) return out.substring(0, i);
       out = out.substring(0, i) + out.substring(e + 1);
     }
+  }
+
+  /// 宽容 JSON 对象解析（公开给 Header 语义使用）。
+  static Map<String, String> lenientJsonMap(String raw) {
+    if (raw.isEmpty) return {};
+    final cleaned = raw.trim();
+    try {
+      final j = jsonDecode(cleaned);
+      if (j is Map) return j.map((k, v) => MapEntry(k.toString(), v.toString()));
+    } catch (_) {}
+    var s = cleaned.replaceAll('\'', '"');
+    s = s.replaceAllMapped(
+        RegExp(r'([{,]\s*)([A-Za-z0-9_\-]+)\s*:'), (m) => '${m.group(1)}"${m.group(2)}":');
+    try {
+      final j = jsonDecode(s);
+      if (j is Map) return j.map((k, v) => MapEntry(k.toString(), v.toString()));
+    } catch (_) {}
+    final out = <String, String>{};
+    for (final kv in cleaned.replaceAll(RegExp(r'^\{|\}$'), '').split(',')) {
+      final i = kv.indexOf(RegExp('[:=]'));
+      if (i <= 0) continue;
+      final k = kv.substring(0, i).trim().replaceAll('"', '').replaceAll('\'', '');
+      final v = kv.substring(i + 1).trim().replaceAll('"', '').replaceAll('\'', '');
+      if (k.isNotEmpty) out[k] = v;
+    }
+    return out;
   }
 
   static String _detect(String selector) {

@@ -327,6 +327,87 @@ void main() {
       expect(detailReq.isPost, isTrue);
       expect(detailReq.body, contains('"comic_id":30956'));
     });
+  });
+
+  group('JS 取图（JsHook 注入）', () {
+    test('规则求值失败时回退 JS 钩子，结果支持换行/JSON 数组', () async {
+      final fetcher = FakeFetcher({
+        'https://m.example.com/c/1': '<html><body>div内容，无 img 规则命中</body></html>',
+        'https://m.example.com/c/2': '<html><body>page2</body></html>',
+      });
+      final src = ComicSource.fromJson({
+        'id': 'jsimg',
+        'name': 'JS取图源',
+        'url': 'https://m.example.com',
+        'rules': {
+          'contentUrl': r'''
+$function getImgList(html) {
+  return ['https://img.example.com/p1.jpg', '/img/p2.jpg'];
+}
+getImgList(html)''',
+        },
+      });
+      final calls = <Map<String, dynamic>>[];
+      Future<String?> hook(String code, Map<String, dynamic> env) async {
+        calls.add(env);
+        return 'https://img.example.com/p1.jpg\n/img/p2.jpg';
+      }
+
+      final rt = SourceRuntime(source: src, fetcher: fetcher, jsHook: hook);
+      final imgs = await rt.images('https://m.example.com/c/1');
+      expect(imgs, [
+        'https://img.example.com/p1.jpg',
+        'https://m.example.com/img/p2.jpg',
+      ], reason: 'JS 结果按换行拆分并绝对化');
+      expect(calls, hasLength(1));
+      expect(calls.single['html'], contains('div内容'));
+      expect(calls.single['baseUrl'], 'https://m.example.com/c/1');
+    });
+
+    test('JSON 数组形式结果', () async {
+      final fetcher = FakeFetcher({'https://m.example.com/c/9': '<html>x</html>'});
+      final src = ComicSource.fromJson({
+        'id': 'jsjson',
+        'name': 'JS JSON源',
+        'url': 'https://m.example.com',
+        'rules': {'contentUrl': r'$function getImgList(html){return []}'},
+      });
+      final rt = SourceRuntime(
+        source: src,
+        fetcher: fetcher,
+        jsHook: (code, env) async =>
+            jsonEncode([{'url': 'https://img.example.com/a.jpg'}]),
+      );
+      expect(await rt.images('https://m.example.com/c/9'),
+          ['https://img.example.com/a.jpg']);
+    });
+
+    test('jsonpath 规则不触发 JS 回退；无钩子时 JS 规则静默为空', () async {
+      final fetcher = FakeFetcher({'https://m.example.com/c/3': '{"pics":["/a.jpg"]}'});
+      // 1) jsonpath 规则 + 钩子存在但不应被调用
+      var hookCalled = false;
+      final src1 = ComicSource.fromJson({
+        'id': 'jp',
+        'url': 'https://m.example.com',
+        'rules': {'contentUrl': r'$.pics[*]'},
+      });
+      final rt1 = SourceRuntime(source: src1, fetcher: fetcher, jsHook: (c, e) async {
+        hookCalled = true;
+        return null;
+      });
+      expect(await rt1.images('https://m.example.com/c/3'),
+          ['https://m.example.com/a.jpg']);
+      expect(hookCalled, isFalse, reason: 'jsonpath 不算 JS 形态');
+
+      // 2) JS 规则 + 无钩子 → 空列表不抛错
+      final src2 = ComicSource.fromJson({
+        'id': 'js2',
+        'url': 'https://m.example.com',
+        'rules': {'contentUrl': r'$function getImgList(html){}'},
+      });
+      final rt2 = SourceRuntime(source: src2, fetcher: fetcher);
+      expect(await rt2.images('https://m.example.com/c/3'), isEmpty);
+    });
 
     test('ruleChapterUrlNext 章节列表翻页（去重合并）', () async {
       const detailP1 = '''
