@@ -15,11 +15,8 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
 // 统一子项目 JVM target（flutter_js 等三方插件 Kotlin 1.8 与 Java 11 冲突）
+// 注意：必须在 evaluationDependsOn 之前注册，否则子项目已被求值
 subprojects {
     afterEvaluate {
         extensions.findByName("android")?.let { androidExt ->
@@ -38,6 +35,10 @@ subprojects {
             }
         }
     }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
