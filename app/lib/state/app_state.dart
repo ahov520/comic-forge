@@ -84,6 +84,7 @@ class AppState extends ChangeNotifier {
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kRepoRefresh = 'cf.repoRefresh';
+  static const _kAdBlock = 'cf.adBlock';
   static const _detailCacheCap = 100;
 
   final List<ComicSource> sources = [];
@@ -92,6 +93,8 @@ class AppState extends ChangeNotifier {
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
+  /// 广告拦截规则（null = 未启用）。
+  AdBlockRules? adBlock;
   bool darkMode = true;
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
@@ -125,6 +128,9 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kRepoRefresh) ?? '{}') as Map<String, dynamic>)
           .map((k, v) => MapEntry(k, v as int)));
+    final adText = sp.getString(_kAdBlock);
+    adBlock = adText == null ? null : AdBlockRules.tryParse(adText);
+    SourceService.instance.adBlock = adBlock;
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     // 首次启动自动导入内置源快照
@@ -400,5 +406,24 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setDouble(_kReaderBrightness, readerBrightness);
     notifyListeners();
+  }
+
+  /// 导入广告拦截规则 JSON（坏 JSON 返回 false）；text 为 null/空则清除。
+  Future<bool> setAdBlock(String? text) async {
+    final sp = await SharedPreferences.getInstance();
+    if (text == null || text.trim().isEmpty) {
+      adBlock = null;
+      SourceService.instance.adBlock = null;
+      await sp.remove(_kAdBlock);
+      notifyListeners();
+      return true;
+    }
+    final rules = AdBlockRules.tryParse(text);
+    if (rules == null) return false;
+    adBlock = rules;
+    SourceService.instance.adBlock = rules;
+    await sp.setString(_kAdBlock, text);
+    notifyListeners();
+    return true;
   }
 }

@@ -100,6 +100,9 @@ class SourceService {
   /// 订阅/更新检查用（fetcher 复用全局实例）。
   RepoClient get repoClient => RepoClient(fetcher: fetcher);
 
+  /// 广告拦截规则（AppState 载入/设置时同步；null = 不过滤）。
+  AdBlockRules? adBlock;
+
   SourceRuntime runtimeFor(ComicSource source) {
     return _runtimes.putIfAbsent(
         source.id,
@@ -108,7 +111,10 @@ class SourceService {
   }
 
   Future<List<String>> imagesFor(SourceRuntime runtime, String chapterUrl) {
-    return _imgFutures.putIfAbsent(chapterUrl, () => runtime.images(chapterUrl));
+    return _imgFutures.putIfAbsent(chapterUrl, () async {
+      final urls = await runtime.images(chapterUrl);
+      return adBlock?.filterImages(urls) ?? urls;
+    });
   }
 
   /// 主动预取（失败静默，不阻塞阅读）。

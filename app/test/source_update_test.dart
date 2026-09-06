@@ -117,4 +117,25 @@ void main() {
       expect(r3.error, isNotNull);
     });
   });
+
+  group('AppState 广告拦截', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('导入/清除/持久化还原', () async {
+      final st = AppState();
+      expect(await st.setAdBlock('{bad'), isFalse, reason: '坏 JSON 拒绝');
+      expect(await st.setAdBlock('{"urlRules":["ad.net"]}'), isTrue);
+      expect(st.adBlock!.blocksImageUrl('https://ad.net/1.jpg'), isTrue);
+
+      final st2 = AppState();
+      await st2.load();
+      expect(st2.adBlock, isNotNull, reason: 'load 应还原规则');
+      expect(st2.adBlock!.blocksImageUrl('https://ad.net/1.jpg'), isTrue);
+
+      await st2.setAdBlock(null);
+      expect(st2.adBlock, isNull);
+    });
+  });
 }

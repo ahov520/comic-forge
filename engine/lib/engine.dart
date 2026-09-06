@@ -7,6 +7,7 @@ library;
 
 export 'src/models/comic_source.dart';
 export 'src/models/content.dart';
+export 'src/models/ad_block.dart';
 export 'src/analyzer/rule_analyzer.dart';
 export 'src/analyzer/rule_evaluator.dart';
 export 'src/adapter/hviewer_adapter.dart';
