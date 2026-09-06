@@ -5,7 +5,9 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
+import 'search_screen.dart';
 import 'skeleton.dart';
+import 'source_screen.dart';
 import 'widgets.dart';
 
 /// 书架。
@@ -190,150 +192,260 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   ComicSource? _source;
-  String? _entry;
-  late Future<Paged<Book>> _future;
+  (String, String)? _entry;
+  Future<Paged<Book>>? _future;
 
   @override
   void initState() {
     super.initState();
-    _pickDefaultSource();
-  }
-
-  void _pickDefaultSource() {
-    final enabled = widget.state.sources.where((s) => s.enabled).toList();
-    _source = enabled.isEmpty ? null : enabled.first;
-    _entry = null;
-    _future = Future.value(Paged(const []));
-  }
-
-  void _loadEntry(String entry) {
-    final src = _source;
-    if (src == null) return;
-    final entries = SourceService.instance.runtimeFor(src).exploreEntries();
-    final url = entries.firstWhere((e) => e.$1 == entry, orElse: () => ('', entry)).$2;
-    setState(() {
-      _entry = entry;
-      _future = SourceService.instance
-          .runtimeFor(src)
-          .explore(url)
-          .then((p) {
-        widget.state.reportSourceHealth([src.id], const {});
-        return p;
-      }).catchError((Object e) {
-        widget.state.reportSourceHealth(const [], {src.id: e.toString()});
-        throw e;
-      });
-    });
+    _syncSource();
+    widget.state.addListener(_onStateChanged);
   }
 
   @override
+  void didUpdateWidget(covariant ExploreScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_onStateChanged);
+      _source = null;
+      _entry = null;
+      _future = null;
+      _syncSource();
+      widget.state.addListener(_onStateChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.state.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  void _onStateChanged() => setState(_syncSource);
+
+  void _syncSource() {
+    final enabled = widget.state.sources.where((s) => s.enabled).toList();
+    final source =
+        enabled.where((s) => s.id == _source?.id).firstOrNull ??
+        enabled.firstOrNull;
+    if (!identical(source, _source)) {
+      _source = source;
+      _entry = null;
+      _future = null;
+    }
+  }
+
+  void _selectSource(String? id) {
+    final source = widget.state.sources
+        .where((s) => s.enabled && s.id == id)
+        .firstOrNull;
+    if (source == null || source.id == _source?.id) return;
+    setState(() {
+      _source = source;
+      _entry = null;
+      _future = null;
+    });
+  }
+
+  void _loadEntry((String, String) entry) {
+    final source = _source;
+    if (source == null) return;
+    setState(() {
+      _entry = entry;
+      _future = _fetchEntry(source, entry.$2);
+      // 下一帧 FutureBuilder 才订阅；即时失败或提前离页也要接住异常。
+      // ignore 不改变原 Future，界面仍会收到错误并显示重试入口。
+      _future!.ignore();
+    });
+  }
+
+  Future<Paged<Book>> _fetchEntry(ComicSource source, String url) async {
+    final state = widget.state;
+    try {
+      final page = await SourceService.instance.runtimeFor(source).explore(url);
+      await state.reportSourceHealth([source.id], const {});
+      return page;
+    } catch (e) {
+      await state.reportSourceHealth(const [], {source.id: e.toString()});
+      rethrow;
+    }
+  }
+
+  void _openSources() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => SourceScreen(state: widget.state)));
+
+  void _openSearch() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => SearchScreen(state: widget.state)));
+
+  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.state,
-      builder: (context, _) {
-        final enabled = widget.state.sources.where((s) => s.enabled).toList();
-        final source = _source ?? (enabled.isEmpty ? null : enabled.first);
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('探索'),
-            actions: [
-              if (enabled.isNotEmpty)
-                DropdownButton<ComicSource>(
-                  value: source,
-                  underline: const SizedBox(),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  items: enabled
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
-                      .toList(),
-                  onChanged: (s) => setState(() {
-                    _source = s;
-                    _entry = null;
-                  }),
-                ),
-            ],
-          ),
-          body: enabled.isEmpty
-              ? const Center(child: Text('还没有可用源，先去「源」页订阅仓库'))
-              : Column(
-                  children: [
-                    if (source != null)
-                      Builder(builder: (context) {
-                        final entries =
-                            SourceService.instance.runtimeFor(source).exploreEntries();
-                        if (entries.isEmpty) return const SizedBox(height: 8);
-                        // 右端渐隐：提示分类条可横向滚动，避免 chip 被硬裁的观感
-                        return ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            stops: [0.9, 1.0],
-                            colors: [Colors.white, Colors.transparent],
-                          ).createShader(bounds),
-                          blendMode: BlendMode.dstIn,
-                          child: SizedBox(
-                            height: 44,
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              children: entries
-                                  .map((e) => Padding(
-                                        padding: const EdgeInsets.only(right: 8),
-                                        child: FilterChip(
-                                          label: Text(e.$1),
-                                          selected: _entry == e.$1,
-                                          onSelected: (_) => _loadEntry(e.$1),
-                                        ),
-                                      ))
-                                  .toList(),
-                            ),
-                          ),
-                        );
-                      }),
-                    Expanded(
-                      child: _entry == null
-                          ? const Center(child: Text('选一个分类开始探索'))
-                          : FutureBuilder<Paged<Book>>(
-                              future: _future,
-                              builder: (context, snap) {
-                                if (snap.hasError) {
-                                  return ErrorView(error: snap.error,
-                                      onRetry: () => _loadEntry(_entry!));
-                                }
-                                if (!snap.hasData) {
-                                  // 骨架网格：与书架封面网格同构，秒开观感
-                                  return GridView.builder(
-                                    padding: const EdgeInsets.all(12),
-                                    gridDelegate:
-                                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 120,
-                                      childAspectRatio: 0.62,
-                                      crossAxisSpacing: 12,
-                                      mainAxisSpacing: 12,
-                                    ),
-                                    itemCount: 8,
-                                    itemBuilder: (context, i) => Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Expanded(
-                                            child: SkeletonBox(
-                                                height: 140, radius: 10)),
-                                        const SizedBox(height: 6),
-                                        SkeletonBox(height: 10, radius: 4),
-                                      ],
-                                    ),
-                                  );
-                                }
-                                return ListView.builder(
-                                  itemCount: snap.data!.items.length,
-                                  itemBuilder: (context, i) =>
-                                      BookTile(book: snap.data!.items[i], state: widget.state),
-                                );
-                              },
-                            ),
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = widget.state.sources.where((s) => s.enabled).toList();
+    final source = _source;
+    final entries = source == null
+        ? const <(String, String)>[]
+        : SourceService.instance.runtimeFor(source).exploreEntries();
+    return Scaffold(
+      appBar: AppBar(title: const Text('探索')),
+      body: source == null
+          ? EmptyStateView(
+              icon: Icons.travel_explore,
+              title: '暂无可用漫画源',
+              message: '添加或启用一个漫画源，开始发现喜欢的漫画。',
+              actionLabel: '管理源',
+              onAction: _openSources,
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey(source.id),
+                    initialValue: source.id,
+                    isExpanded: true,
+                    itemHeight: null,
+                    decoration: InputDecoration(
+                      labelText: '漫画源',
+                      prefixIcon: const Icon(Icons.public),
+                      filled: true,
+                      fillColor: scheme.surfaceContainerLow,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
-                  ],
+                    borderRadius: BorderRadius.circular(16),
+                    items: enabled.map((s) {
+                      final name = s.name.trim().isEmpty ? s.id : s.name;
+                      return DropdownMenuItem(
+                        value: s.id,
+                        child: Tooltip(
+                          message: name,
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: _selectSource,
+                  ),
                 ),
+                if (entries.isNotEmpty)
+                  // 保留右端渐隐提示；高度随字号增长，长分类名可查看完整提示。
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      stops: [0.9, 1.0],
+                      colors: [Colors.white, Colors.transparent],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.dstIn,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: entries
+                            .map(
+                              (entry) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Tooltip(
+                                  message: entry.$1,
+                                  child: ChoiceChip(
+                                    label: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth:
+                                            MediaQuery.sizeOf(context).width *
+                                            0.7,
+                                      ),
+                                      child: Text(
+                                        entry.$1,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    selected: _entry == entry,
+                                    onSelected: (_) => _loadEntry(entry),
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                Expanded(child: _content(entries)),
+              ],
+            ),
+    );
+  }
+
+  Widget _content(List<(String, String)> entries) {
+    if (entries.isEmpty) {
+      return EmptyStateView(
+        icon: Icons.explore_off_outlined,
+        title: '当前源暂无探索分类',
+        message: '可以切换上方漫画源，或通过搜索查找漫画。',
+        actionLabel: '去搜索',
+        onAction: _openSearch,
+      );
+    }
+    final entry = _entry;
+    if (entry == null) {
+      return const EmptyStateView(
+        icon: Icons.explore_outlined,
+        title: '选一个分类开始探索',
+        message: '点按上方分类，发现下一部喜欢的漫画。',
+      );
+    }
+    return FutureBuilder<Paged<Book>>(
+      // 每次切分类或重试都丢弃旧快照，避免旧漫画短暂出现在新分类下。
+      key: ObjectKey(_future),
+      future: _future,
+      builder: (context, snapshot) {
+        final Widget content;
+        if (snapshot.connectionState != ConnectionState.done) {
+          content = const BookListSkeleton(key: ValueKey('loading'));
+        } else if (snapshot.hasError) {
+          content = EmptyStateView(
+            key: const ValueKey('error'),
+            icon: Icons.cloud_off_outlined,
+            title: '暂时无法加载漫画',
+            message: '检查网络后重试，或切换上方漫画源。',
+            actionLabel: '重试',
+            onAction: () => _loadEntry(entry),
+          );
+        } else {
+          final books = snapshot.data!.items;
+          content = books.isEmpty
+              ? EmptyStateView(
+                  key: const ValueKey('empty'),
+                  icon: Icons.auto_stories_outlined,
+                  title: '这个分类还没有漫画',
+                  message: '试试其他分类，或稍后重新加载。',
+                  actionLabel: '重新加载',
+                  onAction: () => _loadEntry(entry),
+                )
+              : ListView.builder(
+                  key: const ValueKey('results'),
+                  padding: const EdgeInsets.only(top: 6, bottom: 12),
+                  itemCount: books.length,
+                  itemBuilder: (context, i) => BookTile(
+                    key: ObjectKey(books[i]),
+                    book: books[i],
+                    state: widget.state,
+                  ),
+                );
+        }
+        return AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          switchInCurve: Curves.easeOut,
+          child: content,
         );
       },
     );

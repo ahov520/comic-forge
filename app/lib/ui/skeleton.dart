@@ -23,7 +23,21 @@ class _SkeletonBoxState extends State<SkeletonBox>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
+  );
+  late final Animation<double> _opacity = _controller
+      .drive(CurveTween(curve: Curves.easeInOut))
+      .drive(Tween<double>(begin: 0.45, end: 0.9));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {
@@ -35,15 +49,73 @@ class _SkeletonBoxState extends State<SkeletonBox>
   Widget build(BuildContext context) {
     final base = Theme.of(context).colorScheme.surfaceContainerHighest;
     return FadeTransition(
-      opacity: Tween<double>(begin: 0.45, end: 0.9).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-      ),
+      opacity: _opacity,
       child: Container(
         width: widget.width,
         height: widget.height,
         decoration: BoxDecoration(
           color: base,
           borderRadius: BorderRadius.circular(widget.radius),
+        ),
+      ),
+    );
+  }
+}
+
+/// 探索列表骨架：封面、标题与元信息的位置对齐 BookTile，加载后不跳布局。
+class BookListSkeleton extends StatelessWidget {
+  const BookListSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: '正在加载漫画',
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: ListView.builder(
+          padding: const EdgeInsets.only(top: 6, bottom: 12),
+          itemCount: 6,
+          itemBuilder: (context, index) => Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            color: scheme.surfaceContainerLow,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(width: 64, height: 96, radius: 10),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: 12),
+                        SkeletonBox(height: 20, radius: 6),
+                        SizedBox(height: 12),
+                        FractionallySizedBox(
+                          widthFactor: 0.7,
+                          child: SkeletonBox(height: 12, radius: 4),
+                        ),
+                        SizedBox(height: 8),
+                        FractionallySizedBox(
+                          widthFactor: 0.9,
+                          child: SkeletonBox(height: 12, radius: 4),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
