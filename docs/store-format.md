@@ -120,3 +120,21 @@ https://gitee.com/<user>/<repo>
 ## 皮皮喵「本地备份」导入
 
 待 Phase 0 拿到备份样本后实现（`PipimiaoBackupImporter`）。
+
+## 广告拦截规则 JSON
+
+设置页可导入；作用于阅读器图片流（引擎 `AdBlockRules`，见
+`engine/lib/src/models/ad_block.dart`）。键名宽松，坏正则条目跳过：
+
+```json
+{
+  "enabled": true,
+  "urlRules":  ["(?i)adserver", "\\.abc\\.net/img/"],
+  "nameRules": ["预告|插页"]
+}
+```
+
+- `urlRules`（别名 `adUrl`）：正则列表，命中即过滤该图片 URL；
+  普通域名即子串匹配，大小写不敏感。
+- `nameRules`（别名 `adName`）：正则列表，命中即过滤（预留章节名过滤）。
+- 顶层为纯字符串数组时整体视为 `urlRules`。
