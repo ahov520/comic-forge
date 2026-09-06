@@ -19,6 +19,33 @@ class SourceScreen extends StatefulWidget {
 class _SourceScreenState extends State<SourceScreen> {
   bool _subscribing = false;
   String? _lastResult;
+  String? _refreshingRepo;
+
+  /// 检查一个订阅仓库的更新。
+  Future<void> _refreshRepo(String repo) async {
+    if (_refreshingRepo != null) return;
+    setState(() => _refreshingRepo = repo);
+    final r = await widget.state.refreshRepo(repo);
+    if (mounted) {
+      setState(() {
+        _refreshingRepo = null;
+        _lastResult = r.summary;
+      });
+    }
+  }
+
+  /// 检查全部订阅仓库。
+  Future<void> _refreshAllRepos() async {
+    if (_refreshingRepo != null) return;
+    setState(() => _refreshingRepo = '*');
+    final results = await widget.state.refreshAllRepos();
+    if (mounted) {
+      setState(() {
+        _refreshingRepo = null;
+        _lastResult = results.map((r) => r.summary).join('；');
+      });
+    }
+  }
 
   /// 导入皮皮喵「本地备份」(.pbak)。
   Future<void> _importPipimiaoBackup() async {
@@ -114,6 +141,8 @@ class _SourceScreenState extends State<SourceScreen> {
                     setState(() => _lastResult =
                         n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
                   }
+                } else if (v == 'refreshAll') {
+                  await _refreshAllRepos();
                 } else if (v == 'disableUnhealthy') {
                   final n = await widget.state.disableUnhealthySources();
                   if (mounted) {
@@ -148,6 +177,17 @@ class _SourceScreenState extends State<SourceScreen> {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
+                if (widget.state.repos.isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'refreshAll',
+                    child: ListTile(
+                      leading: Icon(Icons.cloud_download_outlined),
+                      title: Text('全部检查更新'),
+                      subtitle: Text('逐个拉取订阅仓库，规则有变才更新'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'disableUnhealthy',
                   child: ListTile(
@@ -201,11 +241,28 @@ class _SourceScreenState extends State<SourceScreen> {
                 ),
               ),
             if (widget.state.repos.isNotEmpty)
-              ...widget.state.repos.map((r) => ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.link),
-                    title: Text(r, style: const TextStyle(fontSize: 13)),
-                  )),
+              ...widget.state.repos.map((r) {
+                final lastAt = widget.state.repoLastRefresh[r];
+                final last = lastAt == null
+                    ? '尚未检查更新'
+                    : '上次更新: ${DateTime.fromMillisecondsSinceEpoch(lastAt).toString().substring(0, 16)}';
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.link),
+                  title: Text(r, style: const TextStyle(fontSize: 13)),
+                  subtitle: Text(last, style: const TextStyle(fontSize: 11)),
+                  trailing: _refreshingRepo == r || _refreshingRepo == '*'
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton(
+                          tooltip: '检查更新',
+                          icon: const Icon(Icons.sync, size: 20),
+                          onPressed: () => _refreshRepo(r),
+                        ),
+                );
+              }),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Align(

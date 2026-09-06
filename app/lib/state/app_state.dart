@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:engine/engine.dart';
 
+import 'source_update.dart';
+import '../services/source_service.dart';
+
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
   ReadingProgress({
@@ -80,6 +83,7 @@ class AppState extends ChangeNotifier {
   static const _kProgress = 'cf.progress';
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
+  static const _kRepoRefresh = 'cf.repoRefresh';
   static const _detailCacheCap = 100;
 
   final List<ComicSource> sources = [];
@@ -87,6 +91,7 @@ class AppState extends ChangeNotifier {
   final List<Book> shelf = [];
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
+  final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
   bool darkMode = true;
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
@@ -116,6 +121,10 @@ class AppState extends ChangeNotifier {
       ..addAll((jsonDecode(sp.getString(_kDetailCache) ?? '{}') as Map<String, dynamic>)
           .map((k, v) =>
               MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>))));
+    repoLastRefresh
+      ..clear()
+      ..addAll((jsonDecode(sp.getString(_kRepoRefresh) ?? '{}') as Map<String, dynamic>)
+          .map((k, v) => MapEntry(k, v as int)));
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     // 首次启动自动导入内置源快照
@@ -174,6 +183,43 @@ class AppState extends ChangeNotifier {
   }
 
   CachedDetail? detailCacheFor(String bookUrl) => detailCache[bookUrl];
+
+  /// 检查一个订阅仓库的更新：重新拉取 store，规则有变则就地更新（保留
+  /// 启用/权重/健康），新增源直接追加。[client] 可注入（测试用）。
+  Future<RepoRefreshResult> refreshRepo(String repoUrl, {RepoClient? client}) async {
+    final c = client ?? SourceService.instance.repoClient;
+    try {
+      final bundle = await c.subscribe(repoUrl);
+      final r = SourceUpdate.merge(sources, bundle.sources);
+      sources
+        ..clear()
+        ..addAll(r.sources);
+      repoLastRefresh[repoUrl] = DateTime.now().millisecondsSinceEpoch;
+      final sp = await SharedPreferences.getInstance();
+      await sp.setString(_kRepoRefresh, jsonEncode(repoLastRefresh));
+      await _persistSources();
+      notifyListeners();
+      return RepoRefreshResult(
+        repo: repoUrl,
+        added: r.added,
+        updated: r.updated,
+        total: bundle.sources.length,
+        track: bundle.track,
+      );
+    } catch (e) {
+      final msg = e.toString().split('\n').first;
+      return RepoRefreshResult(repo: repoUrl, added: 0, updated: 0, total: 0, error: msg);
+    }
+  }
+
+  /// 逐个检查全部订阅仓库。
+  Future<List<RepoRefreshResult>> refreshAllRepos({RepoClient? client}) async {
+    final out = <RepoRefreshResult>[];
+    for (final repo in repos) {
+      out.add(await refreshRepo(repo, client: client));
+    }
+    return out;
+  }
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
   /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。

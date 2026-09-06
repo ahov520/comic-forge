@@ -97,6 +97,9 @@ class SourceService {
   /// 章节图片 Future 缓存：同章节去重 + 预加载下一话复用。
   final Map<String, Future<List<String>>> _imgFutures = {};
 
+  /// 订阅/更新检查用（fetcher 复用全局实例）。
+  RepoClient get repoClient => RepoClient(fetcher: fetcher);
+
   SourceRuntime runtimeFor(ComicSource source) {
     return _runtimes.putIfAbsent(
         source.id,
