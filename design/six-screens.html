@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Comic Forge — 六屏设计稿 (human-approachable)</title>
+<style>
+  /* ============ Open Design direction: human-approachable ============ */
+  :root {
+    --bg: oklch(96% 0.004 240);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(90% 0.006 240);
+    --accent: oklch(56% 0.12 170);
+    --accent-soft: oklch(56% 0.12 170 / 0.12);
+    --radius: 16px;
+    --display: 'Söhne', 'Avenir Next', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--body);
+    background: var(--bg);
+    color: var(--fg);
+    padding: 48px 32px;
+    display: flex; flex-wrap: wrap; gap: 40px; justify-content: center;
+  }
+  h1 { font-family: var(--display); font-size: 28px; letter-spacing: -0.02em; width: 100%; text-align: center; }
+  .sub { width: 100%; text-align: center; color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .phone {
+    width: 340px; height: 720px; background: var(--bg); border-radius: 36px;
+    border: 1px solid var(--border); box-shadow: 0 24px 48px -24px oklch(20% 0.02 240 / 0.25);
+    overflow: hidden; display: flex; flex-direction: column; position: relative; flex-shrink: 0;
+  }
+  .phone .statusbar { height: 36px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; font-size: 12px; font-weight: 600; color: var(--fg); }
+  .screen-title { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: -0.02em;
+    padding: 8px 20px 12px; }
+  .navbar { margin-top: auto; background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; height: 64px; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; font-size: 10.5px; color: var(--muted); }
+  .nav-item.active { color: var(--accent); font-weight: 600; }
+  .nav-item .ico { font-size: 20px; line-height: 1; }
+  .content { flex: 1; overflow: hidden; padding: 0 20px; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: none;
+    letter-spacing: 0.02em; margin: 14px 0 10px; }
+  .chip-row { display: flex; gap: 8px; overflow: hidden; margin-bottom: 12px; }
+  .chip { padding: 7px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+    font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; display: flex; gap: 12px; margin-bottom: 10px; box-shadow: 0 1px 2px oklch(20% 0.02 240 / 0.04); }
+  .cover { width: 60px; height: 80px; border-radius: 10px; flex-shrink: 0; position: relative; overflow: hidden; }
+  .cover .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; }
+  .c1 { background: linear-gradient(135deg, oklch(70% 0.09 170), oklch(56% 0.12 170)); }
+  .c2 { background: linear-gradient(135deg, oklch(72% 0.10 60), oklch(60% 0.13 30)); }
+  .c3 { background: linear-gradient(135deg, oklch(68% 0.10 280), oklch(56% 0.13 300)); }
+  .c4 { background: linear-gradient(135deg, oklch(70% 0.10 200), oklch(55% 0.11 230)); }
+  .c5 { background: linear-gradient(135deg, oklch(75% 0.09 90), oklch(62% 0.12 70)); }
+  .card .info { flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .card .t { font-weight: 650; font-size: 15px; margin-bottom: 4px; }
+  .card .m { font-size: 12px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .card .fav { color: var(--accent); font-size: 16px; align-self: center; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .gitem .cover { width: 100%; height: 118px; border-radius: 12px; }
+  .gitem .t { font-size: 11.5px; margin-top: 6px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .searchbar { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    height: 42px; display: flex; align-items: center; padding: 0 14px; gap: 8px; color: var(--muted);
+    font-size: 14px; margin-bottom: 12px; }
+  .btn { background: var(--accent); color: #fff; font-weight: 650; border-radius: 14px;
+    height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .btn.tonal { background: var(--accent-soft); color: var(--accent); }
+  .row-line { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .row-line .ico { color: var(--muted); font-size: 18px; }
+  .row-line .grow { flex: 1; }
+  .row-line .chev { color: var(--muted); }
+  .switch { width: 40px; height: 22px; border-radius: 999px; background: var(--accent); position: relative; }
+  .switch::after { content: ''; position: absolute; right: 2px; top: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; }
+  .hint { font-size: 11px; color: var(--muted); padding: 6px 4px; }
+  /* 阅读器 */
+  .reader { background: #0c0c0e; color: #eee; }
+  .reader .content { padding: 0; }
+  .page { width: 100%; display: flex; align-items: center; justify-content: center; }
+  .reader-bar { position: absolute; top: 36px; left: 12px; right: 12px; display: flex; align-items: center; gap: 10px;
+    background: oklch(20% 0.02 240 / 0.55); backdrop-filter: blur(10px); border-radius: 12px; padding: 8px 12px;
+    font-size: 12px; }
+  .caption { width: 100%; text-align: center; margin-top: 10px; font-weight: 650; font-family: var(--display); }
+</style>
+</head>
+<body>
+<h1>Comic Forge · 视觉设计稿</h1>
+<div class="sub">direction: human-approachable (Airbnb/Duolingo 系统) · Material 3 落地 · 2026-09-06</div>
+
+<!-- 1 书架 -->
+<div>
+<div class="phone">
+  <div class="statusbar"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="screen-title">书架</div>
+  <div class="content">
+    <div class="chip-row">
+      <div class="chip on">全部</div><div class="chip">连载中</div><div class="chip">已完结</div>
+    </div>
+    <div class="grid">
+      <div class="gitem"><div class="cover c1"><div class="ph">🄰</div></div><div class="t">海贼王</div></div>
+      <div class="gitem"><div class="cover c2"><div class="ph">☄</div></div><div class="t">火影忍者</div></div>
+      <div class="gitem"><div class="cover c3"><div class="ph">♣</div></div><div class="t">咒术回战</div></div>
+      <div class="gitem"><div class="cover c4"><div class="ph">◐</div></div><div class="t">间谍过家家</div></div>
+      <div class="gitem"><div class="cover c5"><div class="ph">✦</div></div><div class="t">链锯人</div></div>
+      <div class="gitem"><div class="cover c1"><div class="ph">関</div></div><div class="t">一拳超人</div></div>
+    </div>
+  </div>
+  <div class="navbar">
+    <div class="nav-item active"><div class="ico">▤</div>书架</div>
+    <div class="nav-item"><div class="ico">◉</div>探索</div>
+    <div class="nav-item"><div class="ico">⌕</div>搜索</div>
+    <div class="nav-item"><div class="ico">▦</div>源</div>
+    <div class="nav-item"><div class="ico">⚙</div>设置</div>
+  </div>
+</div>
+<div class="caption">① 书架 — 3 列封面网格 + 状态筛选</div>
+</div>
+
+<!-- 2 探索 -->
+<div>
+<div class="phone">
+  <div class="statusbar"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="screen-title">探索</div>
+  <div class="content">
+    <div class="searchbar" style="border-radius: 12px; height: 36px;">皮皮喵社区源 ▾</div>
+    <div class="chip-row">
+      <div class="chip on">连载</div><div class="chip">完结</div><div class="chip">排行</div><div class="chip">最新</div>
+    </div>
+    <div class="card"><div class="cover c2"></div>
+      <div class="info"><div class="t">鬼灭之刃</div><div class="m">吾峠呼世晴 · 热血/奇幻</div><div class="m">更新至 205 话</div></div>
+      <div class="fav">♡</div></div>
+    <div class="card"><div class="cover c4"></div>
+      <div class="info"><div class="t">蓝色监狱</div><div class="m">金城宗幸 · 运动</div><div class="m">更新至 280 话</div></div>
+      <div class="fav">♡</div></div>
+    <div class="card"><div class="cover c5"></div>
+      <div class="info"><div class="t">葬送的芙莉莲</div><div class="m">山田钟人 · 奇幻</div><div class="m">更新至 140 话</div></div>
+      <div class="fav">♥</div></div>
+  </div>
+  <div class="navbar">
+    <div class="nav-item"><div class="ico">▤</div>书架</div>
+    <div class="nav-item active"><div class="ico">◉</div>探索</div>
+    <div class="nav-item"><div class="ico">⌕</div>搜索</div>
+    <div class="nav-item"><div class="ico">▦</div>源</div>
+    <div class="nav-item"><div class="ico">⚙</div>设置</div>
+  </div>
+</div>
+<div class="caption">② 探索 — 源选择 + 分类 chips + 信息卡</div>
+</div>
+
+<!-- 3 搜索 -->
+<div>
+<div class="phone">
+  <div class="statusbar"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="screen-title">搜索</div>
+  <div class="content">
+    <div class="searchbar">海贼王　⌕</div>
+    <div class="hint">正在聚合 3 个源 · 2 成功 1 超时</div>
+    <div class="card"><div class="cover c1"></div>
+      <div class="info"><div class="t">海贼王</div><div class="m">尾田荣一郎 · 冒险</div><div class="m">源: 皮皮喵社区 A</div></div>
+      <div class="fav">♥</div></div>
+    <div class="card"><div class="cover c2"></div>
+      <div class="info"><div class="t">海贼王/航海王</div><div class="m">尾田荣一郎</div><div class="m">源: 拾荒漫画</div></div>
+      <div class="fav">♡</div></div>
+    <div class="card"><div class="cover c3"></div>
+      <div class="info"><div class="t">ONE PIECE 彩色版</div><div class="m">尾田荣一郎 · 全彩</div><div class="m">源: 咕咕漫画</div></div>
+      <div class="fav">♡</div></div>
+  </div>
+  <div class="navbar">
+    <div class="nav-item"><div class="ico">▤</div>书架</div>
+    <div class="nav-item"><div class="ico">◉</div>探索</div>
+    <div class="nav-item active"><div class="ico">⌕</div>搜索</div>
+    <div class="nav-item"><div class="ico">▦</div>源</div>
+    <div class="nav-item"><div class="ico">⚙</div>设置</div>
+  </div>
+</div>
+<div class="caption">③ 搜索 — 多源聚合 + 失败源提示</div>
+</div>
+
+<!-- 4 阅读器 -->
+<div>
+<div class="phone reader">
+  <div class="statusbar" style="color:#eee"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="reader-bar"><span>✕</span><span style="flex:1">海贼王 · 第1044话</span><span>⋮</span></div>
+  <div class="content">
+    <div class="page" style="height:420px;background:linear-gradient(180deg,#2a2a30,#3a3a44);font-size:13px;color:#888">漫画页 1</div>
+    <div class="page" style="height:300px;background:linear-gradient(180deg,#33333b,#26262c);font-size:13px;color:#888">漫画页 2</div>
+  </div>
+  <div class="navbar" style="background:#161619;border-top-color:#2a2a30;color:#888">
+    <div class="nav-item"><div class="ico">◀</div>上一话</div>
+    <div class="nav-item"><div class="ico">≡</div>1044/1300</div>
+    <div class="nav-item"><div class="ico">☀</div>亮度</div>
+    <div class="nav-item"><div class="ico">▶</div>下一话</div>
+  </div>
+</div>
+<div class="caption">④ 阅读器 — 沉浸黑底 + 毛玻璃工具条 + 话间导航</div>
+</div>
+
+<!-- 5 源管理 -->
+<div>
+<div class="phone">
+  <div class="statusbar"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="screen-title">源 <span style="float:right;font-size:13px;font-weight:600;color:var(--accent)">＋ 订阅仓库</span></div>
+  <div class="content">
+    <div class="label">已订阅仓库</div>
+    <div class="card"><div class="info"><div class="t">AcgLibrary/ppcat_store</div><div class="m">上次同步 09-06 · 12 个源</div></div><div class="fav">⟳</div></div>
+    <div class="label">源</div>
+    <div class="row-line"><span class="ico">▣</span><span class="grow">示例漫画源 A</span><div class="switch"></div></div>
+    <div class="row-line"><span class="ico">▣</span><span class="grow">咕咕漫画</span><div class="switch"></div></div>
+    <div class="row-line"><span class="ico">▣</span><span class="grow">拾荒漫画</span><div class="switch" style="background:var(--border)"></div></div>
+    <div class="hint">长按删除 · 开关控制聚合范围</div>
+    <div class="btn tonal" style="margin-top:10px">粘贴导入单个源 JSON</div>
+  </div>
+  <div class="navbar">
+    <div class="nav-item"><div class="ico">▤</div>书架</div>
+    <div class="nav-item"><div class="ico">◉</div>探索</div>
+    <div class="nav-item"><div class="ico">⌕</div>搜索</div>
+    <div class="nav-item active"><div class="ico">▦</div>源</div>
+    <div class="nav-item"><div class="ico">⚙</div>设置</div>
+  </div>
+</div>
+<div class="caption">⑤ 源 — 仓库订阅 + 启停开关</div>
+</div>
+
+<!-- 6 设置 -->
+<div>
+<div class="phone">
+  <div class="statusbar"><span>6:05</span><span>▮▮▮</span></div>
+  <div class="screen-title">设置</div>
+  <div class="content">
+    <div class="label">外观</div>
+    <div class="row-line"><span class="ico">◐</span><span class="grow">深色模式</span><div class="switch"></div></div>
+    <div class="label">数据</div>
+    <div class="row-line"><span class="ico">☁</span><span class="grow">WebDAV 备份 / 恢复</span><span class="chev">›</span></div>
+    <div class="row-line"><span class="ico">⛨</span><span class="grow">广告拦截规则</span><span class="chev">›</span></div>
+    <div class="label">关于</div>
+    <div class="row-line"><span class="ico">ⓘ</span><span class="grow">Comic Forge v0.1.0</span><span class="chev">›</span></div>
+    <div class="hint">本地工具 · 不内置任何源 · 不提供任何内容</div>
+  </div>
+  <div class="navbar">
+    <div class="nav-item"><div class="ico">▤</div>书架</div>
+    <div class="nav-item"><div class="ico">◉</div>探索</div>
+    <div class="nav-item"><div class="ico">⌕</div>搜索</div>
+    <div class="nav-item"><div class="ico">▦</div>源</div>
+    <div class="nav-item active"><div class="ico">⚙</div>设置</div>
+  </div>
+</div>
+<div class="caption">⑥ 设置 — 分组列表</div>
+</div>
+
+</body>
+</html>

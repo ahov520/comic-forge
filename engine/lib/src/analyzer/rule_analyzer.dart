@@ -1,0 +1,208 @@
+/// 单条选段规则：从上一步结果（节点/字符串）中继续提取。
+class Seg {
+  Seg({this.type, this.value = '', this.attr, this.fun, this.param, this.regex, this.replacement});
+
+  /// css | xpath | json | shorthand(id./class./tag.) | attr
+  final String? type;
+  final String value;
+  final String? attr;
+  final String? fun;
+  final String? param;
+  final String? regex;
+  final String? replacement;
+
+  @override
+  String toString() => 'Seg($type, $value${attr != null ? ", @$attr" : ""})';
+}
+
+/// 一条完整规则 = 若干 Seg 组成的管道；管道内多段依次执行，`||` 分隔的
+/// 备选规则按序尝试直到非空，`&&` 分隔的规则结果合并。
+class Rule {
+  Rule(this.branches);
+
+  /// 备选分支（`||`）；每个分支是合并组（`&&`），每组是一条 Seg 管道。
+  final List<List<List<Seg>>> branches;
+
+  bool get isEmpty => branches.isEmpty;
+
+  /// 正则后处理（取首个分支末段 regex/replacement，H-Viewer 语义）。
+  String? get lastRegex {
+    for (final group in branches) {
+      for (final pipe in group) {
+        if (pipe.last.regex != null) return pipe.last.regex;
+      }
+    }
+    return null;
+  }
+
+  String? get lastReplacement {
+    for (final group in branches) {
+      for (final pipe in group) {
+        if (pipe.last.replacement != null) return pipe.last.replacement;
+      }
+    }
+    return null;
+  }
+}
+
+/// 规则字符串分析器。
+///
+/// 支持（v1 子集，对照 H-Viewer-RuleParser / legado 默认语法）：
+/// - `@css:selector@attr`   显式 CSS
+/// - `selector@attr`        默认按 CSS 处理
+/// - `//a/@href`            XPath（以 `//` 或 `.` 开头）
+/// - `$.data.list[*]`       JSONPath（以 `$.` 开头）
+/// - `id.main@class.content@tag.a@text`  legado 简写
+/// - `@text` `@html` `@href` `@src` `@attr:xxx` 提取函数
+/// - `||` 备选，`&&` 合并
+class RuleAnalyzer {
+  RuleAnalyzer(this.source);
+
+  final String source;
+
+  Rule parse() {
+    final branches = <List<List<Seg>>>[];
+    for (final alt in _splitTop(source, '||')) {
+      final groups = <List<Seg>>[];
+      for (final part in _splitTop(alt, '&&')) {
+        final segs = _parsePipeline(part.trim());
+        if (segs.isNotEmpty) groups.add(segs);
+      }
+      if (groups.isNotEmpty) branches.add(groups);
+    }
+    return Rule(branches);
+  }
+
+  /// 解析单条管道（不含 || 和 &&）。支持多级 @：
+  /// `div.item@tag.a@text` = 选中 div.item → 在其中选 tag.a → 提取 text。
+  /// 支持 legado 风格正则后处理后缀：`规则##正则##替换`。
+  List<Seg> _parsePipeline(String rule) {
+    if (rule.isEmpty) return const [];
+
+    // ## 正则后处理后缀（不适用于 json/xpath 内部——先剥离再判断类型）
+    String? postRegex;
+    String? postReplacement;
+    var body = rule;
+    if (!body.startsWith('//') && !body.startsWith('\$.')) {
+      final parts = _splitTop(body, '##');
+      if (parts.length >= 2) {
+        body = parts[0];
+        postRegex = parts[1].trim();
+        if (parts.length >= 3) postReplacement = parts[2];
+      }
+    }
+
+    // JSONPath
+    if (body.startsWith('\$.')) {
+      return [Seg(type: 'json', value: body.substring(2))];
+    }
+    // XPath
+    if (body.startsWith('//') || body.startsWith('./') || body.startsWith('(')) {
+      return [Seg(type: 'xpath', value: body)];
+    }
+
+    String rest = body;
+    String? type;
+    if (rest.startsWith('@css:')) {
+      type = 'css';
+      rest = rest.substring(5);
+    } else if (rest.startsWith('@XPath:')) {
+      return [Seg(type: 'xpath', value: rest.substring(7))];
+    }
+
+    // 按 @ 拆步骤；末段若为提取函数则作为 attr 挂到最后一个选择步骤上。
+    final tokens = _splitTop(rest, '@');
+    String? attr;
+    if (tokens.isNotEmpty && tokens.last.isNotEmpty) {
+      final tail = tokens.last.trim();
+      if (_isExtractFn(tail)) {
+        attr = tail;
+        tokens.removeLast();
+      } else if (tail.startsWith('attr:')) {
+        attr = tail.substring(5);
+        tokens.removeLast();
+      }
+    }
+
+    final segs = <Seg>[];
+    for (final t in tokens) {
+      final sel = t.trim();
+      if (sel.isEmpty) continue;
+      segs.add(Seg(type: type ?? _detect(sel), value: sel));
+      type = null; // @css: 前缀只作用于第一段
+    }
+    if (segs.isEmpty) {
+      if (attr != null) return [Seg(type: 'self', value: '', attr: attr, regex: postRegex, replacement: postReplacement)];
+      return const [];
+    }
+    final last = segs.removeLast();
+    segs.add(Seg(
+      type: last.type,
+      value: last.value,
+      attr: attr ?? last.attr,
+      regex: postRegex ?? last.regex,
+      replacement: postReplacement ?? last.replacement,
+    ));
+    return segs;
+  }
+
+  static bool _isExtractFn(String s) =>
+      s == 'text' || s == 'textNodes' || s == 'html' || s == 'all' ||
+      s == 'href' || s == 'src' || s == 'content' || s == 'alt' || s == 'title' ||
+      s == 'value' || s == 'textNodes';
+
+  static String _detect(String selector) {
+    // legado 简写：id.xxx class.xxx tag.xxx
+    if (selector.startsWith('id.') || selector.startsWith('class.') ||
+        selector.startsWith('tag.')) {
+      return 'shorthand';
+    }
+    return 'css';
+  }
+}
+
+/// 顶层拆分（忽略引号与括号内的分隔符）。
+List<String> _splitTop(String input, String sep) {
+  if (input.isEmpty) return [''];
+  final out = <String>[];
+  final buf = StringBuffer();
+  var depth = 0;
+  String? quote;
+  for (var i = 0; i < input.length; i++) {
+    final c = input[i];
+    if (quote != null) {
+      buf.write(c);
+      if (c == quote && !input.substring(0, i).endsWith('\\')) quote = null;
+      continue;
+    }
+    if (c == '\'' || c == '"') {
+      quote = c;
+      buf.write(c);
+      continue;
+    }
+    if (c == '(' || c == '[') depth++;
+    if (c == ')' || c == ']') depth--;
+    if (depth == 0 && input.startsWith(sep, i)) {
+      out.add(buf.toString());
+      buf.clear();
+      i += sep.length - 1;
+      continue;
+    }
+    buf.write(c);
+  }
+  out.add(buf.toString());
+  return out;
+}
+
+/// URL 模板：`{{key}}` 占位符替换（searchUrl 的 {{key}}/{{page}}/{{pageSize}}）。
+String renderUrlTemplate(String template, Map<String, String> vars) {
+  return template.replaceAllMapped(RegExp(r'\{\{\s*(\w+)\s*\}\}'), (m) {
+    return vars[m.group(1)] ?? '';
+  });
+}
+
+/// 规则字符串工具入口（供 evaluator 与测试使用）。
+RuleAnalyzer analyzer(String rule) => RuleAnalyzer(rule);
+
+/// 便捷判定：规则是否指向 JSON 数据（用于 evaluator 选择解析器）。
+bool looksLikeJsonRule(String rule) => rule.trim().startsWith('\$.');

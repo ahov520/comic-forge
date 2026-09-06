@@ -1,0 +1,24 @@
+name: comic_forge
+description: "Comic Forge — 规则引擎漫画聚合阅读器（兼容 ppcat 仓库订阅）。"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  engine:
+    path: ../engine
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+  cached_network_image: ^3.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

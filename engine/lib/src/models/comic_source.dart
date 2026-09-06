@@ -1,0 +1,267 @@
+/// 漫画源的一组规则（嵌套视图）。
+///
+/// ppcat 的 JSON 里规则是平铺键（如 `ruleSearchList`），载入时由
+/// [ComicSource.fromPpcatFlat] 归一到本模型；引擎只认嵌套视图。
+class RuleSet {
+  String searchUrl = '';
+  String exploreUrl = '';
+
+  String searchList = '', searchName = '', searchAuthor = '', searchCoverUrl = '';
+  String searchIntroduce = '', searchKind = '', searchLastChapter = '', searchUpdateTime = '';
+  String searchBookUrl = '', searchUrlNext = '';
+
+  String findList = '', findName = '', findAuthor = '', findCoverUrl = '';
+  String findIntroduce = '', findKind = '', findLastChapter = '', findUpdateTime = '';
+  String findBookUrl = '', findUrl = '';
+
+  String bookInit = '', bookName = '', bookAuthor = '', bookKind = '';
+  String bookCoverUrl = '', bookLastChapter = '', bookIntroduce = '', bookUpdateTime = '';
+
+  String chapterList = '', chapterName = '', chapterCoverUrl = '', chapterTime = '';
+  String chapterGroup = '', chapterUrl = '', chapterUrlNext = '', chapterInit = '';
+
+  String contentInit = '', contentUrl = '', contentUrlNext = '', contentWebUrl = '';
+
+  /// 平铺键名 → 本模型字段名 的映射（ppcat schema，来自逆向提取）。
+  static const Map<String, String> ppcatFlatKeys = {
+    'searchUrl': 'searchUrl',
+    'exploreUrl': 'exploreUrl',
+    'ruleSearchList': 'searchList',
+    'ruleSearchName': 'searchName',
+    'ruleSearchAuthor': 'searchAuthor',
+    'ruleSearchCoverUrl': 'searchCoverUrl',
+    'ruleSearchIntroduce': 'searchIntroduce',
+    'ruleSearchKind': 'searchKind',
+    'ruleSearchLastChapter': 'searchLastChapter',
+    'ruleSearchUpdateTime': 'searchUpdateTime',
+    'ruleSearchNoteUrl': 'searchBookUrl',
+    'ruleSearchUrlNext': 'searchUrlNext',
+    'ruleFindList': 'findList',
+    'ruleFindName': 'findName',
+    'ruleFindAuthor': 'findAuthor',
+    'ruleFindCoverUrl': 'findCoverUrl',
+    'ruleFindIntroduce': 'findIntroduce',
+    'ruleFindKind': 'findKind',
+    'ruleFindLastChapter': 'findLastChapter',
+    'ruleFindUpdateTime': 'findUpdateTime',
+    'ruleFindNoteUrl': 'findBookUrl',
+    'ruleFindUrl': 'findUrl',
+    'ruleBookInit': 'bookInit',
+    'ruleBookName': 'bookName',
+    'ruleBookAuthor': 'bookAuthor',
+    'ruleBookKind': 'bookKind',
+    'ruleBookContent': 'bookCoverUrl', // 注意：ppcat 的 bookContent 存疑，Phase 0 样本校正
+    'ruleBookLastChapter': 'bookLastChapter',
+    'ruleBookIntroduce': 'bookIntroduce',
+    'ruleBookUpdateTime': 'bookUpdateTime',
+    'ruleChapterList': 'chapterList',
+    'ruleChapterName': 'chapterName',
+    'ruleChapterCoverUrl': 'chapterCoverUrl',
+    'ruleChapterTime': 'chapterTime',
+    'ruleChapterGroup': 'chapterGroup',
+    'ruleChapterUrl': 'chapterUrl',
+    'ruleChapterUrlNext': 'chapterUrlNext',
+    'ruleChapterInit': 'chapterInit',
+    'ruleContentInit': 'contentInit',
+    'ruleContentUrl': 'contentUrl',
+    'ruleContentUrlNext': 'contentUrlNext',
+    'ruleContentWebUrl': 'contentWebUrl',
+  };
+
+  Map<String, dynamic> toJson() => {
+        if (searchUrl.isNotEmpty) 'searchUrl': searchUrl,
+        if (exploreUrl.isNotEmpty) 'exploreUrl': exploreUrl,
+        if (searchList.isNotEmpty) 'searchList': searchList,
+        if (searchName.isNotEmpty) 'searchName': searchName,
+        if (searchAuthor.isNotEmpty) 'searchAuthor': searchAuthor,
+        if (searchCoverUrl.isNotEmpty) 'searchCoverUrl': searchCoverUrl,
+        if (searchIntroduce.isNotEmpty) 'searchIntroduce': searchIntroduce,
+        if (searchKind.isNotEmpty) 'searchKind': searchKind,
+        if (searchLastChapter.isNotEmpty) 'searchLastChapter': searchLastChapter,
+        if (searchUpdateTime.isNotEmpty) 'searchUpdateTime': searchUpdateTime,
+        if (searchBookUrl.isNotEmpty) 'searchBookUrl': searchBookUrl,
+        if (searchUrlNext.isNotEmpty) 'searchUrlNext': searchUrlNext,
+        if (findList.isNotEmpty) 'findList': findList,
+        if (findName.isNotEmpty) 'findName': findName,
+        if (findAuthor.isNotEmpty) 'findAuthor': findAuthor,
+        if (findCoverUrl.isNotEmpty) 'findCoverUrl': findCoverUrl,
+        if (findIntroduce.isNotEmpty) 'findIntroduce': findIntroduce,
+        if (findKind.isNotEmpty) 'findKind': findKind,
+        if (findLastChapter.isNotEmpty) 'findLastChapter': findLastChapter,
+        if (findUpdateTime.isNotEmpty) 'findUpdateTime': findUpdateTime,
+        if (findBookUrl.isNotEmpty) 'findBookUrl': findBookUrl,
+        if (findUrl.isNotEmpty) 'findUrl': findUrl,
+        if (bookInit.isNotEmpty) 'bookInit': bookInit,
+        if (bookName.isNotEmpty) 'bookName': bookName,
+        if (bookAuthor.isNotEmpty) 'bookAuthor': bookAuthor,
+        if (bookKind.isNotEmpty) 'bookKind': bookKind,
+        if (bookCoverUrl.isNotEmpty) 'bookCoverUrl': bookCoverUrl,
+        if (bookLastChapter.isNotEmpty) 'bookLastChapter': bookLastChapter,
+        if (bookIntroduce.isNotEmpty) 'bookIntroduce': bookIntroduce,
+        if (bookUpdateTime.isNotEmpty) 'bookUpdateTime': bookUpdateTime,
+        if (chapterList.isNotEmpty) 'chapterList': chapterList,
+        if (chapterName.isNotEmpty) 'chapterName': chapterName,
+        if (chapterCoverUrl.isNotEmpty) 'chapterCoverUrl': chapterCoverUrl,
+        if (chapterTime.isNotEmpty) 'chapterTime': chapterTime,
+        if (chapterGroup.isNotEmpty) 'chapterGroup': chapterGroup,
+        if (chapterUrl.isNotEmpty) 'chapterUrl': chapterUrl,
+        if (chapterUrlNext.isNotEmpty) 'chapterUrlNext': chapterUrlNext,
+        if (chapterInit.isNotEmpty) 'chapterInit': chapterInit,
+        if (contentInit.isNotEmpty) 'contentInit': contentInit,
+        if (contentUrl.isNotEmpty) 'contentUrl': contentUrl,
+        if (contentUrlNext.isNotEmpty) 'contentUrlNext': contentUrlNext,
+        if (contentWebUrl.isNotEmpty) 'contentWebUrl': contentWebUrl,
+      };
+
+  void apply(Map<String, String> fields) {
+    final map = <String, void Function(String)>{
+      'searchUrl': (v) => searchUrl = v,
+      'exploreUrl': (v) => exploreUrl = v,
+      'searchList': (v) => searchList = v,
+      'searchName': (v) => searchName = v,
+      'searchAuthor': (v) => searchAuthor = v,
+      'searchCoverUrl': (v) => searchCoverUrl = v,
+      'searchIntroduce': (v) => searchIntroduce = v,
+      'searchKind': (v) => searchKind = v,
+      'searchLastChapter': (v) => searchLastChapter = v,
+      'searchUpdateTime': (v) => searchUpdateTime = v,
+      'searchBookUrl': (v) => searchBookUrl = v,
+      'searchUrlNext': (v) => searchUrlNext = v,
+      'findList': (v) => findList = v,
+      'findName': (v) => findName = v,
+      'findAuthor': (v) => findAuthor = v,
+      'findCoverUrl': (v) => findCoverUrl = v,
+      'findIntroduce': (v) => findIntroduce = v,
+      'findKind': (v) => findKind = v,
+      'findLastChapter': (v) => findLastChapter = v,
+      'findUpdateTime': (v) => findUpdateTime = v,
+      'findBookUrl': (v) => findBookUrl = v,
+      'findUrl': (v) => findUrl = v,
+      'bookInit': (v) => bookInit = v,
+      'bookName': (v) => bookName = v,
+      'bookAuthor': (v) => bookAuthor = v,
+      'bookKind': (v) => bookKind = v,
+      'bookCoverUrl': (v) => bookCoverUrl = v,
+      'bookLastChapter': (v) => bookLastChapter = v,
+      'bookIntroduce': (v) => bookIntroduce = v,
+      'bookUpdateTime': (v) => bookUpdateTime = v,
+      'chapterList': (v) => chapterList = v,
+      'chapterName': (v) => chapterName = v,
+      'chapterCoverUrl': (v) => chapterCoverUrl = v,
+      'chapterTime': (v) => chapterTime = v,
+      'chapterGroup': (v) => chapterGroup = v,
+      'chapterUrl': (v) => chapterUrl = v,
+      'chapterUrlNext': (v) => chapterUrlNext = v,
+      'chapterInit': (v) => chapterInit = v,
+      'contentInit': (v) => contentInit = v,
+      'contentUrl': (v) => contentUrl = v,
+      'contentUrlNext': (v) => contentUrlNext = v,
+      'contentWebUrl': (v) => contentWebUrl = v,
+    };
+    fields.forEach((k, v) {
+      final setter = map[k];
+      if (setter != null && v.isNotEmpty) setter(v);
+    });
+  }
+}
+
+/// 一个漫画源。
+class ComicSource {
+  ComicSource({
+    required this.id,
+    this.name = '',
+    this.group = '',
+    this.icon = '',
+    this.url = '',
+    this.comment = '',
+    this.enabled = true,
+    this.weight = 0,
+    Map<String, String>? headers,
+    RuleSet? rules,
+  })  : headers = headers ?? {},
+        rules = rules ?? RuleSet();
+
+  String id;
+  String name;
+  String group;
+  String icon;
+  String url;
+  String comment;
+  bool enabled;
+  int weight;
+  Map<String, String> headers;
+  RuleSet rules;
+
+  /// 原始 JSON（保持往返保真，未知键不丢）。
+  Map<String, dynamic> raw = {};
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        if (name.isNotEmpty) 'name': name,
+        if (group.isNotEmpty) 'group': group,
+        if (icon.isNotEmpty) 'icon': icon,
+        if (url.isNotEmpty) 'url': url,
+        if (comment.isNotEmpty) 'comment': comment,
+        'enabled': enabled,
+        if (weight != 0) 'weight': weight,
+        if (headers.isNotEmpty) 'headers': headers,
+        'rules': rules.toJson(),
+      };
+
+  /// 从明文仓库（Track A）JSON 构建。
+  static ComicSource fromJson(Map<String, dynamic> j) {
+    final s = ComicSource(
+      id: (j['id'] ?? j['sourceUrl'] ?? j['sourceName'] ?? '') as String,
+      name: (j['name'] ?? j['sourceName'] ?? '') as String,
+      group: (j['group'] ?? j['sourceGroup'] ?? '') as String,
+      icon: (j['icon'] ?? j['sourceIcon'] ?? '') as String,
+      url: (j['url'] ?? j['sourceUrl'] ?? '') as String,
+      comment: (j['comment'] ?? j['sourceComment'] ?? '') as String,
+      enabled: (j['enabled'] ?? true) as bool,
+      weight: (j['weight'] ?? 0) is int ? (j['weight'] ?? 0) as int : 0,
+    );
+    final h = j['headers'];
+    if (h is Map) {
+      h.forEach((k, v) => s.headers[k.toString()] = v.toString());
+    }
+    s.raw = Map<String, dynamic>.from(j);
+    final r = j['rules'];
+    if (r is Map) {
+      r.forEach((k, v) {
+        if (v is String) s._setRule(k, v);
+      });
+    }
+    // 也允许规则直接平铺在源 JSON 顶层（嵌套 rules 缺省时）
+    j.forEach((k, v) {
+      if (v is String && RuleSet.ppcatFlatKeys.containsKey(k)) {
+        s._setRule(RuleSet.ppcatFlatKeys[k]!, v);
+      }
+    });
+    return s;
+  }
+
+  /// 从 ppcat 平铺键 JSON 构建（兼容导入）。
+  static ComicSource fromPpcatFlat(Map<String, dynamic> j) {
+    final s = ComicSource.fromJson({
+      'id': j['ruleId'] ?? j['sourceUrl'] ?? '',
+      'name': j['sourceName'] ?? j['name'] ?? '',
+      'group': j['sourceGroup'] ?? '',
+      'icon': j['sourceIcon'] ?? '',
+      'url': j['sourceUrl'] ?? '',
+      'comment': j['sourceComment'] ?? '',
+      'enabled': j['enabled'] ?? true,
+      'weight': j['weight'] ?? 0,
+    });
+    final fields = <String, String>{};
+    RuleSet.ppcatFlatKeys.forEach((flat, nested) {
+      final v = j[flat];
+      if (v is String && v.isNotEmpty) fields[nested] = v;
+    });
+    s.rules.apply(fields);
+    return s;
+  }
+
+  void _setRule(String nestedKey, String value) {
+    rules.apply({nestedKey: value});
+  }
+}
