@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:engine/engine.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../state/clipboard_import.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
@@ -136,6 +139,31 @@ class _SourceScreenState extends State<SourceScreen> {
     }
   }
 
+  /// 剪贴板导入：单条 → 编辑器预填；多条 → 直接批量导入。
+  Future<void> _importFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text ?? '';
+    final r = ClipboardSourceImport.parse(text);
+    switch (r) {
+      case ClipboardImportSingle(:final source):
+        if (!mounted) return;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => SourceEditorScreen(state: widget.state, source: source),
+        ));
+      case ClipboardImportMany(:final sources):
+        for (final s in sources) {
+          await widget.state.addSourceManual(s);
+        }
+        if (mounted) {
+          setState(() => _lastResult = '剪贴板导入成功：${sources.length} 个源');
+        }
+      case ClipboardImportInvalid(:final message):
+        if (mounted) {
+          setState(() => _lastResult = '剪贴板导入失败：$message');
+        }
+    }
+  }
+
   /// 长按源：编辑 / 删除。
   void _showSourceActions(ComicSource s) {
     final scheme = Theme.of(context).colorScheme;
@@ -181,6 +209,11 @@ class _SourceScreenState extends State<SourceScreen> {
         appBar: AppBar(
           title: Text(pending > 0 ? '源（$pending 个仓库待更新）' : '源'),
           actions: [
+            IconButton(
+              tooltip: '剪贴板导入 JSON',
+              icon: const Icon(Icons.content_paste_go),
+              onPressed: _importFromClipboard,
+            ),
             IconButton(
               tooltip: '新建源',
               icon: const Icon(Icons.add_circle_outline),

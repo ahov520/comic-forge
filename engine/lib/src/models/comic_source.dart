@@ -235,7 +235,7 @@ class ComicSource {
   /// 从明文仓库（Track A）JSON 构建。
   static ComicSource fromJson(Map<String, dynamic> j) {
     final s = ComicSource(
-      id: (j['id'] ?? j['sourceUrl'] ?? j['sourceName'] ?? '') as String,
+      id: (j['id'] ?? j['sourceUrl'] ?? j['url'] ?? j['sourceName'] ?? '') as String,
       name: (j['name'] ?? j['sourceName'] ?? '') as String,
       group: (j['group'] ?? j['sourceGroup'] ?? '') as String,
       icon: (j['icon'] ?? j['sourceIcon'] ?? '') as String,
