@@ -22,5 +22,21 @@ void main() {
         .where((s) => s.rules.searchList.isNotEmpty || s.rules.findUrl.isNotEmpty)
         .length;
     expect(usable, greaterThan(400));
+
+    // 快照几乎全部用 ruleSearchUrl；导入后必须落到嵌套 searchUrl，否则聚合搜索为 0 源。
+    final withFlatSearch = list
+        .where((m) =>
+            (m['ruleSearchUrl'] is String && (m['ruleSearchUrl'] as String).isNotEmpty) ||
+            (m['searchUrl'] is String && (m['searchUrl'] as String).isNotEmpty))
+        .length;
+    final withNestedSearch =
+        sources.where((s) => s.rules.searchUrl.isNotEmpty).length;
+    expect(withFlatSearch, greaterThan(400));
+    expect(withNestedSearch, withFlatSearch);
+
+    final withFlatHeaders = list.where((m) => m['headers'] is Map).length;
+    final withNestedHeaders =
+        sources.where((s) => s.headers.isNotEmpty).length;
+    expect(withNestedHeaders, greaterThanOrEqualTo(withFlatHeaders));
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
