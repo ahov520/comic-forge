@@ -5,6 +5,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
+import 'skeleton.dart';
 import 'widgets.dart';
 
 /// 书架。
@@ -213,7 +214,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                       onRetry: () => _loadEntry(_entry!));
                                 }
                                 if (!snap.hasData) {
-                                  return const Center(child: CircularProgressIndicator());
+                                  // 骨架网格：与书架封面网格同构，秒开观感
+                                  return GridView.builder(
+                                    padding: const EdgeInsets.all(12),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 120,
+                                      childAspectRatio: 0.62,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                    ),
+                                    itemCount: 8,
+                                    itemBuilder: (context, i) => Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                            child: SkeletonBox(
+                                                height: 140, radius: 10)),
+                                        const SizedBox(height: 6),
+                                        SkeletonBox(height: 10, radius: 4),
+                                      ],
+                                    ),
+                                  );
                                 }
                                 return ListView.builder(
                                   itemCount: snap.data!.items.length,

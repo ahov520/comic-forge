@@ -10,6 +10,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
+import 'skeleton.dart';
 
 /// 音量键翻页通道（Android 原生拦截后转发）。
 const _readerChannel = MethodChannel('comic-forge/reader');
@@ -192,9 +193,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ...widget.runtime.imageRequestHeaders,
           },
           fadeInDuration: const Duration(milliseconds: 120),
-          placeholder: (_, _) => const SizedBox(
-              height: 240,
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          placeholder: (_, _) => SizedBox(
+              height: fit == BoxFit.contain ? double.infinity : 240,
+              child: const Center(child: SkeletonBox(height: 220))),
           errorWidget: (_, _, _) => const SizedBox(
             height: 200,
             child: Center(
