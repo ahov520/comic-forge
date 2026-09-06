@@ -92,6 +92,8 @@ class AppState extends ChangeNotifier {
   static const _kRepoUpdates = 'cf.repoUpdates';
   static const _kAdBlock = 'cf.adBlock';
   static const _kWebDav = 'cf.webdav';
+  static const _kSearchHistory = 'cf.searchHistory';
+  static const _searchHistoryLimit = 10;
   static const _detailCacheCap = 100;
 
   /// 启动自动检查间隔：6 小时内不重复检查。
@@ -100,6 +102,11 @@ class AppState extends ChangeNotifier {
   final List<ComicSource> sources = [];
   final List<String> repos = [];
   final List<Book> shelf = [];
+  final List<String> _searchHistory = [];
+
+  /// 最近提交的搜索词（新到旧、去重、最多 10 条）。
+  List<String> get searchHistory => List.unmodifiable(_searchHistory);
+
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
@@ -121,6 +128,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
+    _restoreSearchHistory(sp.get(_kSearchHistory));
     sources
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kSources) ?? '[]') as List)
@@ -185,6 +193,47 @@ class AppState extends ChangeNotifier {
     if (sources.isEmpty) {
       await importBuiltinSources();
     }
+  }
+
+  void _restoreSearchHistory(Object? saved) {
+    _searchHistory.clear();
+    if (saved is! String) return;
+    try {
+      final decoded = jsonDecode(saved);
+      if (decoded is! List) return;
+      _searchHistory.addAll(decoded
+          .whereType<String>()
+          .map((query) => query.trim())
+          .where((query) => query.isNotEmpty)
+          .toSet()
+          .take(_searchHistoryLimit));
+    } on FormatException {
+      // 历史损坏时从空列表恢复，不影响启动。
+    }
+  }
+
+  /// 仅在提交搜索时记录；再次搜索已有词会移到最前。
+  Future<void> recordSearch(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    _searchHistory
+      ..remove(trimmed)
+      ..insert(0, trimmed);
+    if (_searchHistory.length > _searchHistoryLimit) {
+      _searchHistory.removeRange(_searchHistoryLimit, _searchHistory.length);
+    }
+    await _persistSearchHistory();
+  }
+
+  Future<void> clearSearchHistory() async {
+    _searchHistory.clear();
+    await _persistSearchHistory();
+  }
+
+  Future<void> _persistSearchHistory() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kSearchHistory, jsonEncode(_searchHistory));
+    notifyListeners();
   }
 
   /// 记录阅读进度（打开章节时调用；同一本书只保留最新）。
