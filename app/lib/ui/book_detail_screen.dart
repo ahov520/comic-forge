@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:engine/engine.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import '../state/source_share.dart';
 import 'widgets.dart';
 import 'skeleton.dart';
 
@@ -119,6 +121,21 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             appBar: AppBar(
               title: Text(book.name),
               actions: [
+                if (_source != null)
+                  IconButton(
+                    tooltip: '复制本书源 JSON（可分享）',
+                    icon: const Icon(Icons.ios_share),
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(
+                          text: sourceShareJson(_source!)));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('已复制源 JSON，对方可在「源 → 剪贴板导入」粘贴使用')),
+                        );
+                      }
+                    },
+                  ),
                 IconButton(
                   icon: Icon(
                     widget.appState.inShelf(widget.book) ? Icons.favorite : Icons.favorite_border,

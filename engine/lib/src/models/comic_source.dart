@@ -298,6 +298,8 @@ class ComicSource {
       if (v is String && v.isNotEmpty) fields[nested] = v;
     });
     s.rules.apply(fields);
+    // raw 保存原始平铺 JSON（此前误存合成 map，导出/分享会丢规则）
+    s.raw = Map<String, dynamic>.from(j);
     return s;
   }
 
