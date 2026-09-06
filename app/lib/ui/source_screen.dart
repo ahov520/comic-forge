@@ -62,7 +62,7 @@ class _SourceScreenState extends State<SourceScreen> {
           autofocus: true,
           decoration: const InputDecoration(
             hintText: 'github.com/user/repo 或 gitee.com/user/repo',
-            helperText: '支持明文 store.json 仓库；ppcat 加密仓库待密钥取证后开放',
+            helperText: '明文仓库全量导入；ppcat 加密仓库自动提取明文分片（约半数源）',
           ),
         ),
         actions: [
@@ -105,8 +105,16 @@ class _SourceScreenState extends State<SourceScreen> {
             ),
             PopupMenuButton<String>(
               tooltip: '更多',
-              onSelected: (v) {
-                if (v == 'backup') _importPipimiaoBackup();
+              onSelected: (v) async {
+                if (v == 'backup') {
+                  _importPipimiaoBackup();
+                } else if (v == 'builtin') {
+                  final n = await widget.state.importBuiltinSources();
+                  if (mounted) {
+                    setState(() => _lastResult =
+                        n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
+                  }
+                }
               },
               itemBuilder: (context) => const [
                 PopupMenuItem(
@@ -115,6 +123,16 @@ class _SourceScreenState extends State<SourceScreen> {
                     leading: Icon(Icons.restore_outlined),
                     title: Text('导入皮皮喵备份'),
                     subtitle: Text('.pbak · 提取分享源与订阅'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'builtin',
+                  child: ListTile(
+                    leading: Icon(Icons.inventory_2_outlined),
+                    title: Text('恢复内置源'),
+                    subtitle: Text('重新导入 APK 内置的 493 条社区源快照'),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),

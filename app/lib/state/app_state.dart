@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:engine/engine.dart';
@@ -33,6 +34,33 @@ class AppState extends ChangeNotifier {
           .whereType<Map<String, dynamic>>()
           .map(Book.fromJson));
     darkMode = sp.getBool(_kDark) ?? true;
+    // 首次启动自动导入内置源快照
+    if (sources.isEmpty) {
+      await importBuiltinSources();
+    }
+  }
+
+  /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
+  /// 按 id 去重，只增不删；返回新增数量。
+  Future<int> importBuiltinSources() async {
+    final txt = await rootBundle.loadString('assets/store.json');
+    final j = jsonDecode(txt) as Map<String, dynamic>;
+    final list = (j['sources'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(ComicSource.fromPpcatFlat);
+    var added = 0;
+    final known = sources.map((s) => s.id).toSet();
+    for (final s in list) {
+      if (known.contains(s.id)) continue;
+      known.add(s.id);
+      sources.add(s);
+      added++;
+    }
+    if (added > 0) {
+      await _persistSources();
+      notifyListeners();
+    }
+    return added;
   }
 
   Future<void> _persistSources() async {
