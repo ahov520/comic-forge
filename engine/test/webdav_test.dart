@@ -40,9 +40,6 @@ void main() {
     expect(mk, hasLength(2));
     expect(mk[0].$2, 'https://dav.example.com/comic-forge');
     expect(mk[1].$2, 'https://dav.example.com/comic-forge/backup');
-    // Basic 认证头
-    final auth = base64Encode(utf8.encode('u:p'));
-    expect(log.any((e) => e.$1 == 'MKCOL'), isTrue);
   });
 
   test('MKCOL 4xx（非405）抛 WebDavException', () async {
