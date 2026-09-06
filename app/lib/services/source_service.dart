@@ -28,7 +28,77 @@ class SourceService {
   /// 广告拦截规则（AppState 载入/设置时同步；null = 不过滤）。
   AdBlockRules? adBlock;
 
+  /// 换源预扫缓存（key = `源id|书名`，存 Future 使并发调用共享同一飞行）：
+  /// 详情页后台扫描一次，角标与换源面板复用，避免重复网络请求。会话级。
+  final Map<String, Future<List<(ComicSource, Book)>>> _switchCache = {};
+
+  /// 扫描其它启用源中的同名书（限 [maxSources]、并发 6、单源 8s 超时）。
+  /// 命中优先精确同名；缓存/在途直接复用（不重复发请求）。
+  Future<List<(ComicSource, Book)>> scanSwitchTargets({
+    required Book book,
+    required List<ComicSource> allSources,
+    int maxSources = 12,
+    bool useCache = true,
+  }) {
+    final key = '${book.sourceId}|${book.name.trim()}';
+    if (useCache && _switchCache.containsKey(key)) {
+      return _switchCache[key]!;
+    }
+    final fut = _scanSwitch(book, allSources, maxSources);
+    _switchCache[key] = fut;
+    return fut;
+  }
+
+  Future<List<(ComicSource, Book)>> _scanSwitch(
+    Book book,
+    List<ComicSource> allSources,
+    int maxSources,
+  ) async {
+    final others = allSources
+        .where((s) =>
+            s.enabled &&
+            s.id != book.sourceId &&
+            s.rules.searchUrl.isNotEmpty)
+        .take(maxSources)
+        .toList();
+    final results = <(ComicSource, Book)>[];
+    Future<void> probe(ComicSource s) async {
+      try {
+        final page =
+            await runtimeFor(s).search(book.name).timeout(const Duration(seconds: 8));
+        Book hit = page.items.isNotEmpty ? page.items.first : Book();
+        for (final b in page.items) {
+          if (b.name.trim() == book.name.trim()) {
+            hit = b;
+            break;
+          }
+        }
+        if (hit.name.isNotEmpty) results.add((s, hit));
+      } catch (_) {
+        // 单源失败跳过
+      }
+    }
+
+    for (var i = 0; i < others.length; i += 6) {
+      await Future.wait(others.skip(i).take(6).map(probe));
+    }
+    return results;
+  }
+
+  /// 测试接缝：覆盖运行时构造（null = 默认实现）。
+  SourceRuntime Function(ComicSource source)? debugRuntimeOverride;
+
+  /// 测试接缝：清空换源预扫缓存与运行时缓存。
+  void debugClearSwitchCache() {
+    _switchCache.clear();
+    _runtimes.clear();
+  }
+
   SourceRuntime runtimeFor(ComicSource source) {
+    final override = debugRuntimeOverride;
+    if (override != null) {
+      return _runtimes.putIfAbsent(source.id, () => override(source));
+    }
     return _runtimes.putIfAbsent(
         source.id,
         () => SourceRuntime(

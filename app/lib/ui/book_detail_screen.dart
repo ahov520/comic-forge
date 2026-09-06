@@ -39,6 +39,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   ComicSource? _disabledSource; // 来源源存在但被禁用 → 提供一键启用
   bool _fromCache = false;
   bool _carryDone = false;
+  int? _switchCount; // 换源可命中数（后台预扫完成后显示角标）
   /// 缓存命中时首帧直出的数据（避免 FutureBuilder 首帧闪骨架）。
   (Book, List<Chapter>)? _initialData;
 
@@ -46,6 +47,20 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    _scanSwitchTargets();
+  }
+
+  /// 后台预扫换源目标（结果入 SourceService 缓存，面板复用；失败静默）。
+  Future<void> _scanSwitchTargets() async {
+    try {
+      final r = await SourceService.instance.scanSwitchTargets(
+        book: widget.book,
+        allSources: widget.appState.sources,
+      );
+      if (mounted) setState(() => _switchCount = r.length);
+    } catch (_) {
+      // 静默：角标不显示也不影响换源面板（面板会再扫）
+    }
   }
 
   void _load() {
@@ -86,83 +101,81 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     if (mounted) setState(_load);
   }
 
+  ComicSource? _findSource() {
+    for (final s in widget.appState.sources) {
+      if (s.id == widget.book.sourceId && s.enabled) return s;
+    }
+    return null;
+  }
+
+  Future<(Book, List<Chapter>)> _fetchDetail() async {
+    final (book, chapters) = widget.detailLoaderOverride != null
+        ? await widget.detailLoaderOverride!(widget.book.bookUrl)
+        : await SourceService.instance
+            .runtimeFor(_source!)
+            .detail(widget.book.bookUrl);
+    await widget.appState.saveDetailCache(book, chapters);
+    return (book, chapters);
+  }
+
+  Future<void> _refreshInBackground((Book, List<Chapter>) cachedPair) async {
+    if (_source == null) return;
+    try {
+      final fresh = await _fetchDetail();
+      if (mounted) {
+        setState(() {
+          _fromCache = false;
+          _future = Future<(Book, List<Chapter>)>.value(fresh);
+        });
+      }
+    } catch (_) {
+      // 网络失败：保持缓存内容，不打断阅读
+      _future = Future<(Book, List<Chapter>)>.value(cachedPair);
+    }
+  }
+
   /// 换源：在其它启用源中搜同名书，列表点选后替换当前详情页。
+  /// 复用详情加载时的预扫缓存（无缓存/在途则共享同一次扫描）。
   Future<void> _showSwitchSourceSheet() async {
-    final others = widget.appState.sources
-        .where((s) =>
-            s.enabled &&
-            s.id != widget.book.sourceId &&
-            s.rules.searchUrl.isNotEmpty)
-        .take(12)
-        .toList();
-    if (others.isEmpty) {
+    final othersExist = widget.appState.sources.any((s) =>
+        s.enabled &&
+        s.id != widget.book.sourceId &&
+        s.rules.searchUrl.isNotEmpty);
+    if (!othersExist) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('没有其它启用的源可换')));
       return;
     }
-    final results = <(ComicSource, Book)>[];
-    var searching = true;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetCtx, setSheet) {
-          var done = 0;
-          // 首次进入即并发搜索（受限并发 6，单源 8s 超时）
-          if (searching) {
-            searching = false;
-            Future<void> probe(ComicSource s) async {
-              try {
-                final page = await SourceService.instance
-                    .runtimeFor(s)
-                    .search(widget.book.name)
-                    .timeout(const Duration(seconds: 8));
-                final hit = page.items.firstWhere(
-                  (b) => b.name.trim() == widget.book.name.trim(),
-                  orElse: () => page.items.isEmpty
-                      ? Book()
-                      : page.items.first,
-                );
-                if (hit.name.isNotEmpty) results.add((s, hit));
-              } catch (_) {
-                // 单源失败跳过
-              } finally {
-                done++;
-                if (mounted) setSheet(() {});
-              }
-            }
-
-            for (var i = 0; i < others.length; i += 6) {
-              // ignore: unawaited_futures
-              Future.wait(others.skip(i).take(6).map(probe));
-            }
-          }
-          return SizedBox(
-            height: MediaQuery.of(sheetCtx).size.height * 0.7,
-            child: Column(
+      builder: (sheetCtx) => SizedBox(
+        height: MediaQuery.of(sheetCtx).size.height * 0.7,
+        child: FutureBuilder<List<(ComicSource, Book)>>(
+          future: SourceService.instance.scanSwitchTargets(
+            book: widget.book,
+            allSources: widget.appState.sources,
+          ),
+          builder: (context, snap) {
+            return Column(
               children: [
                 Padding(
                   padding: const EdgeInsets.all(14),
                   child: Row(children: [
                     Text('换源 · ${widget.book.name}',
                         style: Theme.of(sheetCtx).textTheme.titleMedium),
-                    const Spacer(),
-                    if (done < others.length)
-                      Text('搜索中 $done/${others.length}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(sheetCtx).colorScheme.outline)),
                   ]),
                 ),
                 Expanded(
-                  child: results.isEmpty && done < others.length
+                  child: !snap.hasData
                       ? const Center(child: CircularProgressIndicator())
-                      : results.isEmpty
+                      : snap.data!.isEmpty
                           ? const Center(child: Text('其它源没有搜到同名书'))
                           : ListView.builder(
-                              itemCount: results.length,
+                              itemCount: snap.data!.length,
                               itemBuilder: (context, i) {
-                                final (s, b) = results[i];
+                                final (s, b) = snap.data![i];
                                 return ListTile(
                                   leading: BookCover(
                                       url: b.coverUrl, width: 44, height: 60),
@@ -195,44 +208,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                             ),
                 ),
               ],
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
-  }
-
-  Future<(Book, List<Chapter>)> _fetchDetail() async {
-    final (book, chapters) = widget.detailLoaderOverride != null
-        ? await widget.detailLoaderOverride!(widget.book.bookUrl)
-        : await SourceService.instance
-            .runtimeFor(_source!)
-            .detail(widget.book.bookUrl);
-    await widget.appState.saveDetailCache(book, chapters);
-    return (book, chapters);
-  }
-
-  Future<void> _refreshInBackground((Book, List<Chapter>) cachedPair) async {
-    if (_source == null) return;
-    try {
-      final fresh = await _fetchDetail();
-      if (mounted) {
-        setState(() {
-          _fromCache = false;
-          _future = Future<(Book, List<Chapter>)>.value(fresh);
-        });
-      }
-    } catch (_) {
-      // 网络失败：保持缓存内容，不打断阅读
-      _future = Future<(Book, List<Chapter>)>.value(cachedPair);
-    }
-  }
-
-  ComicSource? _findSource() {
-    for (final s in widget.appState.sources) {
-      if (s.id == widget.book.sourceId && s.enabled) return s;
-    }
-    return null;
   }
 
   @override
@@ -292,10 +272,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               title: Text(book.name),
               actions: [
                 if (_source != null)
-                  IconButton(
-                    tooltip: '换源',
-                    icon: const Icon(Icons.swap_horiz),
-                    onPressed: _showSwitchSourceSheet,
+                  Badge.count(
+                    count: _switchCount ?? 0,
+                    isLabelVisible: (_switchCount ?? 0) > 0,
+                    child: IconButton(
+                      tooltip: '换源${_switchCount != null && _switchCount! > 0 ? '（$_switchCount 源命中）' : ''}',
+                      icon: const Icon(Icons.swap_horiz),
+                      onPressed: _showSwitchSourceSheet,
+                    ),
                   ),
                 if (_source != null)
                   IconButton(
