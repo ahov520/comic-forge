@@ -33,6 +33,13 @@ class ShelfScreen extends StatelessWidget {
             ),
           );
         }
+        // 最近阅读优先：有进度的书按进度时间倒序排前，其余保持收藏序
+        final books = state.shelf.toList()
+          ..sort((a, b) {
+            final pa = state.progress[a.bookUrl]?.at ?? 0;
+            final pb = state.progress[b.bookUrl]?.at ?? 0;
+            return pb.compareTo(pa);
+          });
         return GridView.builder(
           padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -41,9 +48,12 @@ class ShelfScreen extends StatelessWidget {
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          itemCount: state.shelf.length,
+          itemCount: books.length,
           itemBuilder: (context, i) {
-            final b = state.shelf[i];
+            final b = books[i];
+            final prog = state.progress[b.bookUrl];
+            final progLabel =
+                prog == null || prog.chapterTitle.isEmpty ? '' : prog.chapterTitle;
             return InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
@@ -52,7 +62,22 @@ class ShelfScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: BookCover(url: b.coverUrl)),
+                  Expanded(child: Stack(children: [
+                    Positioned.fill(child: BookCover(url: b.coverUrl)),
+                    if (progLabel.isNotEmpty)
+                      Positioned(
+                        left: 0, right: 0, bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          color: Colors.black54,
+                          child: Text(progLabel,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 10, color: Colors.white)),
+                        ),
+                      ),
+                  ])),
                   const SizedBox(height: 6),
                   Text(b.name,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
