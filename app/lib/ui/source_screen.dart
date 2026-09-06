@@ -18,7 +18,54 @@ class SourceScreen extends StatefulWidget {
 
 class _SourceScreenState extends State<SourceScreen> {
   bool _subscribing = false;
+  bool _probing = false;
   String? _lastResult;
+
+  String _sourceSummary(List<ComicSource> sources) {
+    final enabled = sources.where((s) => s.enabled).length;
+    final unhealthy = sources.where((s) => s.enabled && s.health.isUnhealthy).length;
+    final extra = unhealthy > 0 ? ' · 异常 $unhealthy' : '';
+    return '源 (${sources.length}) · 启用 $enabled$extra';
+  }
+
+  String _sourceSubtitle(ComicSource s) {
+    final parts = <String>[
+      if (!s.enabled) '已禁用',
+      if (s.enabled && s.health.isUnhealthy) '不可用',
+      if (s.group.isNotEmpty) s.group,
+      if (s.url.isNotEmpty) s.url,
+      if (s.health.isUnhealthy && s.health.lastError.isNotEmpty) s.health.lastError,
+    ];
+    return parts.join(' · ');
+  }
+
+  (IconData, Color) _healthIcon(ComicSource s, ColorScheme scheme) {
+    if (!s.enabled) return (Icons.block, scheme.outline);
+    if (s.health.isUnhealthy) return (Icons.error_outline, scheme.error);
+    if (s.health.isHealthy) return (Icons.check_circle_outline, const Color(0xFF169876));
+    return (Icons.book_outlined, scheme.outline);
+  }
+
+  Future<void> _probeOne(ComicSource s) async {
+    if (_probing) return;
+    setState(() => _probing = true);
+    try {
+      await SourceGuard.track(
+        s,
+        () => SourceService.instance.runtimeFor(s).probe(),
+      );
+      if (mounted) {
+        setState(() => _lastResult = '「${s.name.isEmpty ? s.id : s.name}」探测成功');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _lastResult = '「${s.name.isEmpty ? s.id : s.name}」探测失败：$e');
+      }
+    } finally {
+      await widget.state.persistSources();
+      if (mounted) setState(() => _probing = false);
+    }
+  }
 
   /// 导入皮皮喵「本地备份」(.pbak)。
   Future<void> _importPipimiaoBackup() async {
@@ -175,7 +222,7 @@ class _SourceScreenState extends State<SourceScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('源 (${widget.state.sources.length})',
+                child: Text(_sourceSummary(widget.state.sources),
                     style: Theme.of(context).textTheme.titleSmall),
               ),
             ),
@@ -199,20 +246,36 @@ class _SourceScreenState extends State<SourceScreen> {
                       itemCount: widget.state.sources.length,
                       itemBuilder: (context, i) {
                         final s = widget.state.sources[i];
+                        final scheme = Theme.of(context).colorScheme;
+                        final (icon, color) = _healthIcon(s, scheme);
                         return ListTile(
-                          leading: const Icon(Icons.book_outlined),
-                          title: Text(s.name.isEmpty ? s.id : s.name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          leading: IconButton(
+                            tooltip: s.health.isUnhealthy ? '重新检测' : '检测此源',
+                            icon: Icon(icon, color: color),
+                            onPressed: _probing ? null : () => _probeOne(s),
+                          ),
+                          title: Text(
+                            s.name.isEmpty ? s.id : s.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: s.enabled ? null : scheme.outline,
+                            ),
+                          ),
                           subtitle: Text(
-                            [if (s.group.isNotEmpty) s.group, s.url]
-                                .where((e) => e.isNotEmpty)
-                                .join(' · '),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            _sourceSubtitle(s),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: s.health.isUnhealthy
+                                  ? scheme.error
+                                  : scheme.outline,
+                            ),
                           ),
                           trailing: Switch(
                             value: s.enabled,
-                            onChanged: (_) =>
-                                widget.state.toggleSource(s.id),
+                            onChanged: (v) =>
+                                widget.state.setSourceEnabled(s.id, v),
                           ),
                           onLongPress: () =>
                               widget.state.removeSource(s.id),

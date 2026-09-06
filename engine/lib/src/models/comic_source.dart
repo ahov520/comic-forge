@@ -1,3 +1,5 @@
+import 'source_health.dart';
+
 /// 漫画源的一组规则（嵌套视图）。
 ///
 /// ppcat 的 JSON 里规则是平铺键（如 `ruleSearchList`），载入时由
@@ -26,6 +28,9 @@ class RuleSet {
   /// 注意：ruleBookContent 是取图规则（CSS 或 `$js`），ruleContentUrl 在
   /// ruleChapterUrl 缺省时充当章节链接规则。
   static const Map<String, String> ppcatFlatKeys = {
+    // Snapshot / ppcat 平铺源用 ruleSearchUrl；嵌套/Track A 用 searchUrl。
+    // 两者都映射到嵌套 searchUrl，缺一则聚合搜索会滤掉整源。
+    'ruleSearchUrl': 'searchUrl',
     'searchUrl': 'searchUrl',
     'exploreUrl': 'exploreUrl',
     'ruleSearchList': 'searchList',
@@ -182,8 +187,10 @@ class ComicSource {
     this.weight = 0,
     Map<String, String>? headers,
     RuleSet? rules,
+    SourceHealth? health,
   })  : headers = headers ?? {},
-        rules = rules ?? RuleSet();
+        rules = rules ?? RuleSet(),
+        health = health ?? SourceHealth();
 
   String id;
   String name;
@@ -195,6 +202,7 @@ class ComicSource {
   int weight;
   Map<String, String> headers;
   RuleSet rules;
+  SourceHealth health;
 
   /// 原始 JSON（保持往返保真，未知键不丢）。
   Map<String, dynamic> raw = {};
@@ -210,6 +218,7 @@ class ComicSource {
         if (weight != 0) 'weight': weight,
         if (headers.isNotEmpty) 'headers': headers,
         'rules': rules.toJson(),
+        if (!health.isDefault) 'health': health.toJson(),
       };
 
   /// 从明文仓库（Track A）JSON 构建。
@@ -229,6 +238,7 @@ class ComicSource {
       h.forEach((k, v) => s.headers[k.toString()] = v.toString());
     }
     s.raw = Map<String, dynamic>.from(j);
+    s.health = SourceHealth.fromJson(j['health']);
     final r = j['rules'];
     if (r is Map) {
       r.forEach((k, v) {
@@ -258,6 +268,15 @@ class ComicSource {
     });
     final ua = j['httpUserAgent'];
     if (ua is String && ua.isNotEmpty) s.headers['User-Agent'] = ua;
+    final h = j['headers'];
+    if (h is Map) {
+      h.forEach((k, v) {
+        if (v == null) return;
+        final key = k.toString();
+        final val = v.toString();
+        if (key.isNotEmpty && val.isNotEmpty) s.headers[key] = val;
+      });
+    }
     final fields = <String, String>{};
     RuleSet.ppcatFlatKeys.forEach((flat, nested) {
       final v = j[flat];

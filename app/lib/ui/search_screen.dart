@@ -25,22 +25,23 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _doSearch() async {
     final q = _controller.text.trim();
     if (q.isEmpty || _searching) return;
-    final enabled = widget.state.sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty);
     setState(() {
       _searching = true;
       _query = q;
       _results.clear();
       _failed.clear();
     });
-    await Future.wait(enabled.map((s) async {
-      try {
-        final page = await SourceService.instance.runtimeFor(s).search(q);
-        if (mounted) setState(() => _results.addAll(page.items));
-      } catch (e) {
-        if (mounted) setState(() => _failed.add(s.name));
-      }
-    }));
-    if (mounted) setState(() => _searching = false);
+    final result = await IsolatedSearch.run(
+      sources: widget.state.sources,
+      search: (s) => SourceService.instance.runtimeFor(s).search(q),
+    );
+    await widget.state.persistSources();
+    if (!mounted) return;
+    setState(() {
+      _results.addAll(result.items);
+      _failed.addAll(result.failedNames);
+      _searching = false;
+    });
   }
 
   @override
