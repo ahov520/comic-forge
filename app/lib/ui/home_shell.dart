@@ -24,7 +24,7 @@ class _HomeShellState extends State<HomeShell> {
       animation: s,
       builder: (context, _) => Scaffold(
         body: switch (_tab) {
-          0 => ShelfScreen(state: s),
+          0 => ShelfScreen(state: s, onExplore: () => setState(() => _tab = 1)),
           1 => ExploreScreen(state: s),
           2 => SearchScreen(state: s),
           3 => SourceScreen(state: s),

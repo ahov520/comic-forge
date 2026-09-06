@@ -10,8 +10,9 @@ import 'widgets.dart';
 
 /// 书架。
 class ShelfScreen extends StatefulWidget {
-  const ShelfScreen({super.key, required this.state});
+  const ShelfScreen({super.key, required this.state, required this.onExplore});
   final AppState state;
+  final VoidCallback onExplore;
 
   @override
   State<ShelfScreen> createState() => _ShelfScreenState();
@@ -23,141 +24,155 @@ class _ShelfScreenState extends State<ShelfScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: widget.state,
       builder: (context, _) {
-        if (widget.state.shelf.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.collections_bookmark_outlined,
-                    size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                const SizedBox(height: 12),
-                const Text('书架空空如也'),
-                const SizedBox(height: 4),
-                Text('去「探索」或「搜索」收藏第一部漫画吧',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          );
-        }
         // 筛选：kind 含「完结」→ 已完结；kind 非空且不含「完结」→ 连载中；kind 空 → 仅「全部」可见
-        final books = widget.state.shelf.where((b) {
-          switch (_filter) {
-            case 2:
-              return b.kind.contains('完结');
-            case 1:
-              return b.kind.isNotEmpty && !b.kind.contains('完结');
-            default:
-              return true;
-          }
-        }).toList()
-          ..sort((a, b) {
-            final pa = widget.state.progress[a.bookUrl]?.at ?? 0;
-            final pb = widget.state.progress[b.bookUrl]?.at ?? 0;
-            return pb.compareTo(pa);
-          });
-        return CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Text('书架',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                child: Row(
-                  children: ['全部', '连载中', '已完结']
-                      .asMap()
-                      .entries
-                      .map((e) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(e.value),
-                              selected: _filter == e.key,
-                              onSelected: (_) =>
-                                  setState(() => _filter = e.key),
-                            ),
-                          ))
-                      .toList(),
-                ),
-              ),
-            ),
-            if (books.isEmpty)
+        final books =
+            widget.state.shelf.where((b) {
+              switch (_filter) {
+                case 2:
+                  return b.kind.contains('完结');
+                case 1:
+                  return b.kind.isNotEmpty && !b.kind.contains('完结');
+                default:
+                  return true;
+              }
+            }).toList()..sort((a, b) {
+              final pa = widget.state.progress[a.bookUrl]?.at ?? 0;
+              final pb = widget.state.progress[b.bookUrl]?.at ?? 0;
+              return pb.compareTo(pa);
+            });
+        return SafeArea(
+          bottom: false,
+          child: CustomScrollView(
+            slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Center(
-                      child: Text('该分类暂无藏书',
-                          style: TextStyle(color: scheme.onSurfaceVariant))),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.all(12),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 120,
-                    childAspectRatio: 0.62,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Text(
+                    '书架',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: Wrap(
+                    spacing: 8,
+                    children: ['全部', '连载中', '已完结']
+                        .asMap()
+                        .entries
+                        .map(
+                          (e) => ChoiceChip(
+                            label: Text(e.value),
+                            selected: _filter == e.key,
+                            onSelected: (_) => setState(() => _filter = e.key),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+              if (books.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: widget.state.shelf.isEmpty
+                      ? EmptyStateView(
+                          icon: Icons.collections_bookmark_outlined,
+                          title: '书架还没有漫画',
+                          message: '收藏喜欢的漫画，在这里继续上次的阅读。',
+                          actionLabel: '去探索',
+                          onAction: widget.onExplore,
+                        )
+                      : EmptyStateView(
+                          icon: Icons.filter_list_outlined,
+                          title: '这个分类还没有漫画',
+                          message: '试试其他分类，或查看书架中的全部漫画。',
+                          actionLabel: '查看全部',
+                          onAction: () => setState(() => _filter = 0),
+                        ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(12),
+                  sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 120,
+                          childAspectRatio: 0.62,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                    delegate: SliverChildBuilderDelegate((context, i) {
                       final b = books[i];
                       final prog = widget.state.progress[b.bookUrl];
-                      final progLabel = prog == null || prog.chapterTitle.isEmpty
+                      final progLabel =
+                          prog == null || prog.chapterTitle.isEmpty
                           ? ''
                           : prog.chapterTitle;
                       return InkWell(
                         borderRadius: BorderRadius.circular(10),
                         onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => BookDetailScreen(
-                                    book: b, appState: widget.state))),
+                          MaterialPageRoute(
+                            builder: (_) => BookDetailScreen(
+                              book: b,
+                              appState: widget.state,
+                            ),
+                          ),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(child: Stack(children: [
-                              Positioned.fill(
-                                  child: BookCover(url: b.coverUrl)),
-                              if (progLabel.isNotEmpty)
-                                Positioned(
-                                  left: 0, right: 0, bottom: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 2),
-                                    color: Colors.black54,
-                                    child: Text(progLabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.white)),
+                            Expanded(
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: BookCover(url: b.coverUrl),
                                   ),
-                                ),
-                            ])),
-                          const SizedBox(height: 6),
-                          Text(b.name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    );
-                  },
-                    childCount: books.length,
+                                  if (progLabel.isNotEmpty)
+                                    Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
+                                        color: Colors.black54,
+                                        child: Text(
+                                          progLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              b.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      );
+                    }, childCount: books.length),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         );
       },
     );
