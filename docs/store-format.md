@@ -124,7 +124,9 @@ https://gitee.com/<user>/<repo>
 ## 广告拦截规则 JSON
 
 设置页可导入；作用于阅读器图片流（引擎 `AdBlockRules`，见
-`engine/lib/src/models/ad_block.dart`）。键名宽松，坏正则条目跳过：
+`engine/lib/src/models/ad_block.dart`）。解析器按宽容设计，兼容生态内
+多种实际流通格式（ppcat 原版为闭源 APK 内部格式、无公开文档，拿到
+真实样本后可在解析器内零成本映射）：
 
 ```json
 {
@@ -134,7 +136,10 @@ https://gitee.com/<user>/<repo>
 }
 ```
 
-- `urlRules`（别名 `adUrl`）：正则列表，命中即过滤该图片 URL；
-  普通域名即子串匹配，大小写不敏感。
-- `nameRules`（别名 `adName`）：正则列表，命中即过滤（预留章节名过滤）。
-- 顶层为纯字符串数组时整体视为 `urlRules`。
+- JSON 键：`urlRules`（别名 `adUrl` / `adList` / `urls` / `blockUrls` /
+  `urlRule`）→ URL 正则；`nameRules`（别名 `adName` / `nameList`）→ 名称正则。
+- 顶层为纯字符串数组时整体视为 URL 规则（ppcat 风格 URL 正则列表）。
+- **纯文本**（hosts / adblock 风格 txt）也接受：`#`/`!` 注释与空行跳过；
+  `0.0.0.0 x.com` / `127.0.0.1 x.com` / `||x.com^` 均提取域名并整域
+  （含子域）拦截；`@@` 白名单行跳过；其余行视为一条 URL 正则。
+- 正则命中即过滤；普通域名即子串匹配，大小写不敏感。
