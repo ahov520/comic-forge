@@ -86,6 +86,8 @@ class AppState extends ChangeNotifier {
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kReaderMode = 'cf.readerMode';
   static const _kReaderVolumeKeys = 'cf.readerVolumeKeys';
+  static const _kScrollOffsets = 'cf.scrollOffsets';
+  static const _kLastAutoProbe = 'cf.lastAutoProbe';
   static const _kRepoRefresh = 'cf.repoRefresh';
   static const _kRepoUpdates = 'cf.repoUpdates';
   static const _kAdBlock = 'cf.adBlock';
@@ -109,6 +111,9 @@ class AppState extends ChangeNotifier {
   bool darkMode = true;
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
+  /// 章内滚动位置（key=章节 url；LRU 上限 200 条，跨重启记忆）。
+  final Map<String, ({double offset, int at})> scrollOffsets = {};
+  int _lastAutoProbeAt = 0;
   /// 阅读模式：scroll = 连续滚动；paged = 左右翻页。
   String readerMode = 'scroll';
   /// 音量键翻页（Android，翻页模式/滚动模式都可用）。
@@ -158,6 +163,22 @@ class AppState extends ChangeNotifier {
             .map((k, v) => MapEntry(k, v.toString()));
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
+    final offs = sp.getString(_kScrollOffsets);
+    if (offs != null) {
+      try {
+        (jsonDecode(offs) as Map<String, dynamic>).forEach((k, v) {
+          if (v is Map<String, dynamic> && v['v'] is num && v['at'] is int) {
+            scrollOffsets[k] = (
+              offset: (v['v'] as num).toDouble(),
+              at: v['at'] as int,
+            );
+          }
+        });
+      } on FormatException {
+        scrollOffsets.clear();
+      }
+    }
+    _lastAutoProbeAt = sp.getInt(_kLastAutoProbe) ?? 0;
     readerMode = sp.getString(_kReaderMode) == 'paged' ? 'paged' : 'scroll';
     readerVolumeKeys = sp.getBool(_kReaderVolumeKeys) ?? false;
     // 首次启动自动导入内置源快照
@@ -190,6 +211,35 @@ class AppState extends ChangeNotifier {
   }
 
   ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
+
+  /// 记录章内滚动位置（LRU 上限 200；节流由调用方负责）。
+  Future<void> saveScrollOffset(String chapterUrl, double offset) async {
+    if (chapterUrl.isEmpty) return;
+    scrollOffsets[chapterUrl] = (
+      offset: offset,
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    while (scrollOffsets.length > 200) {
+      String? oldest;
+      int? oldestAt;
+      scrollOffsets.forEach((k, v) {
+        if (oldestAt == null || v.at < oldestAt!) {
+          oldest = k;
+          oldestAt = v.at;
+        }
+      });
+      if (oldest == null) break;
+      scrollOffsets.remove(oldest);
+    }
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(
+        _kScrollOffsets,
+        jsonEncode(scrollOffsets
+            .map((k, v) => MapEntry(k, {'v': v.offset, 'at': v.at}))));
+  }
+
+  double? scrollOffsetFor(String chapterUrl) =>
+      scrollOffsets[chapterUrl]?.offset;
 
   /// 章节目录缓存（离线可见 + 秒开），成功拉取详情后调用；超上限按时间淘汰。
   Future<void> saveDetailCache(Book book, List<Chapter> chapters) async {
@@ -402,6 +452,47 @@ class AppState extends ChangeNotifier {
   /// 待更新仓库数（角标用）。
   int get pendingUpdateCount =>
       repoUpdates.values.where((s) => s.hasPending).length;
+
+  /// 轻量自动体检：只在距上次超过 [interval] 时跑，最多探 [maxSources] 个
+  /// 启用源——优先从未探测过的开始（lastOkAt=0），其次上次探测最早的。
+  /// 静默执行（结果写入健康记录，源页可看标红）。
+  Future<void> autoProbeIfNeeded({
+    int maxSources = 20,
+    Duration interval = const Duration(days: 7),
+    SourceRuntime Function(ComicSource source)? runtimeBuilder,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastAutoProbeAt < interval.inMilliseconds) return;
+    _lastAutoProbeAt = now;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setInt(_kLastAutoProbe, now);
+
+    // 排序：从未探测（无成败记录）最优先，其次上次成功最早
+    int rank(ComicSource s) =>
+        (s.lastOkAt == 0 && s.lastFailedAt == 0) ? -1 : s.lastOkAt;
+    final candidates = sources
+        .where((s) => s.enabled && s.rules.searchUrl.isNotEmpty)
+        .toList()
+      ..sort((a, b) => rank(a).compareTo(rank(b)));
+    final targets = candidates.take(maxSources).toList();
+    if (targets.isEmpty) return;
+
+    final builder =
+        runtimeBuilder ?? (s) => SourceService.instance.runtimeFor(s);
+    final okIds = <String>[];
+    final errors = <String, String>{};
+    for (var i = 0; i < targets.length; i += 8) {
+      await Future.wait(targets.skip(i).take(8).map((s) async {
+        try {
+          await builder(s).search('斗罗大陆').timeout(const Duration(seconds: 10));
+          okIds.add(s.id);
+        } catch (e) {
+          errors[s.id] = e.toString();
+        }
+      }));
+    }
+    await reportSourceHealth(okIds, errors);
+  }
 
   /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
   /// 结果走 [reportSourceHealth]（成功清零失败计数，失败累加→标红）。

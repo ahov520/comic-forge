@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -41,6 +42,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final _pageController = PageController();
   final _scrollController = ScrollController();
   bool _nextChapterWarmed = false;
+  bool _offsetRestored = false;
+  Timer? _offsetSaveTimer;
 
   Chapter get _chapter => widget.chapters[_index];
 
@@ -95,6 +98,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
           .imagesFor(widget.runtime, widget.chapters[index].url);
     });
     _nextChapterWarmed = false;
+    _offsetRestored = false;
+    _offsetSaveTimer?.cancel();
     // 预加载下一话 URL 列表（失败静默）
     if (index + 1 < widget.chapters.length) {
       SourceService.instance
@@ -126,6 +131,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// 滚动模式接近底部时同样触发（由 ScrollController 调用）。
   void _warmNextChapterOnScroll() {
+    _saveOffsetDebounced();
     if (_nextChapterWarmed) return;
     final c = _scrollController;
     if (!c.hasClients) return;
@@ -140,6 +146,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  /// 滚动位置节流保存（停顿 600ms 落盘一次）。
+  void _saveOffsetDebounced() {
+    if (_isPaged) return;
+    final c = _scrollController;
+    if (!c.hasClients) return;
+    _offsetSaveTimer?.cancel();
+    _offsetSaveTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!c.hasClients || widget.appState == null) return;
+      widget.appState!
+          .saveScrollOffset(_chapter.url, c.offset);
+    });
+  }
+
   void _go(int delta) {
     final next = _index + delta;
     if (next < 0 || next >= widget.chapters.length) return;
@@ -148,9 +167,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    // 退出阅读器时立即落盘当前滚动位置
+    if (!_isPaged && _scrollController.hasClients && widget.appState != null) {
+      widget.appState!.saveScrollOffset(_chapter.url, _scrollController.offset);
+    }
+    _offsetSaveTimer?.cancel();
     _enableVolumeKeys(false);
     _readerChannel.setMethodCallHandler(null);
     _pageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -183,7 +208,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
           controller: _scrollController,
           key: PageStorageKey<String>(_chapter.url),
           itemCount: urls.length,
-          itemBuilder: (context, i) => img(urls[i]),
+          itemBuilder: (context, i) {
+            // 首帧后恢复持久化的滚动位置（跨重启记忆，每章一次）
+            if (!_offsetRestored) {
+              _offsetRestored = true;
+              final saved =
+                  widget.appState?.scrollOffsetFor(_chapter.url) ?? 0;
+              if (saved > 0) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.jumpTo(saved.clamp(
+                        0, _scrollController.position.maxScrollExtent));
+                  }
+                });
+              }
+            }
+            return img(urls[i]);
+          },
         ),
       );
     }
