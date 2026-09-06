@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'request.dart';
+
 /// 抓取抽象：引擎不绑定具体 HTTP 栈，应用层可注入带 UA/Cookie/代理的实现。
 abstract class Fetcher {
   /// 返回解码后的文本。
@@ -9,9 +11,12 @@ abstract class Fetcher {
 
   /// 返回原始字节。
   Future<List<int>> getBytes(String url, {Map<String, String>? headers});
+
+  /// 发送完整请求（支持 POST form/JSON 与附加请求头）。
+  Future<List<int>> send(SourceRequest request, {Map<String, String>? headers});
 }
 
-/// 默认实现：直接 http.get。
+/// 默认实现：直接 http.get/post。
 class HttpFetcher implements Fetcher {
   HttpFetcher({http.Client? client, this.defaultHeaders})
       : _client = client ?? http.Client();
@@ -33,6 +38,19 @@ class HttpFetcher implements Fetcher {
     );
     if (res.statusCode >= 400) {
       throw FetchException('HTTP ${res.statusCode} for $url');
+    }
+    return res.bodyBytes;
+  }
+
+  @override
+  Future<List<int>> send(SourceRequest request, {Map<String, String>? headers}) async {
+    final h = {...?defaultHeaders, ...request.headers, ...?headers};
+    final uri = Uri.parse(request.url);
+    final res = request.isPost
+        ? await _client.post(uri, headers: h, body: request.body)
+        : await _client.get(uri, headers: h);
+    if (res.statusCode >= 400) {
+      throw FetchException('HTTP ${res.statusCode} for ${request.url}');
     }
     return res.bodyBytes;
   }

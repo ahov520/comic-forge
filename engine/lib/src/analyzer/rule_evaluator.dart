@@ -54,6 +54,11 @@ class RuleEvaluator {
       cur = next;
       if (cur.isEmpty) return const [];
     }
+    // json 路径末段命中数组（如 `$.data.hit`，无 [*]）时摊平为逐项节点，
+    // 列表规则的 ppcat/legado 语义是迭代数组元素。
+    if (cur.length == 1 && cur.first is List) {
+      return (cur.first as List).toList();
+    }
     return cur;
   }
 

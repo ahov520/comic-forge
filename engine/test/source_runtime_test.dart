@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:engine/src/models/comic_source.dart';
 import 'package:engine/src/net/fetcher.dart';
+import 'package:engine/src/net/request.dart';
 import 'package:engine/src/source_runtime.dart';
 import 'package:test/test.dart';
 
@@ -11,6 +12,7 @@ class FakeFetcher implements Fetcher {
 
   final Map<String, String> routes;
   final List<String> requested = [];
+  final List<SourceRequest> sentRequests = [];
 
   @override
   Future<String> getString(String url, {Map<String, String>? headers, String? charset}) async {
@@ -23,6 +25,12 @@ class FakeFetcher implements Fetcher {
   @override
   Future<List<int>> getBytes(String url, {Map<String, String>? headers}) async {
     return utf8.encode(await getString(url, headers: headers));
+  }
+
+  @override
+  Future<List<int>> send(SourceRequest request, {Map<String, String>? headers}) async {
+    sentRequests.add(request);
+    return utf8.encode(await getString(request.url, headers: {...request.headers, ...?headers}));
   }
 
   static String _stripQuery(String url) => url.split('?').first;
@@ -169,6 +177,94 @@ void main() {
       expect(page.items.length, 2);
       expect(page.items.first.name, '甲');
       expect(page.items.first.coverUrl, 'https://img.example.com/1.jpg');
+    });
+  });
+
+  group('POST 搜索（ppcat @ 语法穿透全链路）', () {
+    test('表单体搜索：method/body/content-type 到达抓取器', () async {
+      final fetcher = FakeFetcher({
+        'https://api.example.com/search': jsonEncode({
+          'list': [
+            {'title': '丙', 'url': '/book/9'},
+          ]
+        }),
+      });
+      final src = ComicSource.fromJson({
+        'id': 'post',
+        'name': 'POST源',
+        'url': 'https://api.example.com',
+        'rules': {
+          'searchUrl': '/search@page={{page}}&key={{key}}',
+          'searchList': '\$.list[*]',
+          'searchName': '\$.title',
+          'searchBookUrl': '\$.url',
+        },
+      });
+      final rt = SourceRuntime(source: src, fetcher: fetcher);
+      final page = await rt.search('海贼');
+      expect(page.items.single.name, '丙');
+      expect(fetcher.sentRequests.single.isPost, isTrue);
+      expect(fetcher.sentRequests.single.body, 'page=1&key=%E6%B5%B7%E8%B4%BC');
+      expect(
+          fetcher.sentRequests.single.headers['Content-Type'],
+          'application/x-www-form-urlencoded');
+      expect(fetcher.sentRequests.single.headers['User-Agent'], isNotEmpty);
+    });
+
+    test('PostJson + 算术页码', () async {
+      final fetcher = FakeFetcher({
+        'https://api.example.com/twirp/Search': '{"list":[]}',
+      });
+      final src = ComicSource.fromJson({
+        'id': 'pj',
+        'name': 'PostJson源',
+        'url': 'https://api.example.com',
+        'rules': {
+          'searchUrl': '/twirp/Search@{"page_num":searchPage-1}@PostJson',
+          'searchList': '\$.list[*]',
+        },
+      });
+      final rt = SourceRuntime(source: src, fetcher: fetcher);
+      await rt.search('x', page: 2);
+      final req = fetcher.sentRequests.single;
+      expect(req.isPost, isTrue);
+      expect(req.body, '{"page_num":1}');
+      expect(req.headers['Content-Type'], contains('application/json'));
+    });
+  });
+
+  group('快看式 JSON 源（快看修复回归）', () {
+    test(r'jsonpath 无 [*] 的数组摊平 + {$.id} bookUrl 模板', () async {
+      final fetcher = FakeFetcher({
+        'https://www.kkmh.example.com/v1/search/topic?q=%E6%96%97%E7%BD%97&since=0&count=48':
+            jsonEncode({
+          'code': 200,
+          'data': {
+            'hit': [
+              {'id': 3095, 'title': '斗罗大陆外传'},
+              {'id': 4096, 'title': '斗罗大陆'},
+            ],
+          },
+        }),
+      });
+      final src = ComicSource.fromJson({
+        'id': 'kkmh',
+        'name': '快看式源',
+        'url': 'https://www.kkmh.example.com',
+        'rules': {
+          'searchUrl': '/v1/search/topic?q={{key}}&since={{48*(searchPage-1)}}&count=48',
+          'searchList': '\$.data.hit||\$.data.topics',
+          'searchName': '\$.title',
+          'searchBookUrl': 'https://www.kkmh.example.com/web/topic/{\$.id}/',
+        },
+      });
+      final rt = SourceRuntime(source: src, fetcher: fetcher);
+      final page = await rt.search('斗罗');
+      expect(page.items.length, 2, reason: '命中数组应摊平为逐项节点');
+      expect(page.items.first.name, '斗罗大陆外传');
+      expect(page.items.first.bookUrl, 'https://www.kkmh.example.com/web/topic/3095/',
+          reason: r'{$.id} 字面模板应代入条目字段');
+      expect(page.items.last.bookUrl, 'https://www.kkmh.example.com/web/topic/4096/');
     });
   });
 }

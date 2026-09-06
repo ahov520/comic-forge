@@ -195,10 +195,37 @@ List<String> _splitTop(String input, String sep) {
 }
 
 /// URL 模板：`{{key}}` 占位符替换（searchUrl 的 {{key}}/{{page}}/{{pageSize}}）。
-/// 兼容 ppcat 的裸 `searchKey` 占位与 `{page}` 单括号写法。
+/// 兼容 ppcat 的裸 `searchKey` 占位与 `{page}` 单括号写法；
+/// 数值变量支持 ppcat 算术偏移：`searchPage-1` / `{page+1}`；
+/// `{{48*(searchPage-1)}}` 形式的纯算术表达式可求值。
 String renderUrlTemplate(String template, Map<String, String> vars) {
-  var out = template.replaceAllMapped(RegExp(r'\{\{\s*(\w+)\s*\}\}'), (m) {
-    return vars[m.group(1)] ?? '';
+  var out = template.replaceAllMapped(RegExp(r'\{\{\s*([^{}]+?)\s*\}\}'), (m) {
+    final expr = m.group(1)!.trim();
+    final direct = vars[expr];
+    if (direct != null) return direct;
+    // 算术表达式：变量代入后若为纯数字运算则求值（如 48*(searchPage-1)）
+    var e = expr;
+    vars.forEach((k, v) {
+      e = e.replaceAll(RegExp('\\b${RegExp.escape(k)}\\b'), v);
+    });
+    return evalArithmetic(e) ?? '';
+  });
+  // 算术偏移：仅数值变量（page/searchPage 等页码），避免误伤搜索词。
+  // 括号只在成对时剥离；单侧的 { 或 } 属于外围文本（如 JSON 体），原样保留。
+  vars.forEach((name, value) {
+    final n = int.tryParse(value);
+    if (n == null) return;
+    out = out.replaceAllMapped(
+        RegExp('(\\{)?\\b${RegExp.escape(name)}\\b\\s*([+-])\\s*(\\d+)(\\})?'),
+        (m) {
+      final open = m.group(1) ?? '';
+      final close = m.group(4) ?? '';
+      final v = m.group(2) == '+'
+          ? n + int.parse(m.group(3)!)
+          : n - int.parse(m.group(3)!);
+      // 成对括号 = 占位符本身的包裹（{page+1}），剥离；单侧 = 外围文本（JSON 体），保留
+      return open.isNotEmpty && close.isNotEmpty ? '$v' : '$open$v$close';
+    });
   });
   out = out.replaceAllMapped(RegExp(r'\{\s*(\w+)\s*\}'), (m) {
     return vars[m.group(1)] ?? m.group(0)!;
@@ -216,6 +243,92 @@ String renderUrlTemplate(String template, Map<String, String> vars) {
 
 /// 规则字符串工具入口（供 evaluator 与测试使用）。
 RuleAnalyzer analyzer(String rule) => RuleAnalyzer(rule);
+
+/// 求值纯算术表达式（整数四则 + 括号，如 `48*(searchPage-1)` 代入后的
+/// `48*(2-1)`）。表达式含任何非运算字符则返回 null（不抛错、不 eval）。
+String? evalArithmetic(String expr) {
+  final v = _ArithEval(expr.replaceAll(RegExp(r'\s+'), '')).parseAll();
+  return v;
+}
+
+class _ArithEval {
+  _ArithEval(this.s);
+
+  final String s;
+  int pos = 0;
+
+  String? parseAll() {
+    final v = parseExpr();
+    if (v == null || pos != s.length) return null;
+    return '$v';
+  }
+
+  // expr := term (('+'|'-') term)*
+  int? parseExpr() {
+    final first = parseTerm();
+    if (first == null) return null;
+    int v = first;
+    while (pos < s.length && (s[pos] == '+' || s[pos] == '-')) {
+      final op = s[pos++];
+      final r = parseTerm();
+      if (r == null) return null;
+      v = op == '+' ? v + r : v - r;
+    }
+    return v;
+  }
+
+  // term := unary (('*'|'/'|'%') unary)*
+  int? parseTerm() {
+    final first = parseUnary();
+    if (first == null) return null;
+    int v = first;
+    while (pos < s.length && (s[pos] == '*' || s[pos] == '/' || s[pos] == '%')) {
+      final op = s[pos++];
+      final r = parseUnary();
+      if (r == null) return null;
+      if ((op == '/' || op == '%') && r == 0) return null;
+      if (op == '*') {
+        v = v * r;
+      } else if (op == '/') {
+        v = v ~/ r;
+      } else {
+        v = v % r;
+      }
+    }
+    return v;
+  }
+
+  // unary := ('-'|'+')* atom
+  int? parseUnary() {
+    if (pos < s.length && s[pos] == '-') {
+      pos++;
+      final v = parseUnary();
+      return v == null ? null : -v;
+    }
+    if (pos < s.length && s[pos] == '+') {
+      pos++;
+      return parseUnary();
+    }
+    return parseAtom();
+  }
+
+  // atom := '(' expr ')' | number
+  int? parseAtom() {
+    if (pos < s.length && s[pos] == '(') {
+      pos++;
+      final v = parseExpr();
+      if (v == null || pos >= s.length || s[pos] != ')') return null;
+      pos++;
+      return v;
+    }
+    final start = pos;
+    while (pos < s.length && RegExp(r'[0-9]').hasMatch(s[pos])) {
+      pos++;
+    }
+    if (pos == start) return null;
+    return int.parse(s.substring(start, pos));
+  }
+}
 
 /// 便捷判定：规则是否指向 JSON 数据（用于 evaluator 选择解析器）。
 bool looksLikeJsonRule(String rule) => rule.trim().startsWith('\$.');

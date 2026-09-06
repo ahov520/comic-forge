@@ -7,6 +7,7 @@ import 'analyzer/rule_evaluator.dart';
 import 'models/comic_source.dart';
 import 'models/content.dart';
 import 'net/fetcher.dart';
+import 'net/request.dart';
 
 /// 源运行时：把一个 [ComicSource] + [Fetcher] 变成可搜索、可阅读的接口。
 class SourceRuntime {
@@ -32,8 +33,17 @@ class SourceRuntime {
     return Uri.parse(base).resolve(u).toString();
   }
 
-  Future<dynamic> _fetchDoc(String url) async {
-    final text = await fetcher.getString(url, headers: _headers);
+  /// 规则 URL（可含 ppcat `@` POST/请求头语法）→ 绝对化后的完整请求。
+  SourceRequest _request(String ruleUrl) {
+    final req = parseRuleUrl(ruleUrl, headers: _headers);
+    final abs = _absUrl(source.url, req.url);
+    return SourceRequest(
+        url: abs, method: req.method, body: req.body, headers: req.headers);
+  }
+
+  Future<dynamic> _fetchDoc(SourceRequest req) async {
+    final bytes = await fetcher.send(req);
+    final text = utf8.decode(bytes, allowMalformed: true);
     final trimmed = text.trimLeft();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       return jsonDecode(text);
@@ -47,17 +57,18 @@ class SourceRuntime {
       throw StateError('源 ${source.name} 未配置 searchUrl');
     }
     final key = Uri.encodeComponent(keyword);
-    final url = nextUrl ??
-        _absUrl(source.url, renderUrlTemplate(source.rules.searchUrl, {
-          'key': key,
-          'keyword': key,
-          'searchKey': key,
-          'page': '$page',
-          'searchPage': '$page',
-          'pageSize': '20',
-        }));
+    final req = nextUrl != null
+        ? _request(nextUrl)
+        : _request(renderUrlTemplate(source.rules.searchUrl, {
+            'key': key,
+            'keyword': key,
+            'searchKey': key,
+            'page': '$page',
+            'searchPage': '$page',
+            'pageSize': '20',
+          }));
     return _fetchBooks(
-      url,
+      req,
       listRule: source.rules.searchList,
       nameRule: source.rules.searchName,
       authorRule: source.rules.searchAuthor,
@@ -91,16 +102,17 @@ class SourceRuntime {
   }
 
   Future<Paged<Book>> explore(String entryUrl, {int page = 1, String? nextUrl}) async {
-    final url = nextUrl ??
-        _absUrl(source.url, renderUrlTemplate(entryUrl, {
-          'page': '$page',
-          'searchPage': '$page',
-        }));
+    final req = nextUrl != null
+        ? _request(nextUrl)
+        : _request(renderUrlTemplate(entryUrl, {
+            'page': '$page',
+            'searchPage': '$page',
+          }));
     // ppcat 约定：发现页无独立规则时复用搜索规则
     final r = source.rules;
     final useFind = r.findList.isNotEmpty;
     return _fetchBooks(
-      url,
+      req,
       listRule: useFind ? r.findList : r.searchList,
       nameRule: useFind ? r.findName : r.searchName,
       authorRule: useFind ? r.findAuthor : r.searchAuthor,
@@ -116,7 +128,7 @@ class SourceRuntime {
 
   /// 详情 + 章节列表。
   Future<(Book, List<Chapter>)> detail(String bookUrl) async {
-    final doc = await _fetchDoc(bookUrl);
+    final doc = await _fetchDoc(_request(bookUrl));
     final r = source.rules;
     String? evalFirst(String rule, String fallbackRule) {
       if (rule.isNotEmpty) return _eval.evalFirst(doc, RuleAnalyzer(rule).parse());
@@ -161,7 +173,7 @@ class SourceRuntime {
     final out = <String>[];
     var url = chapterUrl;
     for (var i = 0; i < maxPages && url.isNotEmpty; i++) {
-      final doc = await _fetchDoc(url);
+      final doc = await _fetchDoc(_request(url));
       final urls = _eval.eval(doc, RuleAnalyzer(r.contentUrl).parse());
       out.addAll(urls.map((u) => _absUrl(url, u)));
       if (r.contentUrlNext.isEmpty) break;
@@ -171,8 +183,19 @@ class SourceRuntime {
     return out;
   }
 
+  static final _tplHole = RegExp(r'\{\$([^{}]+)\}');
+
+  /// `https://host/topic/{$.id}/` 形式的字面模板：逐洞对条目求 jsonpath 并代入。
+  String _evalTemplateRule(String rule, dynamic item) {
+    return rule.replaceAllMapped(_tplHole, (m) {
+      final inner = m.group(1)!.trim();
+      final holeRule = RuleAnalyzer(inner.startsWith('\$') ? inner : '\$$inner').parse();
+      return _eval.evalFirst(item, holeRule) ?? '';
+    });
+  }
+
   Future<Paged<Book>> _fetchBooks(
-    String url, {
+    SourceRequest req, {
     required String listRule,
     required String nameRule,
     String? authorRule,
@@ -187,7 +210,8 @@ class SourceRuntime {
     if (listRule.isEmpty) {
       throw StateError('源 ${source.name} 未配置列表规则');
     }
-    final doc = await _fetchDoc(url);
+    final url = req.url;
+    final doc = await _fetchDoc(req);
     // `-` 前缀 = 倒序（legado 语义）
     var ruleStr = listRule;
     var reverse = false;
@@ -201,7 +225,10 @@ class SourceRuntime {
 
     String pick(dynamic item, String r, {bool abs = false}) {
       if (r.isEmpty || item is String) return item is String ? item : '';
-      var v = _eval.evalFirst(item, RuleAnalyzer(r).parse()) ?? '';
+      // 字面模板内嵌 jsonpath（ppcat `{$.id}` → https://host/topic/3095/）
+      var v = r.contains(r'{$')
+          ? _evalTemplateRule(r, item)
+          : (_eval.evalFirst(item, RuleAnalyzer(r).parse()) ?? '');
       if (abs) v = _absUrl(url, v);
       return v;
     }

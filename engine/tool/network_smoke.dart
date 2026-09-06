@@ -36,6 +36,7 @@ bool isPublicHttpUrl(String raw) {
 Future<void> main(List<String> args) async {
   final keyword = args.isNotEmpty ? args[0] : '一人之下';
   final sampleN = args.length > 1 ? int.parse(args[1]) : 12;
+  final nameFilter = args.length > 2 ? args[2] : null;
 
   final j = jsonDecode(File('../app/assets/store.json').readAsStringSync())
       as Map<String, dynamic>;
@@ -43,6 +44,7 @@ Future<void> main(List<String> args) async {
       .whereType<Map<String, dynamic>>()
       .map(ComicSource.fromPpcatFlat)
       .where((s) => s.rules.searchUrl.isNotEmpty)
+      .where((s) => nameFilter == null || s.name.contains(nameFilter))
       .toList();
 
   // 样本挑选：带 headers（常见反爬 UA）的优先，域名分散（每个根域只取 1 条）

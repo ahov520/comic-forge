@@ -15,4 +15,5 @@ export 'src/store/ppcat_store.dart';
 export 'src/store/tolerant_inflate.dart';
 export 'src/store/pipimiao_backup.dart';
 export 'src/net/fetcher.dart';
+export 'src/net/request.dart';
 export 'src/source_runtime.dart';
