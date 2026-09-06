@@ -101,7 +101,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final url = entries.firstWhere((e) => e.$1 == entry, orElse: () => ('', entry)).$2;
     setState(() {
       _entry = entry;
-      _future = SourceService.instance.runtimeFor(src).explore(url);
+      _future = SourceGuard.track(
+        src,
+        () => SourceService.instance.runtimeFor(src).explore(url),
+      ).whenComplete(widget.state.persistSources);
     });
   }
 

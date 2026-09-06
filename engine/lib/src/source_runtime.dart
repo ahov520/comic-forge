@@ -41,6 +41,28 @@ class SourceRuntime {
     return html_parser.parse(text);
   }
 
+  /// 轻量探活：GET 源站点 url；没有则渲染 searchUrl 再 GET。不解析规则。
+  Future<void> probe() async {
+    var url = source.url.trim();
+    if (url.isEmpty && source.rules.searchUrl.isNotEmpty) {
+      url = _absUrl(
+        source.url,
+        renderUrlTemplate(source.rules.searchUrl, {
+          'key': '1',
+          'keyword': '1',
+          'searchKey': '1',
+          'page': '1',
+          'searchPage': '1',
+          'pageSize': '1',
+        }),
+      );
+    }
+    if (url.isEmpty) {
+      throw StateError('源 ${source.name} 无可探测地址');
+    }
+    await fetcher.getString(url, headers: _headers);
+  }
+
   /// 搜索。返回分页结果（含源规则给的下一页链接，若有）。
   Future<Paged<Book>> search(String keyword, {int page = 1, String? nextUrl}) async {
     if (source.rules.searchUrl.isEmpty && nextUrl == null) {

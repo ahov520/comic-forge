@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:engine/engine.dart';
 
+import '../state/app_state.dart';
+
 /// 章节阅读器：图片流连续滚动，点击切换工具栏。
 class ReaderScreen extends StatefulWidget {
   const ReaderScreen({
@@ -9,11 +11,13 @@ class ReaderScreen extends StatefulWidget {
     required this.runtime,
     required this.book,
     required this.chapter,
+    this.appState,
   });
 
   final SourceRuntime runtime;
   final Book book;
   final Chapter chapter;
+  final AppState? appState;
 
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
@@ -26,7 +30,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
-    _images = widget.runtime.images(widget.chapter.url);
+    final src = widget.runtime.source;
+    _images = SourceGuard.track(
+      src,
+      () => widget.runtime.images(widget.chapter.url),
+    ).whenComplete(() => widget.appState?.persistSources());
   }
 
   @override

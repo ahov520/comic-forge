@@ -13,6 +13,12 @@ class SourceService {
   final Map<String, SourceRuntime> _runtimes = {};
 
   SourceRuntime runtimeFor(ComicSource source) {
-    return _runtimes.putIfAbsent(source.id, () => SourceRuntime(source: source, fetcher: fetcher));
+    final existing = _runtimes[source.id];
+    if (existing != null && identical(existing.source, source)) return existing;
+    final rt = SourceRuntime(source: source, fetcher: fetcher);
+    _runtimes[source.id] = rt;
+    return rt;
   }
+
+  void evict(String id) => _runtimes.remove(id);
 }

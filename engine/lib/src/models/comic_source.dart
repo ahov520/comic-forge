@@ -1,3 +1,5 @@
+import 'source_health.dart';
+
 /// 漫画源的一组规则（嵌套视图）。
 ///
 /// ppcat 的 JSON 里规则是平铺键（如 `ruleSearchList`），载入时由
@@ -185,8 +187,10 @@ class ComicSource {
     this.weight = 0,
     Map<String, String>? headers,
     RuleSet? rules,
+    SourceHealth? health,
   })  : headers = headers ?? {},
-        rules = rules ?? RuleSet();
+        rules = rules ?? RuleSet(),
+        health = health ?? SourceHealth();
 
   String id;
   String name;
@@ -198,6 +202,7 @@ class ComicSource {
   int weight;
   Map<String, String> headers;
   RuleSet rules;
+  SourceHealth health;
 
   /// 原始 JSON（保持往返保真，未知键不丢）。
   Map<String, dynamic> raw = {};
@@ -213,6 +218,7 @@ class ComicSource {
         if (weight != 0) 'weight': weight,
         if (headers.isNotEmpty) 'headers': headers,
         'rules': rules.toJson(),
+        if (!health.isDefault) 'health': health.toJson(),
       };
 
   /// 从明文仓库（Track A）JSON 构建。
@@ -232,6 +238,7 @@ class ComicSource {
       h.forEach((k, v) => s.headers[k.toString()] = v.toString());
     }
     s.raw = Map<String, dynamic>.from(j);
+    s.health = SourceHealth.fromJson(j['health']);
     final r = j['rules'];
     if (r is Map) {
       r.forEach((k, v) {

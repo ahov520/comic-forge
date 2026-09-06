@@ -32,7 +32,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     _source = _findSource();
     _future = _source == null
         ? Future.error('未找到来源源（可能已被移除或禁用）')
-        : SourceService.instance.runtimeFor(_source!).detail(widget.book.bookUrl);
+        : SourceGuard.track(
+            _source!,
+            () => SourceService.instance.runtimeFor(_source!).detail(widget.book.bookUrl),
+          ).whenComplete(widget.appState.persistSources);
   }
 
   ComicSource? _findSource() {
@@ -148,8 +151,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       title: Text(ch.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       onTap: () {
                         if (_source != null) {
-                          openReader(context,
-                              SourceService.instance.runtimeFor(_source!), book, ch);
+                          openReader(
+                            context,
+                            SourceService.instance.runtimeFor(_source!),
+                            book,
+                            ch,
+                            appState: widget.appState,
+                          );
                         }
                       },
                     );
