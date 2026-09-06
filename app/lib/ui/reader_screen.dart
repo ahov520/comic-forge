@@ -9,6 +9,7 @@ import 'package:engine/engine.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import '../state/scroll_restore.dart';
 
 /// 音量键翻页通道（Android 原生拦截后转发）。
 const _readerChannel = MethodChannel('comic-forge/reader');
@@ -212,13 +213,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
             // 首帧后恢复持久化的滚动位置（跨重启记忆，每章一次）
             if (!_offsetRestored) {
               _offsetRestored = true;
-              final saved =
-                  widget.appState?.scrollOffsetFor(_chapter.url) ?? 0;
-              if (saved > 0) {
+              final saved = widget.appState?.scrollOffsetFor(_chapter.url);
+              if (saved != null && saved > 0) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
-                    _scrollController.jumpTo(saved.clamp(
-                        0, _scrollController.position.maxScrollExtent));
+                    _scrollController.jumpTo(resolveRestoredScroll(
+                      saved: saved,
+                      maxExtent: _scrollController.position.maxScrollExtent,
+                    ));
                   }
                 });
               }
