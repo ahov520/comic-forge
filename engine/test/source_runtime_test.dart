@@ -267,6 +267,67 @@ void main() {
       expect(page.items.last.bookUrl, 'https://www.kkmh.example.com/web/topic/4096/');
     });
 
+    test('B站式规则全链路：POST搜索 + {{js}}列表 + @js: bookUrl模板 + POST详情', () async {
+      final fetcher = FakeFetcher({
+        'https://manga.bili.example.com/twirp/comic.v1.Comic/Search': jsonEncode({
+          'data': {
+            'list': [
+              {'id': 30956, 'org_title': '某科学的超电磁炮', 'title': '科学超电磁炮'},
+              {'id': 27036, 'org_title': '灵笼', 'title': '灵笼月魁传'},
+            ],
+          },
+        }),
+        'https://manga.bili.example.com/twirp/comic.v1.Comic/ComicDetail?device=h5&platform=h5':
+            jsonEncode({
+          'data': {
+            'title': '某科学的超电磁炮',
+            'chapter_list': [
+              {'id': 1, 'short_title': '第1话', 'url': '/reader/1'},
+              {'id': 2, 'short_title': '第2话', 'url': '/reader/2'},
+            ],
+          },
+        }),
+      });
+      final src = ComicSource.fromJson({
+        'id': 'bili',
+        'name': 'B站式源',
+        'url': 'https://manga.bili.example.com',
+        'headers': {'User-Agent': 'Android'},
+        'rules': {
+          'searchUrl': '/twirp/comic.v1.Comic/Search'
+              '@{"platform":"h5","key_word":"searchKey","pageSize":10,"page_num":searchPage}'
+              '@Header:{"Content-Type":"application/json;charset=UTF-8"}@PostJson',
+          'searchList': "{{\nvar json=JSON.parse(result);\n"
+              "var out='\$.data.list.*|\$.data.*';\n"
+              "if(json.data.list&&json.data.list.length==0){\nout=undefined;\n}\nout\n}}",
+          'searchName': r'$.org_title|$.title@put:{pid:$.id|$.season_id}'
+              '@js:java.fns.diableList=java.ajax("x");result',
+          'searchBookUrl': r'''$.id|$.season_id@js:
+'https://manga.bili.example.com/twirp/comic.v1.Comic/ComicDetail?device=h5&platform=h5@{"comic_id":'+result+'}@PostJson'
+''',
+          'bookName': r'$.data.title',
+          'chapterList': r'$.data.chapter_list[*]',
+          'chapterName': r'$.short_title',
+          'chapterUrl': r'$.url',
+        },
+      });
+      final rt = SourceRuntime(source: src, fetcher: fetcher);
+      final page = await rt.search('超电磁炮');
+      expect(page.items.length, 2, reason: '{{js}}列表块应静态求值为 jsonpath');
+      expect(page.items.first.name, '某科学的超电磁炮', reason: '@put/@js 不可解析时回退前缀提取');
+      final detailUrl = page.items.first.bookUrl;
+      expect(detailUrl, contains('"comic_id":30956'), reason: r'@js: 拼接模板应代入 $.id');
+      expect(detailUrl, contains('@PostJson'));
+
+      final (book, chapters) = await rt.detail(detailUrl);
+      expect(book.name, '某科学的超电磁炮');
+      expect(chapters.map((c) => c.title), ['第1话', '第2话']);
+      final detailReq = fetcher.sentRequests
+          .firstWhere((r) => r.url.contains('ComicDetail'));
+      expect(detailReq.isPost, isTrue);
+      expect(detailReq.body, contains('"comic_id":30956'));
+    });
+
     test('ruleChapterUrlNext 章节列表翻页（去重合并）', () async {
       const detailP1 = '''
 <html><body><h1 class="name">翻页书</h1>

@@ -1,8 +1,10 @@
+import 'js_lite.dart';
+
 /// 单条选段规则：从上一步结果（节点/字符串）中继续提取。
 class Seg {
   Seg({this.type, this.value = '', this.attr, this.fun, this.param, this.regex, this.replacement});
 
-  /// css | xpath | json | shorthand(id./class./tag.) | attr
+  /// css | xpath | json | shorthand(id./class./tag.) | attr | jstemplate
   final String? type;
   final String value;
   final String? attr;
@@ -55,6 +57,7 @@ class Rule {
 /// - `id.main@class.content@tag.a@text`  legado 简写
 /// - `@text` `@html` `@href` `@src` `@attr:xxx` 提取函数
 /// - `||` 备选，`&&` 合并
+/// - ppcat：`{{js}}`/`@js:` 静态子集（js_lite）、`@put:{}` 剥离
 class RuleAnalyzer {
   RuleAnalyzer(this.source);
 
@@ -76,8 +79,40 @@ class RuleAnalyzer {
   /// 解析单条管道（不含 || 和 &&）。支持多级 @：
   /// `div.item@tag.a@text` = 选中 div.item → 在其中选 tag.a → 提取 text。
   /// 支持 legado 风格正则后处理后缀：`规则##正则##替换`。
+  /// ppcat 扩展：`@put:{...}` 剥离；`{{...js...}}` 块静态求值；
+  /// `前缀@js:...'+result+'...'` → jstemplate 段（求值期以 result 拼接）。
   List<Seg> _parsePipeline(String rule) {
     if (rule.isEmpty) return const [];
+
+    // @put:{...} 变量存储暂不支持——剥离
+    rule = _stripPutBlocks(rule);
+
+    // {{...js...}} 块：js_lite 静态求值出一个规则串后重解析
+    final block = RegExp(r'\{\{([\s\S]*?)\}\}').firstMatch(rule);
+    if (block != null) {
+      final evaluated = evalJsLite(block.group(1)!);
+      if (evaluated == null || evaluated.isEmpty) return const [];
+      var lit = evaluated;
+      if (lit.startsWith(r'$.')) lit = normalizeJsonPathLiteral(lit);
+      return _parsePipeline(rule.replaceRange(block.start, block.end, lit));
+    }
+
+    // @js: 后缀
+    final jsIdx = rule.indexOf('@js:');
+    if (jsIdx >= 0) {
+      final prefix = rule.substring(0, jsIdx).trim();
+      final js = rule.substring(jsIdx + 4);
+      if (prefix.isEmpty) {
+        // 纯 js 生成规则串（静态部分）
+        final ev = evalJsLite(js);
+        if (ev == null || ev.isEmpty) return const [];
+        var lit = ev;
+        if (lit.startsWith(r'$.')) lit = normalizeJsonPathLiteral(lit);
+        return _parsePipeline(lit);
+      }
+      if (js.trim().isEmpty) return _parsePipeline(prefix);
+      return [Seg(type: 'jstemplate', value: prefix, param: js)];
+    }
 
     // ## 正则后处理后缀（不适用于 json/xpath 内部——先剥离再判断类型）
     String? postRegex;
@@ -150,6 +185,29 @@ class RuleAnalyzer {
       s == 'text' || s == 'textNodes' || s == 'html' || s == 'all' ||
       s == 'href' || s == 'src' || s == 'content' || s == 'alt' || s == 'title' ||
       s == 'value' || s == 'textNodes';
+
+  /// 剥离 `@put:{...}`（花括号配对扫描）。
+  static String _stripPutBlocks(String rule) {
+    var out = rule;
+    while (true) {
+      final i = out.indexOf('@put:');
+      if (i < 0) return out;
+      var b = out.indexOf('{', i);
+      if (b < 0) return out.substring(0, i);
+      var depth = 0;
+      var e = b;
+      for (; e < out.length; e++) {
+        if (out[e] == '{') {
+          depth++;
+        } else if (out[e] == '}') {
+          depth--;
+          if (depth == 0) break;
+        }
+      }
+      if (e >= out.length) return out.substring(0, i);
+      out = out.substring(0, i) + out.substring(e + 1);
+    }
+  }
 
   static String _detect(String selector) {
     // legado 简写：id.xxx class.xxx tag.xxx

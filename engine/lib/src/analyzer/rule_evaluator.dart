@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:html/dom.dart' as hd;
 
+import 'js_lite.dart';
 import 'rule_analyzer.dart';
 
 /// 在 [root] 上评估规则，返回提取到的全部字符串。
@@ -72,9 +73,24 @@ class RuleEvaluator {
       case 'shorthand':
       case 'self':
         return _evalCss(node, seg);
+      case 'jstemplate':
+        return _evalJsTemplate(node, seg);
       default:
         return const [];
     }
+  }
+
+  /// `前缀@js:...'+result+'...'`：先取前缀值为 result，再用 js_lite 拼接；
+  /// js 不可解析（如依赖 java.ajax）时优雅回退为前缀值。
+  List<dynamic> _evalJsTemplate(dynamic node, Seg seg) {
+    final prefixRule = RuleAnalyzer(seg.value).parse();
+    final vals = _evalBranches(node, prefixRule);
+    final result = vals.isEmpty ? '' : _stringify(vals.first);
+    final ev = evalJsLite(seg.param ?? '', result: result);
+    if (ev == null || ev.isEmpty) {
+      return result.isEmpty ? const [] : [result];
+    }
+    return [ev];
   }
 
   // ---------- HTML / CSS ----------
@@ -342,8 +358,24 @@ class RuleEvaluator {
 
   // ---------- JSONPath（子集） ----------
 
-  /// 支持 `a.b.c` `.a[0]` `a[*].b` `a.b|c`（键备选）。
+  /// 支持 `a.b.c` `.a[0]` `a[*].b` `a.b|c`（键备选，单 `|` 逐支尝试）。
   List<dynamic> _evalJsonPath(dynamic value, String path) {
+    // 键备选：`$.id|$.season_id` / `a.b|c` —— 依序尝试首个非空分支
+    final alts =
+        path.split('|').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (alts.length > 1) {
+      for (final alt in alts) {
+        var p = alt;
+        if (p.startsWith(r'$')) p = p.substring(1);
+        final r = _evalJsonPathSingle(value, p);
+        if (r.isNotEmpty) return r;
+      }
+      return const [];
+    }
+    return _evalJsonPathSingle(value, path.startsWith(r'$') ? path.substring(1) : path);
+  }
+
+  List<dynamic> _evalJsonPathSingle(dynamic value, String path) {
     var cur = <dynamic>[value];
     final tokens = _jsonTokens(path);
     for (final t in tokens) {
