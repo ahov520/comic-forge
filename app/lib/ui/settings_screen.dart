@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../backup_service.dart';
 import '../state/app_state.dart';
 
 /// 设置。
@@ -36,6 +37,146 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// WebDAV 配置与备份/恢复面板。
+  void _showWebDavSheet(BuildContext context) {
+    final cfg = widget.state.webDavConfig ?? const {
+      'url': '',
+      'user': '',
+      'pass': '',
+      'path': BackupService.defaultRemotePath,
+    };
+    final url = TextEditingController(text: cfg['url']);
+    final user = TextEditingController(text: cfg['user']);
+    final pass = TextEditingController(text: cfg['pass']);
+    final path = TextEditingController(
+        text: (cfg['path']?.isEmpty ?? true)
+            ? BackupService.defaultRemotePath
+            : cfg['path']);
+    String? msg;
+    bool busy = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, 24 + MediaQuery.of(sheetCtx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('WebDAV 备份/恢复',
+                  style: Theme.of(sheetCtx).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: url,
+                  decoration: const InputDecoration(
+                      labelText: '服务器地址（https://…）',
+                      isDense: true,
+                      border: OutlineInputBorder())),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                    child: TextField(controller: user,
+                        decoration: const InputDecoration(
+                            labelText: '账号', isDense: true,
+                            border: OutlineInputBorder()))),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: TextField(controller: pass, obscureText: true,
+                        decoration: const InputDecoration(
+                            labelText: '密码', isDense: true,
+                            border: OutlineInputBorder()))),
+              ]),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: path,
+                  decoration: const InputDecoration(
+                      labelText: '备份文件远端路径', isDense: true,
+                      border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    icon: busy
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: const Text('备份'),
+                    onPressed: busy ? null : () async {
+                      setSheet(() { busy = true; msg = null; });
+                      try {
+                        await widget.state.setWebDavConfig({
+                          'url': url.text.trim(),
+                          'user': user.text.trim(),
+                          'pass': pass.text,
+                          'path': path.text.trim(),
+                        });
+                        await BackupService.backupToWebDav(
+                          st: widget.state,
+                          baseUrl: url.text.trim(),
+                          username: user.text.trim(),
+                          password: pass.text,
+                          remotePath: path.text.trim(),
+                        );
+                        setSheet(() => msg = '备份完成 ✓（覆盖远端同名文件）');
+                      } catch (e) {
+                        setSheet(() => msg = '备份失败：$e');
+                      } finally {
+                        if (sheetCtx.mounted) setSheet(() => busy = false);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                    label: const Text('恢复'),
+                    onPressed: busy ? null : () async {
+                      setSheet(() { busy = true; msg = null; });
+                      try {
+                        final r = await BackupService.restoreFromWebDav(
+                          st: widget.state,
+                          baseUrl: url.text.trim(),
+                          username: user.text.trim(),
+                          password: pass.text,
+                          remotePath: path.text.trim(),
+                        );
+                        await widget.state.setWebDavConfig({
+                          'url': url.text.trim(),
+                          'user': user.text.trim(),
+                          'pass': pass.text,
+                          'path': path.text.trim(),
+                        });
+                        setSheet(() => msg =
+                            '恢复完成：源 ${r.sources} · 书架 ${r.shelf} · 进度 ${r.progress} · 订阅 ${r.repos}');
+                      } catch (e) {
+                        setSheet(() => msg = '恢复失败：$e');
+                      } finally {
+                        if (sheetCtx.mounted) setSheet(() => busy = false);
+                      }
+                    },
+                  ),
+                ),
+              ]),
+              if (msg != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(msg!, style: const TextStyle(fontSize: 12)),
+                ),
+              const SizedBox(height: 4),
+              Text('合并语义：源按 id 替换（保留本地启停），书架并集，进度取较新，订阅并集。',
+                  style: TextStyle(
+                      fontSize: 11, color: Theme.of(sheetCtx).colorScheme.outline)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final adBlock = widget.state.adBlock;
@@ -51,11 +192,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (v) => widget.state.setDark(v),
           ),
           const _Header('数据'),
-          const ListTile(
-            leading: Icon(Icons.cloud_upload_outlined),
-            title: Text('WebDAV 备份/恢复'),
-            subtitle: Text('规划中（Phase 4）'),
-            enabled: false,
+          ListTile(
+            leading: Icon(
+              Icons.cloud_upload_outlined,
+              color: widget.state.webDavConfig != null
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            title: const Text('WebDAV 备份/恢复'),
+            subtitle: Text(widget.state.webDavConfig == null
+                ? '未配置 · 点击填写服务器与账号（书架/源库/进度/订阅）'
+                : '已配置 ${widget.state.webDavConfig!['url']}'),
+            onTap: () => _showWebDavSheet(context),
           ),
           ListTile(
             leading: Icon(

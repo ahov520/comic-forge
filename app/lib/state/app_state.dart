@@ -86,6 +86,7 @@ class AppState extends ChangeNotifier {
   static const _kRepoRefresh = 'cf.repoRefresh';
   static const _kRepoUpdates = 'cf.repoUpdates';
   static const _kAdBlock = 'cf.adBlock';
+  static const _kWebDav = 'cf.webdav';
   static const _detailCacheCap = 100;
 
   /// 启动自动检查间隔：6 小时内不重复检查。
@@ -100,6 +101,8 @@ class AppState extends ChangeNotifier {
   final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
   /// 广告拦截规则（null = 未启用）。
   AdBlockRules? adBlock;
+  /// WebDAV 配置（url/user/pass/path；明文存本地，仅本机使用）。
+  Map<String, String>? webDavConfig;
   bool darkMode = true;
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
@@ -141,6 +144,11 @@ class AppState extends ChangeNotifier {
     final adText = sp.getString(_kAdBlock);
     adBlock = adText == null ? null : AdBlockRules.tryParse(adText);
     SourceService.instance.adBlock = adBlock;
+    final wd = sp.getString(_kWebDav);
+    webDavConfig = wd == null
+        ? null
+        : (jsonDecode(wd) as Map<String, dynamic>)
+            .map((k, v) => MapEntry(k, v.toString()));
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     // 首次启动自动导入内置源快照
@@ -325,6 +333,63 @@ class AppState extends ChangeNotifier {
   Future<RepoRefreshResult> applyRepoUpdate(String repoUrl, {RepoClient? client}) =>
       refreshRepo(repoUrl, client: client);
 
+  /// 合并备份载荷：源按 id 替换（备份优先）、书架并集、进度取较新、
+  /// 订阅仓库并集。单次持久化 + 单次通知。
+  Future<({int sources, int shelf, int progress, int repos})> mergeBackup({
+    required List<ComicSource> sources,
+    required List<Book> shelf,
+    required Map<String, ReadingProgress> progress,
+    required List<String> repos,
+  }) async {
+    var nSrc = 0, nShelf = 0, nProg = 0, nRepo = 0;
+
+    for (final s in sources) {
+      final idx = this.sources.indexWhere((e) => e.id == s.id);
+      if (idx < 0) {
+        this.sources.add(s);
+        nSrc++;
+      } else if (SourceUpdate.fingerprint(this.sources[idx]) !=
+          SourceUpdate.fingerprint(s)) {
+        // 保留本地启用/权重/健康，规则以备份为准
+        s.enabled = this.sources[idx].enabled;
+        s.weight = this.sources[idx].weight;
+        s.failCount = this.sources[idx].failCount;
+        s.lastError = this.sources[idx].lastError;
+        s.lastFailedAt = this.sources[idx].lastFailedAt;
+        s.lastOkAt = this.sources[idx].lastOkAt;
+        this.sources[idx] = s;
+        nSrc++;
+      }
+    }
+    for (final b in shelf) {
+      if (!this.shelf.any((e) => e.bookUrl == b.bookUrl)) {
+        this.shelf.add(b);
+        nShelf++;
+      }
+    }
+    progress.forEach((k, v) {
+      final cur = this.progress[k];
+      if (cur == null || v.at > cur.at) {
+        this.progress[k] = v;
+        nProg++;
+      }
+    });
+    for (final r in repos) {
+      if (!this.repos.contains(r)) {
+        this.repos.add(r);
+        nRepo++;
+      }
+    }
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kSources, jsonEncode(this.sources.map((s) => s.toJson()).toList()));
+    await sp.setString(_kShelf, jsonEncode(this.shelf.map((e) => e.toJson()).toList()));
+    await sp.setString(_kProgress,
+        jsonEncode(this.progress.map((k, v) => MapEntry(k, v.toJson()))));
+    await sp.setString(_kRepos, jsonEncode(this.repos));
+    notifyListeners();
+    return (sources: nSrc, shelf: nShelf, progress: nProg, repos: nRepo);
+  }
+
   /// 待更新仓库数（角标用）。
   int get pendingUpdateCount =>
       repoUpdates.values.where((s) => s.hasPending).length;
@@ -507,6 +572,18 @@ class AppState extends ChangeNotifier {
     readerBrightness = v.clamp(0.15, 1.0);
     final sp = await SharedPreferences.getInstance();
     await sp.setDouble(_kReaderBrightness, readerBrightness);
+    notifyListeners();
+  }
+
+  /// 保存 WebDAV 配置（null 清除）。
+  Future<void> setWebDavConfig(Map<String, String>? cfg) async {
+    webDavConfig = cfg;
+    final sp = await SharedPreferences.getInstance();
+    if (cfg == null) {
+      await sp.remove(_kWebDav);
+    } else {
+      await sp.setString(_kWebDav, jsonEncode(cfg));
+    }
     notifyListeners();
   }
 
