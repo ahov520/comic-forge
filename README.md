@@ -57,9 +57,10 @@ flutter build apk --release            # 出包
 
 ## Roadmap / 后续规划
 
-- [ ] **JS 取图规则**：59/194 源的 `$function getImgList(){...}` 需要 JS 执行环境
-      （flutter_js / WebView 桥接，接收 `html` 变量返回图片列表；
-      静态子集 js_lite 已覆盖 `{{js}}` 列表与 `@js:` URL 拼接）
+- [x] **JS 取图规则**：引擎 `JsHook` 可注入接口 + app 接 flutter_js（QuickJS），
+      浏览器/java.* 助手 shim；`$function getImgList` 取图已真网验证（腾讯漫画
+      pccrack 解密实取图片）。59+ 源的复杂取图脚本在 Android 上可用；
+      `{{js}}`/`@js:` 静态子集（js_lite）覆盖列表与 URL 拼接
 - [ ] **store 全量解密**：定位 libapp.so 解密函数（blutter / AOT 逆向），拿到密钥后
       实现 `StoreDecryptor`，订阅官方仓库即得全量源（现为明文分片约半数）
 - [x] **章节翻页**：`ruleChapterUrlNext` 支持（逐页追加 + 链接去重）
