@@ -118,9 +118,11 @@ class _SourceScreenState extends State<SourceScreen> {
     final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: widget.state,
-      builder: (context, _) => Scaffold(
+      builder: (context, _) {
+        final pending = widget.state.pendingUpdateCount;
+        return Scaffold(
         appBar: AppBar(
-          title: const Text('源'),
+          title: Text(pending > 0 ? '源（$pending 个仓库待更新）' : '源'),
           actions: [
             IconButton(
               tooltip: '订阅仓库',
@@ -246,21 +248,41 @@ class _SourceScreenState extends State<SourceScreen> {
                 final last = lastAt == null
                     ? '尚未检查更新'
                     : '上次更新: ${DateTime.fromMillisecondsSinceEpoch(lastAt).toString().substring(0, 16)}';
+                final u = widget.state.repoUpdates[r];
+                final hasPending = u?.hasPending ?? false;
+                final pendingText = hasPending
+                    ? (u!.lastRuleVersion >= 0
+                        ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
+                        : ' · 有新版本 v${u.pendingVersion}')
+                    : '';
                 return ListTile(
                   dense: true,
-                  leading: const Icon(Icons.link),
+                  leading: Icon(
+                    Icons.link,
+                    color: hasPending ? scheme.primary : null,
+                  ),
                   title: Text(r, style: const TextStyle(fontSize: 13)),
-                  subtitle: Text(last, style: const TextStyle(fontSize: 11)),
+                  subtitle: Text('$last$pendingText',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: hasPending ? scheme.primary : null)),
                   trailing: _refreshingRepo == r || _refreshingRepo == '*'
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
-                          tooltip: '检查更新',
-                          icon: const Icon(Icons.sync, size: 20),
-                          onPressed: () => _refreshRepo(r),
-                        ),
+                      : hasPending
+                          ? IconButton(
+                              tooltip: '应用更新（v${u!.pendingVersion}）',
+                              icon: Icon(Icons.new_releases,
+                                  size: 20, color: scheme.primary),
+                              onPressed: () => _refreshRepo(r),
+                            )
+                          : IconButton(
+                              tooltip: '检查更新',
+                              icon: const Icon(Icons.sync, size: 20),
+                              onPressed: () => _refreshRepo(r),
+                            ),
                 );
               }),
             Padding(
@@ -345,7 +367,8 @@ class _SourceScreenState extends State<SourceScreen> {
             ),
           ],
         ),
-      ),
+        );
+      },
     );
   }
 }

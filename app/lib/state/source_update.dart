@@ -59,6 +59,44 @@ class SourceUpdate {
       jsonEncode(s.rules.toJson()) + jsonEncode(s.headers);
 }
 
+/// 一个订阅仓库的更新状态（对齐皮皮喵 gitRuleMap 的 auto 语义）。
+class RepoUpdateState {
+  RepoUpdateState({
+    this.lastRuleVersion = -1,
+    this.pendingVersion = -1,
+    this.checkedAt = 0,
+    this.auto = false,
+  });
+
+  /// 上次已应用的 meta.ruleVersion（-1 = 未知/仓库无版本号）。
+  final int lastRuleVersion;
+
+  /// 检查发现的新版本号（> lastRuleVersion 时待应用；-1 = 无待更新）。
+  final int pendingVersion;
+
+  /// 最近一次检查时间（epoch ms；0 = 从未检查）。
+  final int checkedAt;
+
+  /// 仓库 meta 标记的 auto（ruleAuto），自动应用新版本。
+  final bool auto;
+
+  bool get hasPending => pendingVersion > lastRuleVersion;
+
+  Map<String, dynamic> toJson() => {
+        'lastRuleVersion': lastRuleVersion,
+        'pendingVersion': pendingVersion,
+        'checkedAt': checkedAt,
+        'auto': auto,
+      };
+
+  static RepoUpdateState fromJson(Map<String, dynamic> j) => RepoUpdateState(
+        lastRuleVersion: j['lastRuleVersion'] is int ? j['lastRuleVersion'] as int : -1,
+        pendingVersion: j['pendingVersion'] is int ? j['pendingVersion'] as int : -1,
+        checkedAt: j['checkedAt'] is int ? j['checkedAt'] as int : 0,
+        auto: j['auto'] == true,
+      );
+}
+
 /// 一次仓库刷新的结果。
 class RepoRefreshResult {
   RepoRefreshResult({

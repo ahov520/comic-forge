@@ -84,8 +84,12 @@ class AppState extends ChangeNotifier {
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kRepoRefresh = 'cf.repoRefresh';
+  static const _kRepoUpdates = 'cf.repoUpdates';
   static const _kAdBlock = 'cf.adBlock';
   static const _detailCacheCap = 100;
+
+  /// 启动自动检查间隔：6 小时内不重复检查。
+  static const _autoCheckIntervalMs = 6 * 3600 * 1000;
 
   final List<ComicSource> sources = [];
   final List<String> repos = [];
@@ -93,6 +97,7 @@ class AppState extends ChangeNotifier {
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
+  final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
   /// 广告拦截规则（null = 未启用）。
   AdBlockRules? adBlock;
   bool darkMode = true;
@@ -128,6 +133,11 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kRepoRefresh) ?? '{}') as Map<String, dynamic>)
           .map((k, v) => MapEntry(k, v as int)));
+    repoUpdates
+      ..clear()
+      ..addAll((jsonDecode(sp.getString(_kRepoUpdates) ?? '{}') as Map<String, dynamic>)
+          .map((k, v) =>
+              MapEntry(k, RepoUpdateState.fromJson(v as Map<String, dynamic>))));
     final adText = sp.getString(_kAdBlock);
     adBlock = adText == null ? null : AdBlockRules.tryParse(adText);
     SourceService.instance.adBlock = adBlock;
@@ -201,8 +211,9 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll(r.sources);
       repoLastRefresh[repoUrl] = DateTime.now().millisecondsSinceEpoch;
-      final sp = await SharedPreferences.getInstance();
-      await sp.setString(_kRepoRefresh, jsonEncode(repoLastRefresh));
+      _recordRepoVersion(repoUrl, bundle.meta.ruleVersion,
+          metaAuto: bundle.meta.ruleAuto);
+      await _persistRepoMeta();
       await _persistSources();
       notifyListeners();
       return RepoRefreshResult(
@@ -226,6 +237,97 @@ class AppState extends ChangeNotifier {
     }
     return out;
   }
+
+  void _recordRepoVersion(String repoUrl, int ruleVersion, {bool? metaAuto}) {
+    final st = repoUpdates[repoUrl] ?? RepoUpdateState();
+    repoUpdates[repoUrl] = RepoUpdateState(
+      lastRuleVersion: ruleVersion,
+      pendingVersion: -1,
+      checkedAt: DateTime.now().millisecondsSinceEpoch,
+      auto: metaAuto ?? st.auto,
+    );
+  }
+
+  Future<void> _persistRepoMeta() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kRepoRefresh, jsonEncode(repoLastRefresh));
+    await sp.setString(
+        _kRepoUpdates,
+        jsonEncode(repoUpdates.map((k, v) => MapEntry(k, v.toJson()))));
+  }
+
+  /// 轻量版本检查：只拉各仓库 meta（不拉全量 store），比对 ruleVersion。
+  /// 新版本 → 标记 pending（meta.ruleAuto 时立即自动应用）。
+  /// 仓库无版本号（ruleVersion=0）时退化为全量刷新比对。
+  Future<List<String>> checkRepoUpdates({RepoClient? client}) async {
+    final c = client ?? SourceService.instance.repoClient;
+    final notices = <String>[];
+    for (final repoUrl in repos) {
+      try {
+        final meta = await c.fetchMeta(repoUrl);
+        final st = repoUpdates[repoUrl] ?? RepoUpdateState();
+        final checkedAt = DateTime.now().millisecondsSinceEpoch;
+        if (meta.ruleVersion > 0 &&
+            st.lastRuleVersion >= 0 &&
+            meta.ruleVersion > st.lastRuleVersion) {
+          // 有新版本
+          repoUpdates[repoUrl] = RepoUpdateState(
+            lastRuleVersion: st.lastRuleVersion,
+            pendingVersion: meta.ruleVersion,
+            checkedAt: checkedAt,
+            auto: meta.ruleAuto,
+          );
+          if (meta.ruleAuto) {
+            await refreshRepo(repoUrl, client: c);
+            notices.add('$repoUrl：已自动更新到 v${meta.ruleVersion}');
+          } else {
+            notices.add('$repoUrl：发现新版本 v${meta.ruleVersion}');
+          }
+        } else if (meta.ruleVersion == 0) {
+          // 仓库无版本号：退化为全量刷新做内容比对
+          final r = await refreshRepo(repoUrl, client: c);
+          if (r.ok && (r.added > 0 || r.updated > 0)) {
+            notices.add('$repoUrl：源有变更（新增 ${r.added} · 更新 ${r.updated}）');
+          }
+        } else {
+          repoUpdates[repoUrl] = RepoUpdateState(
+            lastRuleVersion: st.lastRuleVersion,
+            pendingVersion: st.pendingVersion,
+            checkedAt: checkedAt,
+            auto: meta.ruleAuto,
+          );
+        }
+      } catch (e) {
+        // 检查失败不打断其他仓库
+        continue;
+      }
+    }
+    if (repoUpdates.isNotEmpty || repoLastRefresh.isNotEmpty) {
+      await _persistRepoMeta();
+      notifyListeners();
+    }
+    return notices;
+  }
+
+  /// 启动自动检查（节流：距上次检查不足 [_autoCheckIntervalMs] 则跳过）。
+  /// 静默执行，结果通过 repoUpdates/notifyListeners 反映。
+  Future<void> autoCheckUpdates({RepoClient? client}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final due = repos.any((r) {
+      final st = repoUpdates[r];
+      return st == null || now - st.checkedAt > _autoCheckIntervalMs;
+    });
+    if (!due) return;
+    await checkRepoUpdates(client: client);
+  }
+
+  /// 应用一个仓库的待更新版本（等价全量刷新）。
+  Future<RepoRefreshResult> applyRepoUpdate(String repoUrl, {RepoClient? client}) =>
+      refreshRepo(repoUrl, client: client);
+
+  /// 待更新仓库数（角标用）。
+  int get pendingUpdateCount =>
+      repoUpdates.values.where((s) => s.hasPending).length;
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
   /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。

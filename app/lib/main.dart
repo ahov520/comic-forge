@@ -11,6 +11,8 @@ Future<void> main() async {
   ));
   final state = AppState();
   await state.load();
+  // 启动后台检查订阅仓库更新（节流 6h，静默失败，不打断首屏）
+  state.autoCheckUpdates().catchError((_) {});
   runApp(ComicForgeApp(state: state));
 }
 

@@ -138,4 +138,88 @@ void main() {
       expect(st2.adBlock, isNull);
     });
   });
+
+  group('AppState ruleVersion 变更通知', () {
+    late AppState st;
+    const repo = 'https://github.com/u/r';
+    String meta = '';
+    String store = '';
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      st = AppState();
+      meta = '{"ruleId":"1","ruleVersion":2,"ruleAuto":false}';
+      store = '{"sources":[{"bookSourceName":"甲","bookSourceUrl":"https://x.example.com/a","ruleSearchUrl":"/s?q=1"}]}';
+    });
+
+    /// 每次构造新 client：路由取当前 meta/store 值（模拟仓库内容随时间变化）
+    RepoClient mkClient() => RepoClient(
+          fetcher: FakeFetcher({
+            'https://raw.githubusercontent.com/u/r/master/meta.json': meta,
+            'https://raw.githubusercontent.com/u/r/master/store.json': store,
+          }),
+        );
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      st = AppState();
+    });
+
+    test('新版本发现→pending 标记→手动应用', () async {
+      await st.addRepoSubscribed(repo, const []);
+      await st.refreshRepo(repo, client: mkClient()); // lastRuleVersion=2
+
+      // 仓库升到 v3
+      meta = '{"ruleId":"1","ruleVersion":3,"ruleAuto":false}';
+      final notices = await st.checkRepoUpdates(client: mkClient());
+      expect(notices, hasLength(1));
+      expect(notices.first, contains('v3'));
+      expect(st.repoUpdates[repo]!.hasPending, isTrue);
+      expect(st.pendingUpdateCount, 1);
+
+      // 应用后 pending 清除，lastRuleVersion=3
+      final r = await st.applyRepoUpdate(repo, client: mkClient());
+      expect(r.ok, isTrue);
+      expect(st.repoUpdates[repo]!.hasPending, isFalse);
+      expect(st.repoUpdates[repo]!.lastRuleVersion, 3);
+    });
+
+    test('ruleAuto=true 时检查即自动应用', () async {
+      await st.addRepoSubscribed(repo, const []);
+      await st.refreshRepo(repo, client: mkClient()); // v2, auto=false
+
+      meta = '{"ruleId":"1","ruleVersion":5,"ruleAuto":true}';
+      store = store.replaceAll('/s?q=1', '/s?q=2');
+      final notices = await st.checkRepoUpdates(client: mkClient());
+      expect(notices.first, contains('已自动更新'));
+      expect(st.repoUpdates[repo]!.hasPending, isFalse, reason: 'auto 仓库直接应用');
+      expect(st.repoUpdates[repo]!.lastRuleVersion, 5);
+      expect(st.repoUpdates[repo]!.auto, isTrue);
+    });
+
+    test('版本未变时无通知；启动节流（6h 内不重复检查）', () async {
+      await st.addRepoSubscribed(repo, const []);
+      await st.refreshRepo(repo, client: mkClient());
+      final notices = await st.checkRepoUpdates(client: mkClient());
+      expect(notices, isEmpty);
+      expect(st.repoUpdates[repo]!.hasPending, isFalse);
+
+      // 刚检查过（checkedAt 刚更新）→ autoCheckUpdates 直接跳过
+      await st.autoCheckUpdates(client: mkClient());
+      expect(st.repoUpdates[repo]!.checkedAt, greaterThan(0));
+    });
+
+    test('仓库无 meta（版本号 0）时退化为全量内容比对', () async {
+      meta = '{}'; // 无 ruleVersion
+      await st.addRepoSubscribed(repo, const []);
+      await st.refreshRepo(repo, client: mkClient());
+      expect(st.repoUpdates[repo]!.lastRuleVersion, 0);
+
+      // 内容变了：更新源并通知
+      store = store.replaceAll('/s?q=1', '/s?q=changed');
+      final notices = await st.checkRepoUpdates(client: mkClient());
+      expect(notices, hasLength(1));
+      expect(notices.first, contains('源有变更'));
+    });
+  });
 }

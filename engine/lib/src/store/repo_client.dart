@@ -112,6 +112,16 @@ class RepoClient {
     return StoreBundle(ref: ref, meta: meta, sources: sources, track: _lastTrack);
   }
 
+  /// 轻量版本检查：只拉 meta（不拉全量 store）。
+  /// 仓库无 meta 时返回 ruleVersion=0 的默认值（与 subscribe 行为一致）。
+  Future<StoreMeta> fetchMeta(String repoInput) async {
+    final ref = RepoRef.parse(repoInput);
+    if (ref == null) {
+      throw const FormatException('无法识别的仓库地址（支持 github.com/user/repo 或 gitee.com/user/repo）');
+    }
+    return _fetchMeta(ref);
+  }
+
   String? _lastTrack;
 
   Future<StoreMeta> _fetchMeta(RepoRef ref) async {
