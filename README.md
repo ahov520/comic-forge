@@ -44,6 +44,8 @@ cd ../app && flutter run               # 开发运行
 flutter build apk --release            # 出包
 ```
 
+本机 Android 出包记录、无 KVM 模拟器启动命令及验证范围见 [Android 验证记录](docs/android-validation.md)。
+
 ## 与皮皮喵的互操作状态
 
 | 能力 | 状态 |
