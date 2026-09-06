@@ -86,9 +86,21 @@ class BookTile extends StatelessWidget {
 
 /// 简易错误视图。
 class ErrorView extends StatelessWidget {
-  const ErrorView({super.key, this.error, this.onRetry});
+  const ErrorView({
+    super.key,
+    this.error,
+    this.onRetry,
+    this.actionLabel,
+    this.onAction,
+    this.icon = Icons.cloud_off_outlined,
+  });
   final Object? error;
   final VoidCallback? onRetry;
+
+  /// 附加动作（如「启用该源并重试」）。
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -98,13 +110,17 @@ class ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_outlined, size: 40),
+            Icon(icon, size: 40),
             const SizedBox(height: 12),
             Text('加载失败：$error', textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall),
             if (onRetry != null) ...[
               const SizedBox(height: 12),
               FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
+            ],
+            if (onAction != null && actionLabel != null) ...[
+              const SizedBox(height: 8),
+              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
             ],
           ],
         ),

@@ -32,6 +32,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   late Future<(Book, List<Chapter>)> _future;
   Book? _book;
   ComicSource? _source;
+  ComicSource? _disabledSource; // 来源源存在但被禁用 → 提供一键启用
   bool _fromCache = false;
 
   @override
@@ -43,6 +44,15 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   void _load() {
     _book = null;
     _source = _findSource();
+    _disabledSource = null;
+    if (_source == null) {
+      for (final s in widget.appState.sources) {
+        if (s.id == widget.book.sourceId && !s.enabled) {
+          _disabledSource = s;
+          break;
+        }
+      }
+    }
     final cached = widget.appState.detailCacheFor(widget.book.bookUrl);
     if (cached != null) {
       // stale-while-revalidate：先秒开缓存，再后台刷新（失败静默回退缓存）
@@ -54,8 +64,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
     _fromCache = false;
     _future = _source == null
-        ? Future.error('未找到来源源（可能已被移除或禁用）')
+        ? Future.error('未找到可用的来源源')
         : _fetchDetail();
+  }
+
+  /// 一键启用被禁用的来源源并重新加载（体检自动禁用后的死路解法）。
+  Future<void> _enableSourceAndReload() async {
+    final id = _disabledSource?.id;
+    if (id == null) return;
+    await widget.appState.toggleSource(id);
+    if (mounted) setState(_load);
   }
 
   Future<(Book, List<Chapter>)> _fetchDetail() async {
@@ -101,7 +119,17 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           if (snap.hasError) {
             return Scaffold(
               appBar: AppBar(title: Text(widget.book.name)),
-              body: ErrorView(error: snap.error, onRetry: () => setState(_load)),
+              body: ErrorView(
+                error: snap.error,
+                onRetry: () => setState(_load),
+                icon: _disabledSource != null
+                    ? Icons.block_outlined
+                    : Icons.cloud_off_outlined,
+                actionLabel: _disabledSource != null
+                    ? '启用「${_disabledSource!.name}」并重试'
+                    : null,
+                onAction: _disabledSource != null ? _enableSourceAndReload : null,
+              ),
             );
           }
           if (!snap.hasData) {
