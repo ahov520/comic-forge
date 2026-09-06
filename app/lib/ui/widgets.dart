@@ -5,6 +5,7 @@ import 'package:engine/engine.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
 import 'reader_screen.dart';
+import 'skeleton.dart';
 
 /// 阅读器前的统一封面组件。
 class BookCover extends StatelessWidget {
@@ -31,6 +32,9 @@ class BookCover extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: width,
                 height: height,
+                // 加载中用呼吸骨架，替代死灰块
+                loadingBuilder: (_, child, progress) =>
+                    progress == null ? child : SkeletonBox(width: width, height: height),
                 errorBuilder: (_, _, _) =>
                     Icon(Icons.broken_image_outlined, color: scheme.outline),
               ),

@@ -5,12 +5,22 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'widgets.dart';
+import 'skeleton.dart';
 
 /// 书籍详情 + 章节列表。
 class BookDetailScreen extends StatefulWidget {
-  const BookDetailScreen({super.key, required this.book, required this.appState});
+  const BookDetailScreen({
+    super.key,
+    required this.book,
+    required this.appState,
+    this.detailLoaderOverride,
+  });
   final Book book;
   final AppState appState;
+
+  /// 详情加载器（测试接缝；null 用真实源运行时）。
+  final Future<(Book, List<Chapter>)> Function(String bookUrl)?
+      detailLoaderOverride;
 
   @override
   State<BookDetailScreen> createState() => _BookDetailScreenState();
@@ -47,8 +57,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 
   Future<(Book, List<Chapter>)> _fetchDetail() async {
-    final (book, chapters) =
-        await SourceService.instance.runtimeFor(_source!).detail(widget.book.bookUrl);
+    final (book, chapters) = widget.detailLoaderOverride != null
+        ? await widget.detailLoaderOverride!(widget.book.bookUrl)
+        : await SourceService.instance
+            .runtimeFor(_source!)
+            .detail(widget.book.bookUrl);
     await widget.appState.saveDetailCache(book, chapters);
     return (book, chapters);
   }
@@ -90,9 +103,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             );
           }
           if (!snap.hasData) {
+            // 骨架屏：结构对齐真实布局（封面块+文字条+章节行），秒开观感
             return Scaffold(
               appBar: AppBar(title: Text(widget.book.name)),
-              body: const Center(child: CircularProgressIndicator()),
+              body: const DetailSkeleton(),
             );
           }
           final (book, chapters) = snap.data!;
