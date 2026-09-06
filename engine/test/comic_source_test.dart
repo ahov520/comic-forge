@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:engine/src/models/comic_source.dart';
 import 'package:engine/src/store/repo_client.dart';
@@ -33,6 +34,46 @@ void main() {
       expect(s.rules.contentUrl, 'img.pic@src');
     });
 
+    test('ruleSearchUrl 平铺键归一到 rules.searchUrl', () {
+      final s = ComicSource.fromPpcatFlat({
+        'bookSourceName': '腾讯漫画（正版）',
+        'bookSourceUrl': 'https://m.ac.qq.com',
+        'ruleSearchUrl':
+            '/search/result?word=searchKey&page=searchPage&pageSize=30&style=items',
+        'ruleSearchList': 'class.item',
+        'headers': {'User-Agent': 'Android'},
+      });
+      expect(s.rules.searchUrl, contains('searchKey'));
+      expect(s.headers['User-Agent'], 'Android');
+    });
+
+    test('searchUrl 与 ruleSearchUrl 任一非空即可；两者并存时 searchUrl 优先', () {
+      final viaNestedName = ComicSource.fromPpcatFlat({
+        'bookSourceName': '甲',
+        'bookSourceUrl': 'https://m.example.com',
+        'searchUrl': 'https://m.example.com/search?q={{key}}',
+      });
+      expect(viaNestedName.rules.searchUrl, contains('{{key}}'));
+
+      final both = ComicSource.fromPpcatFlat({
+        'bookSourceName': '乙',
+        'bookSourceUrl': 'https://m.example.com',
+        'ruleSearchUrl': '/legacy?q=searchKey',
+        'searchUrl': 'https://m.example.com/search?q={{key}}',
+      });
+      expect(both.rules.searchUrl, contains('{{key}}'));
+    });
+
+    test('fromJson 顶层 ruleSearchUrl 同样归一', () {
+      final s = ComicSource.fromJson({
+        'id': 'https://m.example.com',
+        'name': '丙',
+        'url': 'https://m.example.com',
+        'ruleSearchUrl': '/search?q=searchKey',
+      });
+      expect(s.rules.searchUrl, '/search?q=searchKey');
+    });
+
     test('嵌套 JSON 往返', () {
       final s = ComicSource.fromJson({
         'id': 'a1',
@@ -50,6 +91,27 @@ void main() {
       final back = ComicSource.fromJson(jsonDecode(jsonEncode(s.toJson())) as Map<String, dynamic>);
       expect(back.rules.searchList, '.item');
       expect(back.name, '甲');
+    });
+
+    test('内置快照多数源导入后 searchUrl 非空', () {
+      final snapshot = File('../store-snapshot/store.json');
+      expect(snapshot.existsSync(), isTrue, reason: '需从 engine/ 目录运行 dart test');
+      final j = jsonDecode(snapshot.readAsStringSync()) as Map<String, dynamic>;
+      final list = (j['sources'] as List).whereType<Map<String, dynamic>>().toList();
+      expect(list.length, greaterThan(400));
+
+      final sources = list.map(ComicSource.fromPpcatFlat).toList();
+      final provided = list.where((m) {
+        final a = m['ruleSearchUrl'];
+        final b = m['searchUrl'];
+        return (a is String && a.isNotEmpty) || (b is String && b.isNotEmpty);
+      }).length;
+      final imported = sources.where((s) => s.rules.searchUrl.isNotEmpty).length;
+      expect(provided, greaterThan(400));
+      expect(imported, provided);
+
+      final headerMaps = list.where((m) => m['headers'] is Map && (m['headers'] as Map).isNotEmpty).length;
+      expect(sources.where((s) => s.headers.isNotEmpty).length, greaterThanOrEqualTo(headerMaps));
     });
   });
 

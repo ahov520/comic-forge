@@ -26,6 +26,9 @@ class RuleSet {
   /// 注意：ruleBookContent 是取图规则（CSS 或 `$js`），ruleContentUrl 在
   /// ruleChapterUrl 缺省时充当章节链接规则。
   static const Map<String, String> ppcatFlatKeys = {
+    // Snapshot / ppcat 平铺源用 ruleSearchUrl；嵌套/Track A 用 searchUrl。
+    // 两者都映射到嵌套 searchUrl，缺一则聚合搜索会滤掉整源。
+    'ruleSearchUrl': 'searchUrl',
     'searchUrl': 'searchUrl',
     'exploreUrl': 'exploreUrl',
     'ruleSearchList': 'searchList',
@@ -258,6 +261,15 @@ class ComicSource {
     });
     final ua = j['httpUserAgent'];
     if (ua is String && ua.isNotEmpty) s.headers['User-Agent'] = ua;
+    final h = j['headers'];
+    if (h is Map) {
+      h.forEach((k, v) {
+        if (v == null) return;
+        final key = k.toString();
+        final val = v.toString();
+        if (key.isNotEmpty && val.isNotEmpty) s.headers[key] = val;
+      });
+    }
     final fields = <String, String>{};
     RuleSet.ppcatFlatKeys.forEach((flat, nested) {
       final v = j[flat];

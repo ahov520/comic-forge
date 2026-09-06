@@ -83,9 +83,9 @@ https://gitee.com/<user>/<repo>
 }
 ```
 
-也兼容 ppcat 平铺键写法（`ruleSearchList`/`ruleSearchName`/…/`ruleContentUrlNext`），
+也兼容 ppcat 平铺键写法（`ruleSearchUrl`/`searchUrl`/`ruleSearchList`/`ruleSearchName`/…/`ruleContentUrlNext`），
 导入时自动归一（见 `ComicSource.fromPpcatFlat`，键名映射表见
-`lib/src/models/comic_source.dart` 的 `RuleSet.ppcatFlatKeys`）。
+`engine/lib/src/models/comic_source.dart` 的 `RuleSet.ppcatFlatKeys`）。平铺条目的 `headers` 也会并入源。
 
 ## 规则语法（v1 支持子集）
 

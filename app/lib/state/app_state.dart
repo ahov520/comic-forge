@@ -41,7 +41,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
-  /// 按 id 去重，只增不删；返回新增数量。
+  /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。
+  /// 返回新增 + 修复数量。
   Future<int> importBuiltinSources() async {
     final txt = await rootBundle.loadString('assets/store.json');
     final j = jsonDecode(txt) as Map<String, dynamic>;
@@ -49,18 +50,31 @@ class AppState extends ChangeNotifier {
         .whereType<Map<String, dynamic>>()
         .map(ComicSource.fromPpcatFlat);
     var added = 0;
-    final known = sources.map((s) => s.id).toSet();
+    var repaired = 0;
     for (final s in list) {
-      if (known.contains(s.id)) continue;
-      known.add(s.id);
-      sources.add(s);
-      added++;
+      final idx = sources.indexWhere((e) => e.id == s.id);
+      if (idx < 0) {
+        sources.add(s);
+        added++;
+        continue;
+      }
+      // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，保留启用与权重。
+      final existing = sources[idx];
+      final needsSearchUrl =
+          existing.rules.searchUrl.isEmpty && s.rules.searchUrl.isNotEmpty;
+      final needsHeaders = existing.headers.isEmpty && s.headers.isNotEmpty;
+      if (needsSearchUrl || needsHeaders) {
+        s.enabled = existing.enabled;
+        s.weight = existing.weight;
+        sources[idx] = s;
+        repaired++;
+      }
     }
-    if (added > 0) {
+    if (added > 0 || repaired > 0) {
       await _persistSources();
       notifyListeners();
     }
-    return added;
+    return added + repaired;
   }
 
   Future<void> _persistSources() async {
