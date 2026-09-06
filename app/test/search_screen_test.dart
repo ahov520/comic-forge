@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/search_screen.dart';
+import 'package:comic_forge/ui/source_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -200,6 +201,112 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(state.searchHistory, ['海贼王']);
+  });
+
+  testWidgets('无匹配时提示修改关键词，点按选中输入内容便于替换', (tester) async {
+    respond = (_) => '<html></html>';
+    await _showSearch(tester, state);
+    await tester.enterText(find.byType(TextField), '海贼王');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('没有找到相关漫画'), findsOneWidget);
+    expect(find.text('暂时无法连接漫画源'), findsNothing);
+
+    await tester.tap(find.text('修改关键词'));
+    await tester.pumpAndSettle();
+    final input = tester.widget<TextField>(find.byType(TextField));
+    expect(input.focusNode!.hasFocus, isTrue);
+    expect(
+      input.controller!.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 3),
+    );
+    expect(fetcher.requests, hasLength(1));
+  });
+
+  testWidgets('搜索按源显示进度，部分源失败仍保留已到达的结果', (tester) async {
+    await state.addSourceManual(
+      ComicSource.fromPpcatFlat({
+        'bookSourceName': '备用源',
+        'bookSourceUrl': 'https://second.example.com',
+        'ruleSearchUrl': '/search?q=searchKey',
+        'ruleSearchList': 'class.item',
+        'ruleSearchName': 'class.title@text',
+        'ruleSearchBookUrl': 'class.title@href',
+      }),
+    );
+    final first = Completer<String>();
+    final second = Completer<String>();
+    respond = (uri) => uri.host == 'example.com' ? first.future : second.future;
+    await _showSearch(tester, state);
+    await tester.enterText(find.byType(TextField), '海贼王');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    expect(find.text('正在搜索 0/2 个源 · 已找到 0 条'), findsOneWidget);
+
+    first.complete(_results('海贼王'));
+    await tester.pumpAndSettle();
+    expect(find.text('正在搜索 1/2 个源 · 已找到 1 条'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0.5,
+    );
+    expect(find.text('结果：海贼王'), findsOneWidget);
+    expect(find.byTooltip('来源：测试源'), findsOneWidget);
+
+    second.completeError(FetchException('offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('结果：海贼王'), findsOneWidget);
+    expect(find.text('1 条结果 · 1 个源命中'), findsOneWidget);
+    expect(find.text('1 个源暂时不可用：备用源'), findsOneWidget);
+    expect(find.text('暂时无法连接漫画源'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('全部源失败与无匹配分开显示，同名源分别计数且可重试恢复', (tester) async {
+    await state.addSourceManual(
+      ComicSource.fromPpcatFlat({
+        'bookSourceName': '测试源',
+        'bookSourceUrl': 'https://second.example.com',
+        'ruleSearchUrl': '/search?q=searchKey',
+        'ruleSearchList': 'class.item',
+        'ruleSearchName': 'class.title@text',
+        'ruleSearchBookUrl': 'class.title@href',
+      }),
+    );
+    respond = (_) => throw FetchException('offline');
+    await _showSearch(tester, state);
+    await tester.enterText(find.byType(TextField), '海贼王');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('暂时无法连接漫画源'), findsOneWidget);
+    expect(find.text('没有找到相关漫画'), findsNothing);
+    expect(find.text('2 个源暂时不可用：测试源、测试源'), findsOneWidget);
+
+    respond = (_) => _results('海贼王');
+    await tester.tap(find.text('重新搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('结果：海贼王'), findsOneWidget);
+    expect(find.text('暂时无法连接漫画源'), findsNothing);
+    expect(find.text('1 条结果 · 2 个源命中 · 去重 1'), findsOneWidget);
+    expect(state.searchHistory, ['海贼王']);
+    expect(fetcher.requests, hasLength(4));
+  });
+
+  testWidgets('无启用搜索源时提供管理入口，不误报无匹配', (tester) async {
+    await state.toggleSource(state.sources.single.id);
+    await _showSearch(tester, state);
+    await tester.enterText(find.byType(TextField), '海贼王');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('暂无可搜索的源'), findsOneWidget);
+    expect(find.text('没有找到相关漫画'), findsNothing);
+    expect(fetcher.requests, isEmpty);
+
+    await tester.tap(find.text('管理源'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceScreen), findsOneWidget);
   });
 
   testWidgets('窄屏长历史词可回填完整内容且不溢出', (tester) async {

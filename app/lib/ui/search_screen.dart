@@ -5,6 +5,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/search_aggregator.dart';
+import 'source_screen.dart';
 import 'widgets.dart';
 
 /// 聚合搜索：并发查所有启用源；结果带源标识、同名去重、按源权重排序。
@@ -21,10 +22,11 @@ class _SearchScreenState extends State<SearchScreen> {
   final _focusNode = FocusNode();
   final Map<String, List<Book>> _raw = {}; // 源id → 结果（到达序）
   AggregatedSearch? _agg;
-  final Set<String> _failed = {};
+  final Map<String, String> _failed = {};
   bool _searching = false;
   String _query = '';
   int _searchGeneration = 0;
+  int _sourceCount = 0;
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _searchGeneration++;
         _searching = false;
         _query = '';
+        _sourceCount = 0;
         _raw.clear();
         _agg = null;
         _failed.clear();
@@ -84,6 +87,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _searching = true;
       _query = q;
+      _sourceCount = enabled.length;
       _raw.clear();
       _agg = null;
       _failed.clear();
@@ -106,7 +110,7 @@ class _SearchScreenState extends State<SearchScreen> {
           okIds.add(s.id);
         } catch (e) {
           if (_isCurrentSearch(generation)) {
-            setState(() => _failed.add(s.name));
+            setState(() => _failed[s.id] = _sourceName(s.id));
           }
           errors[s.id] = e.toString();
         }
@@ -149,11 +153,10 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         const SizedBox(height: 12),
         if (history.isEmpty)
-          Text(
-            '输入关键词开始聚合搜索',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          const EmptyStateView(
+            icon: Icons.manage_search_outlined,
+            title: '输入关键词开始聚合搜索',
+            message: '输入书名或作者，跨源查找喜欢的漫画。',
           )
         else
           Wrap(
@@ -181,51 +184,133 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _resultsView(BuildContext context) {
     final agg = _agg;
+    final scheme = Theme.of(context).colorScheme;
+    final completed = _raw.length + _failed.length;
     return Column(
       children: [
-        if (_searching) const LinearProgressIndicator(),
-        if (agg != null && !_searching)
+        if (_searching)
+          LinearProgressIndicator(
+            value: _sourceCount == 0 ? null : completed / _sourceCount,
+            semanticsLabel: '搜索进度',
+          ),
+        if (_query.isNotEmpty && _sourceCount > 0)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '${agg.books.length} 条结果 · ${agg.sourcesHit} 个源命中'
-                '${agg.duplicatesRemoved > 0 ? ' · 去重 ${agg.duplicatesRemoved}' : ''}',
-                style: Theme.of(context).textTheme.bodySmall,
+                _searching
+                    ? '正在搜索 $completed/$_sourceCount 个源 · 已找到 ${agg?.books.length ?? 0} 条'
+                    : '${agg?.books.length ?? 0} 条结果 · ${agg?.sourcesHit ?? 0} 个源命中'
+                          '${(agg?.duplicatesRemoved ?? 0) > 0 ? ' · 去重 ${agg!.duplicatesRemoved}' : ''}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
           ),
         Expanded(
-          child: (agg == null || agg.books.isEmpty)
-              ? Center(
-                  child: Text(
-                    _query.isEmpty
-                        ? '输入关键词开始聚合搜索'
-                        : (_searching ? '搜索中…' : '没有结果'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: agg.books.length,
-                  itemBuilder: (context, i) => BookTile(
-                    book: agg.books[i],
-                    state: widget.state,
-                    sourceLabel: _sourceName(agg.sourceIds[i]),
-                  ),
-                ),
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            child: _resultContent(),
+          ),
         ),
         if (_failed.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              '${_failed.length} 个源失败: ${_failed.join('、')}',
-              style: Theme.of(context).textTheme.bodySmall,
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.errorContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cloud_off_outlined,
+                  size: 20,
+                  color: scheme.onErrorContainer,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_failed.length} 个源暂时不可用：${_failed.values.join('、')}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
+    );
+  }
+
+  Widget _resultContent() {
+    if (_query.isEmpty) {
+      return const EmptyStateView(
+        key: ValueKey('prompt'),
+        icon: Icons.manage_search_outlined,
+        title: '输入关键词开始聚合搜索',
+        message: '输入书名或作者，跨源查找喜欢的漫画。',
+      );
+    }
+    if (_sourceCount == 0) {
+      return EmptyStateView(
+        key: const ValueKey('no-sources'),
+        icon: Icons.travel_explore,
+        title: '暂无可搜索的源',
+        message: '启用一个支持搜索的漫画源后再试。',
+        actionLabel: '管理源',
+        onAction: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => SourceScreen(state: widget.state)),
+        ),
+      );
+    }
+    final agg = _agg;
+    if (agg != null && agg.books.isNotEmpty) {
+      return ListView.builder(
+        key: ValueKey('results-$_query'),
+        padding: const EdgeInsets.only(top: 6, bottom: 12),
+        itemCount: agg.books.length,
+        itemBuilder: (context, i) => BookTile(
+          key: ObjectKey(agg.books[i]),
+          book: agg.books[i],
+          state: widget.state,
+          sourceLabel: _sourceName(agg.sourceIds[i]),
+        ),
+      );
+    }
+    if (_searching) {
+      return const Center(key: ValueKey('loading'), child: Text('搜索中…'));
+    }
+    if (_raw.isEmpty && _failed.isNotEmpty) {
+      return EmptyStateView(
+        key: const ValueKey('failed'),
+        icon: Icons.cloud_off_outlined,
+        title: '暂时无法连接漫画源',
+        message: '检查网络，或到「源」页查看源状态后再试。',
+        actionLabel: '重新搜索',
+        onAction: _doSearch,
+      );
+    }
+    return EmptyStateView(
+      key: const ValueKey('empty'),
+      icon: Icons.search_off_outlined,
+      title: '没有找到相关漫画',
+      message: '试试更短的书名、作者名，或换一个关键词。',
+      actionLabel: '修改关键词',
+      onAction: () {
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+        _focusNode.requestFocus();
+      },
     );
   }
 
@@ -235,14 +320,24 @@ class _SearchScreenState extends State<SearchScreen> {
       listenable: widget.state,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
+          toolbarHeight: 72,
           title: TextField(
             controller: _controller,
             focusNode: _focusNode,
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _doSearch(),
             decoration: InputDecoration(
-              hintText: '搜索全部源…',
-              border: InputBorder.none,
+              hintText: '搜索书名、作者…',
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
               suffixIcon: _controller.text.isEmpty
                   ? null
                   : IconButton(
@@ -256,7 +351,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           actions: [
-            IconButton(
+            IconButton.filledTonal(
               tooltip: '搜索',
               icon: const Icon(Icons.search),
               onPressed: _searching || _controller.text.trim().isEmpty
