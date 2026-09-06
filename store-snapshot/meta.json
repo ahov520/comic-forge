@@ -1,7 +1,7 @@
 {
- "ruleId": "snapshot-2022",
- "ruleVersion": 20220906,
+ "ruleId": "snapshot-merged",
+ "ruleVersion": 20260906,
  "ruleContent": "",
  "ruleAuto": false,
- "comment": "皮皮喵社区源快照（195条中194条完整解析），提取自 mowentianxia/ppcat mh_rules.bin 明文分片。仅规则文本，无任何内容。"
+ "comment": "皮皮喵社区源合并快照：493 个唯一源。来源=后端config/store明文分片(现行版本优先)+mowentianxia镜像。仅规则文本，无任何内容数据。"
 }

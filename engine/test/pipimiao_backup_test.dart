@@ -41,4 +41,10 @@ void main() {
     expect(partial!, contains('"bookSourceName":"皮皮喵来源教程（教程）"'));
     expect(partial, contains('ruleFindUrl'));
   });
+
+  test('extractCompleteSources 对截断条目容错', () {
+    // 教程源的明文分片在 181B 处截断（无完整对象），应返回空而非抛异常
+    final out = backup.extractCompleteSources();
+    expect(out, isEmpty);
+  });
 }

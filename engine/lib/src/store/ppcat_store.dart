@@ -14,6 +14,8 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 
+import 'tolerant_inflate.dart';
+
 /// 从字节流解析出的加密 ZIP 元信息。
 class PpcatZipEntry {
   PpcatZipEntry({
@@ -96,6 +98,47 @@ class PpcatStoreInspector {
     if (archive.isEmpty) throw const FormatException('明文 ZIP 内无文件');
     final content = archive.first.content as List<int>;
     return utf8.decode(content, allowMalformed: true);
+  }
+
+  /// 无密钥部分提取：`.mh_rules` 的写入方把 deflate 流的**前缀**以明文
+  /// 形式留在 EOCD 之后（`[加密区][明文CDH][EOCD][LFH尾片段+明文deflate]`），
+  /// 加密区只含流的**后缀**。本方法解出明文分片 → 源 JSON 前缀（可能截断）。
+  ///
+  /// 返回 null 表示该文件无明文分片（加密布局不同或数据损坏）。
+  static String? partialJson(List<int> bytes) {
+    final sig = [0x50, 0x4b, 0x05, 0x06]; // PK\x05\x06
+    var eocd = -1;
+    for (var i = bytes.length - 22; i >= 0; i--) {
+      if (bytes[i] == sig[0] && bytes[i + 1] == sig[1] && bytes[i + 2] == sig[2] && bytes[i + 3] == sig[3]) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) return null;
+    final tail = bytes.sublist(eocd + 22);
+    // deflate 起点 = 尾部最后一个 `.mh_rules` 名字之后
+    final nameSig = utf8.encode('.mh_rules');
+    var frag = -1;
+    for (var i = tail.length - nameSig.length; i >= 0; i--) {
+      var ok = true;
+      for (var j = 0; j < nameSig.length; j++) {
+        if (tail[i + j] != nameSig[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        frag = i;
+        break;
+      }
+    }
+    if (frag < 0) return null;
+    final start = frag + nameSig.length;
+    if (start >= tail.length) return null;
+    final s = inflateTextTolerant(tail.sublist(start));
+    if (s == null) return null;
+    if (s.contains('bookSource') || s.contains('ruleSearch')) return s;
+    return null;
   }
 
   static int _lastIndex(List<int> hay, int u32sig) {

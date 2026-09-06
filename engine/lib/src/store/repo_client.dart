@@ -144,21 +144,69 @@ class RepoClient {
       }
     }
     // Track B：ppcat 加密 store（二进制）
-    if (storeDecryptor != null) {
-      for (final url in ref.rawCandidates('store')) {
-        try {
-          final bytes = await fetcher.getBytes(url);
+    for (final url in ref.rawCandidates('store')) {
+      try {
+        final bytes = await fetcher.getBytes(url);
+        // 先试完整解密（需注入解密器）
+        if (storeDecryptor != null) {
           final sources = _parsePpcatStore(bytes);
           if (sources != null) {
             _lastTrack = 'B';
             return sources;
           }
-        } on Exception {
-          // 试下一个候选
         }
+        // 无密钥：提取尾部明文分片（deflate 流前缀，可能截断）
+        final partial = PpcatStoreInspector.partialJson(bytes);
+        if (partial != null) {
+          final sources = parseEntriesPrefix(partial);
+          if (sources != null && sources.isNotEmpty) {
+            _lastTrack = 'B-partial';
+            return sources;
+          }
+        }
+      } on Exception {
+        // 试下一个候选
       }
     }
     throw FetchException('仓库 ${ref.canonical} 未找到可识别的 store（需要明文 store.json 或注入加密解码器）');
+  }
+
+  /// 从截断的 JSON 数组前缀里抽出完整条目（字符串感知的花括号扫描）。
+  /// 从截断的 JSON 数组前缀里抽出完整条目（字符串感知扫描）。
+  static List<ComicSource>? parseEntriesPrefix(String text) {
+    final out = <ComicSource>[];
+    var depth = 0, start = -1, i = 0;
+    var inStr = false, esc = false;
+    while (i < text.length) {
+      final c = text[i];
+      if (inStr) {
+        if (esc) {
+          esc = false;
+        } else if (c == '\\') {
+          esc = true;
+        } else if (c == '"') {
+          inStr = false;
+        }
+      } else if (c == '"') {
+        inStr = true;
+      } else if (c == '{') {
+        if (depth == 0) start = i;
+        depth++;
+      } else if (c == '}') {
+        depth--;
+        if (depth == 0 && start >= 0) {
+          try {
+            final obj = jsonDecode(text.substring(start, i + 1)) as Map<String, dynamic>;
+            out.add(_looksPpcatFlat(obj) ? ComicSource.fromPpcatFlat(obj) : ComicSource.fromJson(obj));
+          } on FormatException {
+            // 跳过坏条目
+          }
+          start = -1;
+        }
+      }
+      i++;
+    }
+    return out.isEmpty ? null : out;
   }
 
   /// 明文 store.json → 源列表。结构宽松：顶层数组、{sources:[...]}、

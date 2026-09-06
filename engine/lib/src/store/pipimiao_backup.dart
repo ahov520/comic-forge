@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 
+import '../models/comic_source.dart';
 import 'ppcat_store.dart';
 
 /// 皮皮喵「本地备份」(.pbak) 解析器。
@@ -80,6 +81,67 @@ class PipimiaoBackup {
 
   static PipimiaoBackup parseFile(String path) => parse(File(path).readAsBytesSync());
 
+  /// 从全部分享源的明文分片里提取完整源条目（容错跳过被截断的尾部）。
+  List<ComicSource> extractCompleteSources() {
+    final out = <ComicSource>[];
+    for (final r in sharedRules) {
+      final partial = r.partialRulesJson();
+      if (partial == null) continue;
+      out.addAll(_parseTruncatedArray(partial));
+    }
+    return out;
+  }
+
+  /// 解析可能被截断的 `[{"..."},{...` 源数组：按括号配对逐条解码，
+  /// 损坏/不完整条目跳过。
+  static List<ComicSource> _parseTruncatedArray(String s) {
+    final out = <ComicSource>[];
+    var i = s.indexOf('{');
+    while (i >= 0 && i < s.length) {
+      final end = _matchObject(s, i);
+      if (end < 0) break; // 尾部不完整
+      try {
+        final obj = jsonDecode(s.substring(i, end + 1));
+        if (obj is Map<String, dynamic> &&
+            ((obj['bookSourceName'] ?? obj['sourceName'] ?? '') as String).isNotEmpty) {
+          out.add(ComicSource.fromPpcatFlat(obj));
+        }
+        i = end + 1;
+      } on FormatException {
+        i = s.indexOf('{', i + 1);
+      }
+    }
+    return out;
+  }
+
+  /// 返回与 s[start] '{' 配对的 '}' 下标；未闭合返回 -1。
+  static int _matchObject(String s, int start) {
+    var depth = 0;
+    var inStr = false;
+    var esc = false;
+    for (var i = start; i < s.length; i++) {
+      final c = s.codeUnitAt(i);
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c == 0x5C /* 反斜杠 */) {
+        if (inStr) esc = true;
+        continue;
+      }
+      if (c == 0x22 /* 引号 */) {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (c == 0x7B /* 左花括号 */) depth++;
+      if (c == 0x7D /* 右花括号 */) {
+        depth--;
+        if (depth == 0) return i;
+      }
+    }
+    return -1;
+  }
 }
 
 /// 一条分享源（加密 .mh_rules 包 + 已解出的明文部分）。
@@ -99,27 +161,5 @@ class SharedRule {
   }
 
   /// 尾部明文 deflate 分片解出的源 JSON 前缀（可能截断）。
-  String? partialRulesJson() {
-    final raw = storeBytes;
-    final sig = [0x50, 0x4b, 0x05, 0x06]; // PK\x05\x06
-    var eocd = -1;
-    for (var i = raw.length - 22; i >= 0; i--) {
-      if (raw[i] == sig[0] && raw[i + 1] == sig[1] && raw[i + 2] == sig[2] && raw[i + 3] == sig[3]) {
-        eocd = i;
-        break;
-      }
-    }
-    if (eocd < 0) return null;
-    final codec = ZLibCodec(raw: true);
-    for (var start = eocd + 22; start < raw.length - 2; start++) {
-      try {
-        final out = codec.decoder.convert(raw.sublist(start));
-        final s = utf8.decode(out, allowMalformed: true);
-        if (s.contains('bookSource') || s.contains('ruleSearch')) return s;
-      } on Exception {
-        // 换下一个偏移
-      }
-    }
-    return null;
-  }
+  String? partialRulesJson() => PpcatStoreInspector.partialJson(storeBytes);
 }

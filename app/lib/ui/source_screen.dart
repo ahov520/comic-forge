@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
 import 'package:engine/engine.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
@@ -17,6 +19,37 @@ class SourceScreen extends StatefulWidget {
 class _SourceScreenState extends State<SourceScreen> {
   bool _subscribing = false;
   String? _lastResult;
+
+  /// 导入皮皮喵「本地备份」(.pbak)。
+  Future<void> _importPipimiaoBackup() async {
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.any,
+        dialogTitle: '选择皮皮喵备份文件(.pbak)',
+      );
+      final path = picked?.path;
+      if (path == null) return;
+      final bytes = File(path).readAsBytesSync();
+      final backup = PipimiaoBackup.parse(bytes);
+      // 1) 订阅仓库直接搬过来
+      for (final sub in backup.storeSubscriptions) {
+        if (!widget.state.repos.contains(sub.url)) {
+          widget.state.addRepoSubscribed(sub.url, const []);
+        }
+      }
+      // 2) 分享源里明文分片可解出的完整条目导入
+      final sources = backup.extractCompleteSources();
+      for (final s in sources) {
+        await widget.state.addSourceManual(s);
+      }
+      setState(() => _lastResult = sources.isEmpty
+          ? '备份读取成功：${backup.sharedRules.length} 条分享源（加密部分待密钥），'
+              '已同步 ${backup.storeSubscriptions.length} 个订阅仓库'
+          : '导入成功：${sources.length} 个源（来自 ${backup.sharedRules.length} 条分享记录）');
+    } catch (e) {
+      setState(() => _lastResult = '备份导入失败：$e');
+    }
+  }
 
   Future<void> _subscribeDialog() async {
     final controller = TextEditingController();
@@ -69,6 +102,24 @@ class _SourceScreenState extends State<SourceScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.cloud_sync_outlined),
               onPressed: _subscribing ? null : _subscribeDialog,
+            ),
+            PopupMenuButton<String>(
+              tooltip: '更多',
+              onSelected: (v) {
+                if (v == 'backup') _importPipimiaoBackup();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'backup',
+                  child: ListTile(
+                    leading: Icon(Icons.restore_outlined),
+                    title: Text('导入皮皮喵备份'),
+                    subtitle: Text('.pbak · 提取分享源与订阅'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
