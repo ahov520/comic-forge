@@ -403,6 +403,43 @@ class AppState extends ChangeNotifier {
   int get pendingUpdateCount =>
       repoUpdates.values.where((s) => s.hasPending).length;
 
+  /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
+  /// 结果走 [reportSourceHealth]（成功清零失败计数，失败累加→标红）。
+  /// [runtimeBuilder] 可注入（测试用）。返回 (可用数, 总数)。
+  Future<(int ok, int total)> probeSources({
+    String keyword = '斗罗大陆',
+    int concurrency = 8,
+    Duration timeout = const Duration(seconds: 12),
+    SourceRuntime Function(ComicSource source)? runtimeBuilder,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final targets =
+        sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty).toList();
+    final builder =
+        runtimeBuilder ?? (s) => SourceService.instance.runtimeFor(s);
+    var done = 0;
+    final okIds = <String>[];
+    final errors = <String, String>{};
+
+    Future<void> probeOne(ComicSource s) async {
+      try {
+        await builder(s).search(keyword).timeout(timeout);
+        okIds.add(s.id);
+      } catch (e) {
+        errors[s.id] = e.toString();
+      } finally {
+        done++;
+        onProgress?.call(done, targets.length);
+      }
+    }
+
+    for (var i = 0; i < targets.length; i += concurrency) {
+      await Future.wait(targets.skip(i).take(concurrency).map(probeOne));
+    }
+    await reportSourceHealth(okIds, errors);
+    return (okIds.length, targets.length);
+  }
+
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
   /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。
   /// 返回新增 + 修复数量。

@@ -21,6 +21,28 @@ class _SourceScreenState extends State<SourceScreen> {
   bool _subscribing = false;
   String? _lastResult;
   String? _refreshingRepo;
+  bool _probing = false;
+
+  /// 源健康体检：真实搜索探测全部启用源，实时显示进度。
+  Future<void> _probeHealth() async {
+    if (_probing) return;
+    setState(() {
+      _probing = true;
+      _lastResult = '体检中… 0';
+    });
+    final (ok, total) = await widget.state.probeSources(
+      onProgress: (done, t) {
+        if (mounted) setState(() => _lastResult = '体检中… $done/$t');
+      },
+    );
+    if (mounted) {
+      setState(() {
+        _probing = false;
+        _lastResult =
+            '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
+      });
+    }
+  }
 
   /// 检查一个订阅仓库的更新。
   Future<void> _refreshRepo(String repo) async {
@@ -185,6 +207,8 @@ class _SourceScreenState extends State<SourceScreen> {
                     setState(() => _lastResult =
                         n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
                   }
+                } else if (v == 'probeHealth') {
+                  _probeHealth();
                 } else if (v == 'refreshAll') {
                   await _refreshAllRepos();
                 } else if (v == 'disableUnhealthy') {
@@ -228,6 +252,20 @@ class _SourceScreenState extends State<SourceScreen> {
                       leading: Icon(Icons.cloud_download_outlined),
                       title: Text('全部检查更新'),
                       subtitle: Text('逐个拉取订阅仓库，规则有变才更新'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                if (widget.state.sources.isNotEmpty)
+                  PopupMenuItem(
+                    value: 'probeHealth',
+                    child: ListTile(
+                      leading: _probing
+                          ? const SizedBox(width: 18, height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.monitor_heart_outlined),
+                      title: const Text('源健康体检'),
+                      subtitle: const Text('真实搜索探测全部启用源（受限并发），失效标红'),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
