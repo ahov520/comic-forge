@@ -106,9 +106,20 @@ class ErrorView extends StatelessWidget {
 }
 
 /// 阅读器入口：详情页章节 → 图片流。
-void openReader(BuildContext context, SourceRuntime runtime, Book book, Chapter chapter) {
+void openReader(
+  BuildContext context,
+  SourceRuntime runtime,
+  Book book,
+  Chapter chapter, {
+  AppState? appState,
+}) {
   Navigator.of(context).push(MaterialPageRoute(
     fullscreenDialog: true,
-    builder: (_) => ReaderScreen(runtime: runtime, book: book, chapter: chapter),
+    builder: (_) => ReaderScreen(
+      runtime: runtime,
+      book: book,
+      chapter: chapter,
+      appState: appState,
+    ),
   ));
 }

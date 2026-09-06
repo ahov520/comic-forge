@@ -49,32 +49,16 @@ class AppState extends ChangeNotifier {
     final list = (j['sources'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(ComicSource.fromPpcatFlat);
-    var added = 0;
-    var repaired = 0;
-    for (final s in list) {
-      final idx = sources.indexWhere((e) => e.id == s.id);
-      if (idx < 0) {
-        sources.add(s);
-        added++;
-        continue;
-      }
-      // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，保留启用与权重。
-      final existing = sources[idx];
-      final needsSearchUrl =
-          existing.rules.searchUrl.isEmpty && s.rules.searchUrl.isNotEmpty;
-      final needsHeaders = existing.headers.isEmpty && s.headers.isNotEmpty;
-      if (needsSearchUrl || needsHeaders) {
-        s.enabled = existing.enabled;
-        s.weight = existing.weight;
-        sources[idx] = s;
-        repaired++;
-      }
+    // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，保留启用与权重。
+    final result = SourceCatalog.merge(
+      sources,
+      list,
+      mode: SourceMergeMode.restoreBuiltins,
+    );
+    if (result.changed > 0) {
+      await persistSources();
     }
-    if (added > 0 || repaired > 0) {
-      await _persistSources();
-      notifyListeners();
-    }
-    return added + repaired;
+    return result.changed;
   }
 
   Future<void> _persistSources() async {
@@ -82,37 +66,42 @@ class AppState extends ChangeNotifier {
     await sp.setString(_kSources, jsonEncode(sources.map((s) => s.toJson()).toList()));
   }
 
-  Future<void> addRepoSubscribed(String repoUrl, List<ComicSource> imported) async {
-    if (!repos.contains(repoUrl)) repos.add(repoUrl);
-    for (final s in imported) {
-      sources.removeWhere((e) => e.id == s.id);
-      sources.add(s);
-    }
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kRepos, jsonEncode(repos));
+  /// 写回源列表并通知 UI（健康状态变更后调用）。
+  Future<void> persistSources() async {
     await _persistSources();
     notifyListeners();
   }
 
+  Future<void> addRepoSubscribed(String repoUrl, List<ComicSource> imported) async {
+    if (!repos.contains(repoUrl)) repos.add(repoUrl);
+    SourceCatalog.merge(sources, imported, mode: SourceMergeMode.subscribe);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kRepos, jsonEncode(repos));
+    await persistSources();
+  }
+
   Future<void> addSourceManual(ComicSource s) async {
-    sources.removeWhere((e) => e.id == s.id);
-    sources.add(s);
-    await _persistSources();
-    notifyListeners();
+    SourceCatalog.merge(sources, [s], mode: SourceMergeMode.subscribe);
+    await persistSources();
   }
 
   Future<void> removeSource(String id) async {
     sources.removeWhere((e) => e.id == id);
-    await _persistSources();
-    notifyListeners();
+    await persistSources();
   }
 
   Future<void> toggleSource(String id) async {
     for (final s in sources) {
       if (s.id == id) s.enabled = !s.enabled;
     }
-    await _persistSources();
-    notifyListeners();
+    await persistSources();
+  }
+
+  Future<void> setSourceEnabled(String id, bool enabled) async {
+    for (final s in sources) {
+      if (s.id == id) s.enabled = enabled;
+    }
+    await persistSources();
   }
 
   Future<void> toggleShelf(Book b) async {
