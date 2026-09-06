@@ -173,4 +173,23 @@ void main() {
       expect(st2.detailCacheFor('https://m.example.com/b/9')!.book.name, '缓存书');
     });
   });
+
+  group('AppState 阅读器亮度', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('设置后持久化并在 load() 还原，下限截断', () async {
+      final st = AppState();
+      await st.setReaderBrightness(0.4);
+      expect(st.readerBrightness, 0.4);
+
+      await st.setReaderBrightness(0.01); // 低于下限
+      expect(st.readerBrightness, 0.15);
+
+      final st2 = AppState();
+      await st2.load();
+      expect(st2.readerBrightness, 0.15);
+    });
+  });
 }

@@ -79,6 +79,7 @@ class AppState extends ChangeNotifier {
   static const _kDark = 'cf.dark';
   static const _kProgress = 'cf.progress';
   static const _kDetailCache = 'cf.detailCache';
+  static const _kReaderBrightness = 'cf.readerBrightness';
   static const _detailCacheCap = 100;
 
   final List<ComicSource> sources = [];
@@ -87,6 +88,8 @@ class AppState extends ChangeNotifier {
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   bool darkMode = true;
+  /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
+  double readerBrightness = 1.0;
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
@@ -114,6 +117,7 @@ class AppState extends ChangeNotifier {
           .map((k, v) =>
               MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>))));
     darkMode = sp.getBool(_kDark) ?? true;
+    readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
@@ -341,6 +345,14 @@ class AppState extends ChangeNotifier {
     darkMode = v;
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kDark, v);
+    notifyListeners();
+  }
+
+  /// 阅读器亮度（遮罩式调暗，持久化全局）。
+  Future<void> setReaderBrightness(double v) async {
+    readerBrightness = v.clamp(0.15, 1.0);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setDouble(_kReaderBrightness, readerBrightness);
     notifyListeners();
   }
 }

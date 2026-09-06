@@ -72,6 +72,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = widget.appState?.readerBrightness ?? 1.0;
     return Scaffold(
       backgroundColor: Colors.black,
       body: FutureBuilder<List<String>>(
@@ -130,6 +131,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ),
               ),
+              // 亮度遮罩（夜间调暗，不影响截图系统亮度）
+              if (brightness < 1.0)
+                IgnorePointer(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 1 - brightness),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 8,
                 left: 8,
@@ -167,6 +176,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         onPressed: _index > 0 ? () => _go(-1) : null,
                         icon: const Icon(Icons.skip_previous_outlined),
                       ),
+                      IconButton(
+                        color: Colors.white70,
+                        tooltip: '亮度',
+                        icon: Icon(brightness < 1.0
+                            ? Icons.brightness_4_outlined
+                            : Icons.brightness_6_outlined),
+                        onPressed: () => _showBrightnessSheet(context),
+                      ),
                       Expanded(
                         child: Center(
                           child: Text(
@@ -190,6 +207,41 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// 亮度调节面板（遮罩式调暗）。
+  void _showBrightnessSheet(BuildContext context) {
+    final appState = widget.appState;
+    if (appState == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      builder: (sheetCtx) => AnimatedBuilder(
+        animation: appState,
+        builder: (context, _) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                const Icon(Icons.brightness_low, color: Colors.white54, size: 18),
+                Expanded(
+                  child: Slider(
+                    value: appState.readerBrightness,
+                    min: 0.15,
+                    max: 1.0,
+                    onChanged: appState.setReaderBrightness,
+                  ),
+                ),
+                const Icon(Icons.brightness_high, color: Colors.white70, size: 20),
+              ]),
+              Text('亮度 ${(appState.readerBrightness * 100).round()}%',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            ],
+          ),
+        ),
       ),
     );
   }
