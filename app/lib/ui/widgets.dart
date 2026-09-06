@@ -41,10 +41,13 @@ class BookCover extends StatelessWidget {
 
 /// 搜索/探索结果条目。
 class BookTile extends StatelessWidget {
-  const BookTile({super.key, required this.book, required this.state});
+  const BookTile({super.key, required this.book, required this.state, this.sourceLabel});
 
   final Book book;
   final AppState state;
+
+  /// 来源标签（聚合搜索结果显示用；null 不显示）。
+  final String? sourceLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +57,7 @@ class BookTile extends StatelessWidget {
       title: Text(book.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         [
+          if (sourceLabel != null) '【$sourceLabel】',
           if (book.author.isNotEmpty) book.author,
           if (book.kind.isNotEmpty) book.kind,
           if (book.lastChapter.isNotEmpty) '更新: ${book.lastChapter}',
