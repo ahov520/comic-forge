@@ -83,6 +83,8 @@ class AppState extends ChangeNotifier {
   static const _kProgress = 'cf.progress';
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
+  static const _kReaderMode = 'cf.readerMode';
+  static const _kReaderVolumeKeys = 'cf.readerVolumeKeys';
   static const _kRepoRefresh = 'cf.repoRefresh';
   static const _kRepoUpdates = 'cf.repoUpdates';
   static const _kAdBlock = 'cf.adBlock';
@@ -106,6 +108,10 @@ class AppState extends ChangeNotifier {
   bool darkMode = true;
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
+  /// 阅读模式：scroll = 连续滚动；paged = 左右翻页。
+  String readerMode = 'scroll';
+  /// 音量键翻页（Android，翻页模式/滚动模式都可用）。
+  bool readerVolumeKeys = false;
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
@@ -151,6 +157,8 @@ class AppState extends ChangeNotifier {
             .map((k, v) => MapEntry(k, v.toString()));
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
+    readerMode = sp.getString(_kReaderMode) == 'paged' ? 'paged' : 'scroll';
+    readerVolumeKeys = sp.getBool(_kReaderVolumeKeys) ?? false;
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
@@ -572,6 +580,22 @@ class AppState extends ChangeNotifier {
     readerBrightness = v.clamp(0.15, 1.0);
     final sp = await SharedPreferences.getInstance();
     await sp.setDouble(_kReaderBrightness, readerBrightness);
+    notifyListeners();
+  }
+
+  /// 阅读模式：scroll / paged。
+  Future<void> setReaderMode(String mode) async {
+    readerMode = mode == 'paged' ? 'paged' : 'scroll';
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kReaderMode, readerMode);
+    notifyListeners();
+  }
+
+  /// 音量键翻页开关。
+  Future<void> setReaderVolumeKeys(bool v) async {
+    readerVolumeKeys = v;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_kReaderVolumeKeys, v);
     notifyListeners();
   }
 
