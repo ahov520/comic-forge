@@ -10,6 +10,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
+import 'reader_chrome.dart';
 import 'skeleton.dart';
 
 /// 音量键翻页通道（Android 原生拦截后转发）。
@@ -332,6 +333,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
           return Stack(
             children: [
               _buildReaderBody(context, urls),
+              // 工具栏渐变遮罩：白字在浅色漫画上也可读（点击穿透到翻页点区）
+              ReaderChromeOverlay(
+                visible: _chromeVisible,
+                topInset: MediaQuery.of(context).padding.top,
+                bottomInset: MediaQuery.of(context).padding.bottom,
+              ),
               // 亮度遮罩（夜间调暗，不影响截图系统亮度）
               if (brightness < 1.0)
                 IgnorePointer(
