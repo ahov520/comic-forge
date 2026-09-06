@@ -63,6 +63,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           }
           final (book, chapters) = snap.data!;
           _book ??= book;
+          final prog = widget.appState.progressFor(widget.book.bookUrl);
+          final savedIdx = (prog != null)
+              ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
+              : -1;
           return Scaffold(
             appBar: AppBar(
               title: Text(book.name),
@@ -133,23 +137,57 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text('章节 (${chapters.length})',
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Row(
+                      children: [
+                        Text('章节 (${chapters.length})',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const Spacer(),
+                        if (savedIdx >= 0)
+                          FilledButton.tonalIcon(
+                            onPressed: () {
+                              if (_source != null) {
+                                openReader(context,
+                                    SourceService.instance.runtimeFor(_source!),
+                                    book, chapters, savedIdx, widget.appState);
+                              }
+                            },
+                            icon: const Icon(Icons.play_arrow, size: 18),
+                            label: Text('续读 ${savedIdx + 1}',
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 SliverList.builder(
                   itemCount: chapters.length,
                   itemBuilder: (context, i) {
                     final ch = chapters[i];
+                    final isCurrent = i == savedIdx;
                     return ListTile(
                       dense: true,
                       leading: Text('${i + 1}',
-                          style: TextStyle(color: scheme.outline)),
-                      title: Text(ch.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: TextStyle(
+                              color: isCurrent
+                                  ? scheme.primary
+                                  : scheme.outline,
+                              fontWeight: isCurrent
+                                  ? FontWeight.bold
+                                  : null)),
+                      title: Text(ch.title,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: isCurrent
+                              ? TextStyle(color: scheme.primary)
+                              : null),
+                      trailing: isCurrent
+                          ? Icon(Icons.bookmark, size: 16,
+                              color: scheme.primary)
+                          : null,
                       onTap: () {
                         if (_source != null) {
                           openReader(context,
-                              SourceService.instance.runtimeFor(_source!), book, ch);
+                              SourceService.instance.runtimeFor(_source!),
+                              book, chapters, i, widget.appState);
                         }
                       },
                     );

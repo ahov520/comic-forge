@@ -149,20 +149,36 @@ class SourceRuntime {
 
     final chapters = <Chapter>[];
     if (r.chapterList.isNotEmpty) {
-      final items = _eval.evalNodes(doc, RuleAnalyzer(r.chapterList).parse());
-      for (final item in items) {
-        String pick(String rule) =>
-            rule.isEmpty ? '' : (_eval.evalFirst(item, RuleAnalyzer(rule).parse()) ?? '');
-        chapters.add(Chapter(
-          title: pick(r.chapterName),
-          url: _absUrl(bookUrl, pick(r.chapterUrl)),
-          coverUrl: _absUrl(bookUrl, pick(r.chapterCoverUrl)),
-          time: pick(r.chapterTime),
-          group: pick(r.chapterGroup),
-        ));
+      var pageUrl = bookUrl;
+      var doc2 = doc; // 首页复用详情 doc，避免重复抓取
+      final seen = <String>{};
+      // ruleChapterUrlNext：章节列表翻页（legado/ppcat 语义，逐页追加并按链接去重）
+      for (var page = 0; page < 20 && pageUrl.isNotEmpty; page++) {
+        final items = _eval.evalNodes(doc2, RuleAnalyzer(r.chapterList).parse());
+        var added = 0;
+        for (final item in items) {
+          String pick(String rule) =>
+              rule.isEmpty ? '' : (_eval.evalFirst(item, RuleAnalyzer(rule).parse()) ?? '');
+          final chUrl = _absUrl(pageUrl, pick(r.chapterUrl));
+          if (chUrl.isEmpty || !seen.add(chUrl)) continue;
+          chapters.add(Chapter(
+            title: pick(r.chapterName),
+            url: chUrl,
+            coverUrl: _absUrl(pageUrl, pick(r.chapterCoverUrl)),
+            time: pick(r.chapterTime),
+            group: pick(r.chapterGroup),
+          ));
+          added++;
+        }
+        if (r.chapterUrlNext.isEmpty || (added == 0 && page > 0)) break;
+        final next =
+            _eval.evalFirst(doc2, RuleAnalyzer(r.chapterUrlNext).parse()) ?? '';
+        final absNext = _absUrl(pageUrl, next.trim());
+        if (absNext.isEmpty || absNext == pageUrl) break;
+        pageUrl = absNext;
+        doc2 = await _fetchDoc(_request(pageUrl));
       }
     }
-    // TODO(Phase2+): ruleChapterUrlNext 翻页
     return (book, chapters);
   }
 

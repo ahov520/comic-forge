@@ -266,5 +266,43 @@ void main() {
           reason: r'{$.id} 字面模板应代入条目字段');
       expect(page.items.last.bookUrl, 'https://www.kkmh.example.com/web/topic/4096/');
     });
+
+    test('ruleChapterUrlNext 章节列表翻页（去重合并）', () async {
+      const detailP1 = '''
+<html><body><h1 class="name">翻页书</h1>
+<div class="chapters"><a class="ch" href="/c/1">第1话</a><a class="ch" href="/c/2">第2话</a></div>
+<a class="next" href="/book/1?p=2">下一页</a></body></html>''';
+      const detailP2 = '''
+<html><body><div class="chapters"><a class="ch" href="/c/3">第3话</a></div>
+</body></html>''';
+      final fetcher = FakeFetcher({
+        'https://m.example.com/book/1': detailP1,
+        'https://m.example.com/book/1?p=2': detailP2,
+      });
+      final src = ComicSource.fromJson({
+        'id': 'pg',
+        'name': '翻页源',
+        'url': 'https://m.example.com',
+        'rules': {
+          'bookName': '.name@text',
+          'chapterList': '.chapters a',
+          'chapterName': '@text',
+          'chapterUrl': '@href',
+          'chapterUrlNext': 'a.next@href',
+        },
+      });
+      final rt = SourceRuntime(source: src, fetcher: fetcher);
+      final (book, chapters) = await rt.detail('https://m.example.com/book/1');
+      expect(book.name, '翻页书');
+      expect(chapters.map((c) => c.title), ['第1话', '第2话', '第3话']);
+      expect(chapters.last.url, 'https://m.example.com/c/3');
+    });
+
+    test('无 chapterUrlNext 时单页章节照常（回归）', () async {
+      final fetcher = FakeFetcher({'https://m.example.com/comic/1': detailPage});
+      final rt = SourceRuntime(source: buildSource(), fetcher: fetcher);
+      final (_, chapters) = await rt.detail('https://m.example.com/comic/1');
+      expect(chapters.length, 2);
+    });
   });
 }

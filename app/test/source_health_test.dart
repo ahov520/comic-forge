@@ -111,4 +111,40 @@ void main() {
       expect(st.sources.first.lastFailedAt, 0);
     });
   });
+
+  group('AppState 阅读进度', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('保存后续读定位正确，且按 load() 路径还原', () async {
+      final st = AppState();
+      final book = Book.fromJson({'name': '测试书', 'bookUrl': 'https://m.example.com/b/1', 'sourceId': 's1'});
+      await st.saveProgress(book,
+          chapterUrl: 'https://m.example.com/b/1/c3',
+          chapterTitle: '第3话',
+          chapterIndex: 2,
+          chapterCount: 10);
+      expect(st.progressFor('https://m.example.com/b/1')!.chapterIndex, 2);
+      expect(st.progressFor('https://m.example.com/b/1')!.chapterUrl, contains('/c3'));
+
+      // load() 还原路径
+      final st2 = AppState();
+      await st2.load();
+      final p = st2.progressFor('https://m.example.com/b/1');
+      expect(p, isNotNull);
+      expect(p!.chapterTitle, '第3话');
+      expect(p.chapterIndex, 2);
+      expect(p.chapterCount, 10);
+    });
+
+    test('同一本书重复保存只留最新', () async {
+      final st = AppState();
+      final book = Book.fromJson({'name': '测试书', 'bookUrl': 'https://m.example.com/b/2', 'sourceId': 's1'});
+      await st.saveProgress(book, chapterUrl: 'c1', chapterTitle: '第1话', chapterIndex: 0, chapterCount: 5);
+      await st.saveProgress(book, chapterUrl: 'c4', chapterTitle: '第4话', chapterIndex: 3, chapterCount: 5);
+      expect(st.progressFor('https://m.example.com/b/2')!.chapterIndex, 3);
+      expect(st.progress.length, 1);
+    });
+  });
 }

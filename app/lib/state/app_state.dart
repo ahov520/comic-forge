@@ -6,16 +6,59 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:engine/engine.dart';
 
+/// 阅读进度（按书记忆，重启可续读）。
+class ReadingProgress {
+  ReadingProgress({
+    required this.bookUrl,
+    required this.sourceId,
+    required this.chapterUrl,
+    required this.chapterTitle,
+    required this.chapterIndex,
+    required this.chapterCount,
+    required this.at,
+  });
+
+  final String bookUrl;
+  final String sourceId;
+  final String chapterUrl;
+  final String chapterTitle;
+  final int chapterIndex;
+  final int chapterCount;
+  final int at;
+
+  Map<String, dynamic> toJson() => {
+        'bookUrl': bookUrl,
+        'sourceId': sourceId,
+        'chapterUrl': chapterUrl,
+        'chapterTitle': chapterTitle,
+        'chapterIndex': chapterIndex,
+        'chapterCount': chapterCount,
+        'at': at,
+      };
+
+  static ReadingProgress fromJson(Map<String, dynamic> j) => ReadingProgress(
+        bookUrl: j['bookUrl'] as String? ?? '',
+        sourceId: j['sourceId'] as String? ?? '',
+        chapterUrl: j['chapterUrl'] as String? ?? '',
+        chapterTitle: j['chapterTitle'] as String? ?? '',
+        chapterIndex: j['chapterIndex'] as int? ?? 0,
+        chapterCount: j['chapterCount'] as int? ?? 0,
+        at: j['at'] as int? ?? 0,
+      );
+}
+
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
   static const _kSources = 'cf.sources';
   static const _kRepos = 'cf.repos';
   static const _kShelf = 'cf.shelf';
   static const _kDark = 'cf.dark';
+  static const _kProgress = 'cf.progress';
 
   final List<ComicSource> sources = [];
   final List<String> repos = [];
   final List<Book> shelf = [];
+  final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   bool darkMode = true;
 
   Future<void> load() async {
@@ -33,12 +76,42 @@ class AppState extends ChangeNotifier {
       ..addAll((jsonDecode(sp.getString(_kShelf) ?? '[]') as List)
           .whereType<Map<String, dynamic>>()
           .map(Book.fromJson));
+    progress
+      ..clear()
+      ..addAll((jsonDecode(sp.getString(_kProgress) ?? '{}') as Map<String, dynamic>)
+          .map((k, v) => MapEntry(
+              k, ReadingProgress.fromJson(v as Map<String, dynamic>))));
     darkMode = sp.getBool(_kDark) ?? true;
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
     }
   }
+
+  /// 记录阅读进度（打开章节时调用；同一本书只保留最新）。
+  Future<void> saveProgress(Book book,
+      {required String chapterUrl,
+      required String chapterTitle,
+      required int chapterIndex,
+      required int chapterCount}) async {
+    progress[book.bookUrl] = ReadingProgress(
+      bookUrl: book.bookUrl,
+      sourceId: book.sourceId ?? '',
+      chapterUrl: chapterUrl,
+      chapterTitle: chapterTitle,
+      chapterIndex: chapterIndex,
+      chapterCount: chapterCount,
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(
+        _kProgress,
+        jsonEncode(progress
+            .map((k, v) => MapEntry(k, v.toJson()))));
+    notifyListeners();
+  }
+
+  ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
   /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。
