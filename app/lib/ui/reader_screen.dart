@@ -39,6 +39,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late Future<List<String>> _images;
   bool _chromeVisible = true;
   final _pageController = PageController();
+  final _scrollController = ScrollController();
+  bool _nextChapterWarmed = false;
 
   Chapter get _chapter => widget.chapters[_index];
 
@@ -52,6 +54,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // 音量键翻页（Android）：仅阅读器打开期间激活
     _enableVolumeKeys(true);
     _readerChannel.setMethodCallHandler(_onVolumeKey);
+    // 滚动模式：接近底部预热下一话（翻页模式由 onPageChanged 触发）
+    _scrollController.addListener(_warmNextChapterOnScroll);
   }
 
   Future<void> _onVolumeKey(MethodCall call) async {
@@ -90,7 +94,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _images = SourceService.instance
           .imagesFor(widget.runtime, widget.chapters[index].url);
     });
-    // 预加载下一话（失败静默）
+    _nextChapterWarmed = false;
+    // 预加载下一话 URL 列表（失败静默）
     if (index + 1 < widget.chapters.length) {
       SourceService.instance
           .prefetchImages(widget.runtime, widget.chapters[index + 1].url);
@@ -103,6 +108,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
         chapterIndex: index,
         chapterCount: widget.chapters.length,
       );
+    }
+  }
+
+  /// 接近本章末页时预热下一话图片字节（每章只触发一次）。
+  void _warmNextChapterIfNeeded(int page, int pageCount) {
+    if (_nextChapterWarmed) return;
+    if (page < pageCount - 2) return;
+    final next = _index + 1;
+    if (next >= widget.chapters.length) return;
+    _nextChapterWarmed = true;
+    SourceService.instance.prefetchImages(
+        widget.runtime, widget.chapters[next].url);
+    SourceService.instance.precacheLeadingImages(
+        context, widget.runtime, widget.chapters[next].url);
+  }
+
+  /// 滚动模式接近底部时同样触发（由 ScrollController 调用）。
+  void _warmNextChapterOnScroll() {
+    if (_nextChapterWarmed) return;
+    final c = _scrollController;
+    if (!c.hasClients) return;
+    if (c.position.maxScrollExtent - c.offset < 800) {
+      final next = _index + 1;
+      if (next >= widget.chapters.length) return;
+      _nextChapterWarmed = true;
+      SourceService.instance.prefetchImages(
+          widget.runtime, widget.chapters[next].url);
+      SourceService.instance.precacheLeadingImages(
+          context, widget.runtime, widget.chapters[next].url);
     }
   }
 
@@ -146,6 +180,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       return GestureDetector(
         onTap: () => setState(() => _chromeVisible = !_chromeVisible),
         child: ListView.builder(
+          controller: _scrollController,
+          key: PageStorageKey<String>(_chapter.url),
           itemCount: urls.length,
           itemBuilder: (context, i) => img(urls[i]),
         ),
@@ -161,7 +197,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return PageView.builder(
       controller: _pageController,
       itemCount: urls.length,
-      onPageChanged: (i) => setState(() {}),
+      onPageChanged: (i) {
+        setState(() {});
+        _warmNextChapterIfNeeded(i, urls.length);
+      },
       itemBuilder: (context, i) {
         final isLast = i == urls.length - 1;
         return Stack(children: [

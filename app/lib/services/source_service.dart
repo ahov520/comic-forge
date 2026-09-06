@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/widgets.dart';
+
 import 'package:engine/engine.dart';
 
 import 'js_hook.dart';
@@ -41,5 +46,35 @@ class SourceService {
   void prefetchImages(SourceRuntime runtime, String chapterUrl) {
     if (_imgFutures.containsKey(chapterUrl)) return;
     imagesFor(runtime, chapterUrl).catchError((_) => const <String>[]);
+  }
+
+  /// 预热下一话前 N 张图片到图片缓存（翻页接近末页时调用）。
+  /// 静默失败；URL 列表先经 imagesFor（命中已有的预取）。
+  void precacheLeadingImages(
+    BuildContext context,
+    SourceRuntime runtime,
+    String chapterUrl, {
+    int count = 3,
+  }) {
+    final urls = imagesFor(runtime, chapterUrl);
+    unawaited(urls.then((list) async {
+      for (final u in list.take(count)) {
+        if (!context.mounted) return;
+        try {
+          await precacheImage(
+            CachedNetworkImageProvider(
+                u, headers: runtime.imageRequestHeaders.isEmpty
+                    ? runtime.source.headers
+                    : {
+                        ...runtime.source.headers,
+                        ...runtime.imageRequestHeaders,
+                      }),
+            context,
+          );
+        } catch (_) {
+          return; // 第一张失败即放弃本轮预热
+        }
+      }
+    }));
   }
 }
