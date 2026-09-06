@@ -60,7 +60,7 @@ class BookTile extends StatelessWidget {
         ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: scheme.outline),
+        style: TextStyle(color: scheme.onSurfaceVariant),
       ),
       trailing: IconButton(
         icon: Icon(

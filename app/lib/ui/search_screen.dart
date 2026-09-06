@@ -71,7 +71,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 ? Center(
                     child: Text(
                       _query.isEmpty ? '输入关键词开始聚合搜索' : (_searching ? '搜索中…' : '没有结果'),
-                      style: TextStyle(color: Theme.of(context).colorScheme.outline),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   )
                 : ListView.builder(

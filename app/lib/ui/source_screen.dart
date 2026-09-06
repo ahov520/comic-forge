@@ -307,7 +307,9 @@ class _SourceScreenState extends State<SourceScreen> {
                   subtitle: Text('$last$pendingText',
                       style: TextStyle(
                           fontSize: 11,
-                          color: hasPending ? scheme.primary : null)),
+                          color: hasPending
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant)),
                   trailing: _refreshingRepo == r || _refreshingRepo == '*'
                       ? const SizedBox(
                           width: 18,
@@ -342,7 +344,7 @@ class _SourceScreenState extends State<SourceScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.source_outlined,
-                              size: 64, color: scheme.outline),
+                              size: 64, color: scheme.onSurfaceVariant),
                           const SizedBox(height: 12),
                           const Text('还没有源'),
                           const SizedBox(height: 4),

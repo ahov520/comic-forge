@@ -134,7 +134,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(book.author,
-                                      style: TextStyle(color: scheme.outline)),
+                                      style: TextStyle(color: scheme.onSurfaceVariant)),
                                 ),
                               if (book.kind.isNotEmpty)
                                 Padding(
@@ -213,7 +213,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           style: TextStyle(
                               color: isCurrent
                                   ? scheme.primary
-                                  : scheme.outline,
+                                  : scheme.onSurfaceVariant,
                               fontWeight: isCurrent
                                   ? FontWeight.bold
                                   : null)),

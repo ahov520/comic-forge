@@ -8,6 +8,7 @@ import 'package:engine/engine.dart';
 
 import 'source_update.dart';
 import '../services/source_service.dart';
+import 'safe_prefs.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -181,7 +182,7 @@ class AppState extends ChangeNotifier {
       at: DateTime.now().millisecondsSinceEpoch,
     );
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(
+    await sp.setStringSafe(
         _kProgress,
         jsonEncode(progress
             .map((k, v) => MapEntry(k, v.toJson()))));
@@ -210,7 +211,7 @@ class AppState extends ChangeNotifier {
       detailCache.remove(oldest);
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kDetailCache,
+    await sp.setStringSafe(_kDetailCache,
         jsonEncode(detailCache.map((k, v) => MapEntry(k, v.toJson()))));
   }
 
@@ -266,8 +267,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> _persistRepoMeta() async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kRepoRefresh, jsonEncode(repoLastRefresh));
-    await sp.setString(
+    await sp.setStringSafe(_kRepoRefresh, jsonEncode(repoLastRefresh));
+    await sp.setStringSafe(
         _kRepoUpdates,
         jsonEncode(repoUpdates.map((k, v) => MapEntry(k, v.toJson()))));
   }
@@ -389,11 +390,11 @@ class AppState extends ChangeNotifier {
       }
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kSources, jsonEncode(this.sources.map((s) => s.toJson()).toList()));
-    await sp.setString(_kShelf, jsonEncode(this.shelf.map((e) => e.toJson()).toList()));
-    await sp.setString(_kProgress,
+    await sp.setStringSafe(_kSources, jsonEncode(this.sources.map((s) => s.toJson()).toList()));
+    await sp.setStringSafe(_kShelf, jsonEncode(this.shelf.map((e) => e.toJson()).toList()));
+    await sp.setStringSafe(_kProgress,
         jsonEncode(this.progress.map((k, v) => MapEntry(k, v.toJson()))));
-    await sp.setString(_kRepos, jsonEncode(this.repos));
+    await sp.setStringSafe(_kRepos, jsonEncode(this.repos));
     notifyListeners();
     return (sources: nSrc, shelf: nShelf, progress: nProg, repos: nRepo);
   }
@@ -518,7 +519,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _persistSources() async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kSources, jsonEncode(sources.map((s) => s.toJson()).toList()));
+    await sp.setStringSafe(_kSources, jsonEncode(sources.map((s) => s.toJson()).toList()));
   }
 
   Future<void> addRepoSubscribed(String repoUrl, List<ComicSource> imported) async {
@@ -528,7 +529,7 @@ class AppState extends ChangeNotifier {
       sources.add(s);
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kRepos, jsonEncode(repos));
+    await sp.setStringSafe(_kRepos, jsonEncode(repos));
     await _persistSources();
     notifyListeners();
   }
@@ -562,7 +563,7 @@ class AppState extends ChangeNotifier {
       shelf.insert(0, b);
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kShelf, jsonEncode(shelf.map((e) => e.toJson()).toList()));
+    await sp.setStringSafe(_kShelf, jsonEncode(shelf.map((e) => e.toJson()).toList()));
     notifyListeners();
   }
 
@@ -571,7 +572,7 @@ class AppState extends ChangeNotifier {
   Future<void> setDark(bool v) async {
     darkMode = v;
     final sp = await SharedPreferences.getInstance();
-    await sp.setBool(_kDark, v);
+    await sp.setBoolSafe(_kDark, v);
     notifyListeners();
   }
 
@@ -579,7 +580,7 @@ class AppState extends ChangeNotifier {
   Future<void> setReaderBrightness(double v) async {
     readerBrightness = v.clamp(0.15, 1.0);
     final sp = await SharedPreferences.getInstance();
-    await sp.setDouble(_kReaderBrightness, readerBrightness);
+    await sp.setDoubleSafe(_kReaderBrightness, readerBrightness);
     notifyListeners();
   }
 
@@ -587,7 +588,7 @@ class AppState extends ChangeNotifier {
   Future<void> setReaderMode(String mode) async {
     readerMode = mode == 'paged' ? 'paged' : 'scroll';
     final sp = await SharedPreferences.getInstance();
-    await sp.setString(_kReaderMode, readerMode);
+    await sp.setStringSafe(_kReaderMode, readerMode);
     notifyListeners();
   }
 
@@ -595,7 +596,7 @@ class AppState extends ChangeNotifier {
   Future<void> setReaderVolumeKeys(bool v) async {
     readerVolumeKeys = v;
     final sp = await SharedPreferences.getInstance();
-    await sp.setBool(_kReaderVolumeKeys, v);
+    await sp.setBoolSafe(_kReaderVolumeKeys, v);
     notifyListeners();
   }
 
@@ -604,9 +605,9 @@ class AppState extends ChangeNotifier {
     webDavConfig = cfg;
     final sp = await SharedPreferences.getInstance();
     if (cfg == null) {
-      await sp.remove(_kWebDav);
+      await sp.removeSafe(_kWebDav);
     } else {
-      await sp.setString(_kWebDav, jsonEncode(cfg));
+      await sp.setStringSafe(_kWebDav, jsonEncode(cfg));
     }
     notifyListeners();
   }
@@ -617,7 +618,7 @@ class AppState extends ChangeNotifier {
     if (text == null || text.trim().isEmpty) {
       adBlock = null;
       SourceService.instance.adBlock = null;
-      await sp.remove(_kAdBlock);
+      await sp.removeSafe(_kAdBlock);
       notifyListeners();
       return true;
     }
@@ -625,7 +626,7 @@ class AppState extends ChangeNotifier {
     if (rules == null) return false;
     adBlock = rules;
     SourceService.instance.adBlock = rules;
-    await sp.setString(_kAdBlock, text);
+    await sp.setStringSafe(_kAdBlock, text);
     notifyListeners();
     return true;
   }

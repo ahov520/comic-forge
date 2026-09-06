@@ -23,12 +23,12 @@ class ShelfScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.collections_bookmark_outlined,
-                    size: 64, color: Theme.of(context).colorScheme.outline),
+                    size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 const SizedBox(height: 12),
                 const Text('书架空空如也'),
                 const SizedBox(height: 4),
                 Text('去「探索」或「搜索」收藏第一部漫画吧',
-                    style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
           );
@@ -149,21 +149,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         final entries =
                             SourceService.instance.runtimeFor(source).exploreEntries();
                         if (entries.isEmpty) return const SizedBox(height: 8);
-                        return SizedBox(
-                          height: 44,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            children: entries
-                                .map((e) => Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: FilterChip(
-                                        label: Text(e.$1),
-                                        selected: _entry == e.$1,
-                                        onSelected: (_) => _loadEntry(e.$1),
-                                      ),
-                                    ))
-                                .toList(),
+                        // 右端渐隐：提示分类条可横向滚动，避免 chip 被硬裁的观感
+                        return ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            stops: [0.9, 1.0],
+                            colors: [Colors.white, Colors.transparent],
+                          ).createShader(bounds),
+                          blendMode: BlendMode.dstIn,
+                          child: SizedBox(
+                            height: 44,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              children: entries
+                                  .map((e) => Padding(
+                                        padding: const EdgeInsets.only(right: 8),
+                                        child: FilterChip(
+                                          label: Text(e.$1),
+                                          selected: _entry == e.$1,
+                                          onSelected: (_) => _loadEntry(e.$1),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
                           ),
                         );
                       }),
