@@ -16,6 +16,7 @@ class BookDetailScreen extends StatefulWidget {
     required this.book,
     required this.appState,
     this.detailLoaderOverride,
+    this.carryChapterIndex,
   });
   final Book book;
   final AppState appState;
@@ -23,6 +24,9 @@ class BookDetailScreen extends StatefulWidget {
   /// 详情加载器（测试接缝；null 用真实源运行时）。
   final Future<(Book, List<Chapter>)> Function(String bookUrl)?
       detailLoaderOverride;
+
+  /// 换源迁移：以章序号对齐旧进度（皮皮喵语义，跨源章节名不一致按序号近似）。
+  final int? carryChapterIndex;
 
   @override
   State<BookDetailScreen> createState() => _BookDetailScreenState();
@@ -34,6 +38,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   ComicSource? _source;
   ComicSource? _disabledSource; // 来源源存在但被禁用 → 提供一键启用
   bool _fromCache = false;
+  bool _carryDone = false;
   /// 缓存命中时首帧直出的数据（避免 FutureBuilder 首帧闪骨架）。
   (Book, List<Chapter>)? _initialData;
 
@@ -79,6 +84,122 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     if (id == null) return;
     await widget.appState.toggleSource(id);
     if (mounted) setState(_load);
+  }
+
+  /// 换源：在其它启用源中搜同名书，列表点选后替换当前详情页。
+  Future<void> _showSwitchSourceSheet() async {
+    final others = widget.appState.sources
+        .where((s) =>
+            s.enabled &&
+            s.id != widget.book.sourceId &&
+            s.rules.searchUrl.isNotEmpty)
+        .take(12)
+        .toList();
+    if (others.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('没有其它启用的源可换')));
+      return;
+    }
+    final results = <(ComicSource, Book)>[];
+    var searching = true;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) {
+          var done = 0;
+          // 首次进入即并发搜索（受限并发 6，单源 8s 超时）
+          if (searching) {
+            searching = false;
+            Future<void> probe(ComicSource s) async {
+              try {
+                final page = await SourceService.instance
+                    .runtimeFor(s)
+                    .search(widget.book.name)
+                    .timeout(const Duration(seconds: 8));
+                final hit = page.items.firstWhere(
+                  (b) => b.name.trim() == widget.book.name.trim(),
+                  orElse: () => page.items.isEmpty
+                      ? Book()
+                      : page.items.first,
+                );
+                if (hit.name.isNotEmpty) results.add((s, hit));
+              } catch (_) {
+                // 单源失败跳过
+              } finally {
+                done++;
+                if (mounted) setSheet(() {});
+              }
+            }
+
+            for (var i = 0; i < others.length; i += 6) {
+              // ignore: unawaited_futures
+              Future.wait(others.skip(i).take(6).map(probe));
+            }
+          }
+          return SizedBox(
+            height: MediaQuery.of(sheetCtx).size.height * 0.7,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(children: [
+                    Text('换源 · ${widget.book.name}',
+                        style: Theme.of(sheetCtx).textTheme.titleMedium),
+                    const Spacer(),
+                    if (done < others.length)
+                      Text('搜索中 $done/${others.length}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(sheetCtx).colorScheme.outline)),
+                  ]),
+                ),
+                Expanded(
+                  child: results.isEmpty && done < others.length
+                      ? const Center(child: CircularProgressIndicator())
+                      : results.isEmpty
+                          ? const Center(child: Text('其它源没有搜到同名书'))
+                          : ListView.builder(
+                              itemCount: results.length,
+                              itemBuilder: (context, i) {
+                                final (s, b) = results[i];
+                                return ListTile(
+                                  leading: BookCover(
+                                      url: b.coverUrl, width: 44, height: 60),
+                                  title: Text(b.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                    [s.name, if (b.author.isNotEmpty) b.author]
+                                        .join(' · '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onTap: () {
+                                    final carry = widget.appState
+                                        .progressFor(widget.book.bookUrl)
+                                        ?.chapterIndex;
+                                    Navigator.of(sheetCtx).pop();
+                                    Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (_) => BookDetailScreen(
+                                          book: b,
+                                          appState: widget.appState,
+                                          carryChapterIndex: carry,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<(Book, List<Chapter>)> _fetchDetail() async {
@@ -147,6 +268,21 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           }
           final (book, chapters) = snap.data!;
           _book ??= book;
+          // 换源进度迁移：按章序号写入新书进度（一次性）
+          if (widget.carryChapterIndex != null &&
+              !_carryDone &&
+              chapters.isNotEmpty) {
+            _carryDone = true;
+            final idx =
+                widget.carryChapterIndex!.clamp(0, chapters.length - 1);
+            final c = chapters[idx];
+            // ignore: unawaited_futures
+            widget.appState.saveProgress(book,
+                chapterUrl: c.url,
+                chapterTitle: c.title,
+                chapterIndex: idx,
+                chapterCount: chapters.length);
+          }
           final prog = widget.appState.progressFor(widget.book.bookUrl);
           final savedIdx = (prog != null)
               ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
@@ -155,6 +291,12 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             appBar: AppBar(
               title: Text(book.name),
               actions: [
+                if (_source != null)
+                  IconButton(
+                    tooltip: '换源',
+                    icon: const Icon(Icons.swap_horiz),
+                    onPressed: _showSwitchSourceSheet,
+                  ),
                 if (_source != null)
                   IconButton(
                     tooltip: '复制本书源 JSON（可分享）',
