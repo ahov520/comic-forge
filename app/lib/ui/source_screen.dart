@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import 'source_editor_screen.dart';
 
 /// 源管理：订阅仓库 / 手动导入 / 启停。
 class SourceScreen extends StatefulWidget {
@@ -113,6 +114,40 @@ class _SourceScreenState extends State<SourceScreen> {
     }
   }
 
+  /// 长按源：编辑 / 删除。
+  void _showSourceActions(ComicSource s) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('编辑源'),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      SourceEditorScreen(state: widget.state, source: s),
+                ));
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: scheme.error),
+              title: Text('删除源', style: TextStyle(color: scheme.error)),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                widget.state.removeSource(s.id);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -124,6 +159,13 @@ class _SourceScreenState extends State<SourceScreen> {
         appBar: AppBar(
           title: Text(pending > 0 ? '源（$pending 个仓库待更新）' : '源'),
           actions: [
+            IconButton(
+              tooltip: '新建源',
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SourceEditorScreen(state: widget.state),
+              )),
+            ),
             IconButton(
               tooltip: '订阅仓库',
               icon: _subscribing
@@ -359,8 +401,7 @@ class _SourceScreenState extends State<SourceScreen> {
                               ),
                             ],
                           ),
-                          onLongPress: () =>
-                              widget.state.removeSource(s.id),
+                          onLongPress: () => _showSourceActions(s),
                         );
                       },
                     ),
