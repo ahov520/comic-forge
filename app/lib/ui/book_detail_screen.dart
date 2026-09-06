@@ -34,6 +34,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   ComicSource? _source;
   ComicSource? _disabledSource; // 来源源存在但被禁用 → 提供一键启用
   bool _fromCache = false;
+  /// 缓存命中时首帧直出的数据（避免 FutureBuilder 首帧闪骨架）。
+  (Book, List<Chapter>)? _initialData;
 
   @override
   void initState() {
@@ -55,13 +57,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
     final cached = widget.appState.detailCacheFor(widget.book.bookUrl);
     if (cached != null) {
-      // stale-while-revalidate：先秒开缓存，再后台刷新（失败静默回退缓存）
+      // stale-while-revalidate：先秒开缓存，再后台刷新（失败静默回退缓存）。
+      // initialData 让 FutureBuilder 首帧即有数据——缓存命中不闪骨架。
       _fromCache = true;
       final cachedPair = (cached.book, cached.chapters);
+      _initialData = cachedPair;
       _future = Future<(Book, List<Chapter>)>.value(cachedPair);
       _refreshInBackground(cachedPair);
       return;
     }
+    _initialData = null;
     _fromCache = false;
     _future = _source == null
         ? Future.error('未找到可用的来源源')
@@ -115,6 +120,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     return Scaffold(
       body: FutureBuilder<(Book, List<Chapter>)>(
         future: _future,
+        initialData: _initialData,
         builder: (context, snap) {
           if (snap.hasError) {
             return Scaffold(

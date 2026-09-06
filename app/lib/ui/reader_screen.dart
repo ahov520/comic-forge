@@ -359,7 +359,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       const CloseButton(color: Colors.white),
                       Expanded(
                         child: Text(
-                          '${widget.book.name} · ${_index + 1}/${widget.chapters.length} ${_chapter.title}',
+                          '${widget.runtime.source.name} · ${widget.book.name} · ${_index + 1}/${widget.chapters.length} ${_chapter.title}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.white),
