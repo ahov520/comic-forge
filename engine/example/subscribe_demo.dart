@@ -3,7 +3,6 @@
 import 'dart:convert';
 
 import 'package:engine/engine.dart';
-import 'package:engine/src/adapter/hviewer_adapter.dart';
 
 Future<void> main() async {
   final fetcher = HttpFetcher(defaultHeaders: {'User-Agent': 'Mozilla/5.0'});

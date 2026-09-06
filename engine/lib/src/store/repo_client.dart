@@ -183,7 +183,10 @@ class RepoClient {
   }
 
   static bool _looksPpcatFlat(Map<String, dynamic> m) =>
-      m.containsKey('ruleSearchList') || m.containsKey('ruleFindList') || m.containsKey('ruleId');
+      m.containsKey('ruleSearchList') ||
+      m.containsKey('ruleFindList') ||
+      m.containsKey('ruleId') ||
+      m.containsKey('bookSourceName');
 
   /// ppcat 加密 store → 源列表（需要注入解密器）。
   List<ComicSource>? _parsePpcatStore(List<int> bytes) {

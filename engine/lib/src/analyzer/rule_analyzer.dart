@@ -195,10 +195,23 @@ List<String> _splitTop(String input, String sep) {
 }
 
 /// URL 模板：`{{key}}` 占位符替换（searchUrl 的 {{key}}/{{page}}/{{pageSize}}）。
+/// 兼容 ppcat 的裸 `searchKey` 占位与 `{page}` 单括号写法。
 String renderUrlTemplate(String template, Map<String, String> vars) {
-  return template.replaceAllMapped(RegExp(r'\{\{\s*(\w+)\s*\}\}'), (m) {
+  var out = template.replaceAllMapped(RegExp(r'\{\{\s*(\w+)\s*\}\}'), (m) {
     return vars[m.group(1)] ?? '';
   });
+  out = out.replaceAllMapped(RegExp(r'\{\s*(\w+)\s*\}'), (m) {
+    return vars[m.group(1)] ?? m.group(0)!;
+  });
+  final sk = vars['key'];
+  if (sk != null && sk.isNotEmpty) {
+    out = out.replaceFirst('searchKey', sk);
+  }
+  final sp = vars['searchPage'];
+  if (sp != null && sp.isNotEmpty) {
+    out = out.replaceFirst('searchPage', sp);
+  }
+  return out;
 }
 
 /// 规则字符串工具入口（供 evaluator 与测试使用）。

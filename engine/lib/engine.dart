@@ -12,5 +12,6 @@ export 'src/analyzer/rule_evaluator.dart';
 export 'src/adapter/hviewer_adapter.dart';
 export 'src/store/repo_client.dart';
 export 'src/store/ppcat_store.dart';
+export 'src/store/pipimiao_backup.dart';
 export 'src/net/fetcher.dart';
 export 'src/source_runtime.dart';

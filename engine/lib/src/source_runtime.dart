@@ -46,14 +46,16 @@ class SourceRuntime {
     if (source.rules.searchUrl.isEmpty && nextUrl == null) {
       throw StateError('源 ${source.name} 未配置 searchUrl');
     }
+    final key = Uri.encodeComponent(keyword);
     final url = nextUrl ??
-        renderUrlTemplate(source.rules.searchUrl, {
-          'key': Uri.encodeComponent(keyword),
-          'keyword': Uri.encodeComponent(keyword),
+        _absUrl(source.url, renderUrlTemplate(source.rules.searchUrl, {
+          'key': key,
+          'keyword': key,
+          'searchKey': key,
           'page': '$page',
           'searchPage': '$page',
           'pageSize': '20',
-        });
+        }));
     return _fetchBooks(
       url,
       listRule: source.rules.searchList,
@@ -72,7 +74,8 @@ class SourceRuntime {
   /// 发现页（exploreUrl；支持多入口 `名称::url\n` 行格式）。
   List<(String, String)> exploreEntries() {
     final out = <(String, String)>[];
-    final raw = source.rules.exploreUrl;
+    var raw = source.rules.findUrl;
+    if (raw.isEmpty) raw = source.rules.exploreUrl;
     if (raw.isEmpty) return out;
     for (final line in raw.split('\n')) {
       final l = line.trim();
@@ -88,19 +91,26 @@ class SourceRuntime {
   }
 
   Future<Paged<Book>> explore(String entryUrl, {int page = 1, String? nextUrl}) async {
-    final url = nextUrl ?? renderUrlTemplate(entryUrl, {'page': '$page'});
+    final url = nextUrl ??
+        _absUrl(source.url, renderUrlTemplate(entryUrl, {
+          'page': '$page',
+          'searchPage': '$page',
+        }));
+    // ppcat 约定：发现页无独立规则时复用搜索规则
+    final r = source.rules;
+    final useFind = r.findList.isNotEmpty;
     return _fetchBooks(
       url,
-      listRule: source.rules.findList,
-      nameRule: source.rules.findName,
-      authorRule: source.rules.findAuthor,
-      coverRule: source.rules.findCoverUrl,
-      introduceRule: source.rules.findIntroduce,
-      kindRule: source.rules.findKind,
-      lastChapterRule: source.rules.findLastChapter,
-      updateTimeRule: source.rules.findUpdateTime,
-      bookUrlRule: source.rules.findBookUrl,
-      nextRule: source.rules.findUrl,
+      listRule: useFind ? r.findList : r.searchList,
+      nameRule: useFind ? r.findName : r.searchName,
+      authorRule: useFind ? r.findAuthor : r.searchAuthor,
+      coverRule: useFind ? r.findCoverUrl : r.searchCoverUrl,
+      introduceRule: useFind ? r.findIntroduce : r.searchIntroduce,
+      kindRule: useFind ? r.findKind : r.searchKind,
+      lastChapterRule: useFind ? r.findLastChapter : r.searchLastChapter,
+      updateTimeRule: useFind ? r.findUpdateTime : r.searchUpdateTime,
+      bookUrlRule: useFind ? r.findBookUrl : r.searchBookUrl,
+      nextRule: '',
     );
   }
 
@@ -115,13 +125,13 @@ class SourceRuntime {
     }
     final book = Book(
       sourceId: source.id,
-      name: evalFirst(r.bookName, '') ?? '',
-      author: evalFirst(r.bookAuthor, '') ?? '',
-      kind: evalFirst(r.bookKind, '') ?? '',
-      coverUrl: _absUrl(bookUrl, evalFirst(r.bookCoverUrl, '') ?? ''),
-      introduce: evalFirst(r.bookIntroduce, '') ?? '',
-      lastChapter: evalFirst(r.bookLastChapter, '') ?? '',
-      updateTime: evalFirst(r.bookUpdateTime, '') ?? '',
+      name: evalFirst(r.bookName, r.searchName) ?? '',
+      author: evalFirst(r.bookAuthor, r.searchAuthor) ?? '',
+      kind: evalFirst(r.bookKind, r.searchKind) ?? '',
+      coverUrl: _absUrl(bookUrl, evalFirst(r.bookCoverUrl, r.searchCoverUrl) ?? ''),
+      introduce: evalFirst(r.bookIntroduce, r.searchIntroduce) ?? '',
+      lastChapter: evalFirst(r.bookLastChapter, r.searchLastChapter) ?? '',
+      updateTime: evalFirst(r.bookUpdateTime, r.searchUpdateTime) ?? '',
       bookUrl: bookUrl,
     );
 
@@ -178,8 +188,16 @@ class SourceRuntime {
       throw StateError('源 ${source.name} 未配置列表规则');
     }
     final doc = await _fetchDoc(url);
-    final rule = RuleAnalyzer(listRule).parse();
+    // `-` 前缀 = 倒序（legado 语义）
+    var ruleStr = listRule;
+    var reverse = false;
+    if (ruleStr.startsWith('-')) {
+      reverse = true;
+      ruleStr = ruleStr.substring(1);
+    }
+    final rule = RuleAnalyzer(ruleStr).parse();
     final items = _eval.evalNodes(doc, rule);
+    final ordered = reverse ? items.reversed.toList() : items;
 
     String pick(dynamic item, String r, {bool abs = false}) {
       if (r.isEmpty || item is String) return item is String ? item : '';
@@ -188,7 +206,7 @@ class SourceRuntime {
       return v;
     }
 
-    final books = items.map((item) {
+    final books = ordered.map((item) {
       return Book(
         sourceId: source.id,
         name: pick(item, nameRule),

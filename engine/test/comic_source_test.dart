@@ -18,7 +18,8 @@ void main() {
         'ruleSearchName': 'class.title@text',
         'ruleSearchNoteUrl': 'a@href',
         'ruleChapterList': 'class.chapter',
-        'ruleContentUrl': 'img@src',
+        'ruleContentUrl': 'tag.a@href',
+        'ruleBookContent': 'img.pic@src',
       });
       expect(s.id, 'src-1');
       expect(s.name, '测试源');
@@ -27,7 +28,9 @@ void main() {
       expect(s.rules.searchName, 'class.title@text');
       expect(s.rules.searchBookUrl, 'a@href');
       expect(s.rules.chapterList, 'class.chapter');
-      expect(s.rules.contentUrl, 'img@src');
+      // 真实语义：ruleContentUrl=章节链接，ruleBookContent=取图规则
+      expect(s.rules.chapterUrl, 'tag.a@href');
+      expect(s.rules.contentUrl, 'img.pic@src');
     });
 
     test('嵌套 JSON 往返', () {

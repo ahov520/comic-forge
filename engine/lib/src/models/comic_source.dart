@@ -22,7 +22,9 @@ class RuleSet {
 
   String contentInit = '', contentUrl = '', contentUrlNext = '', contentWebUrl = '';
 
-  /// 平铺键名 → 本模型字段名 的映射（ppcat schema，来自逆向提取）。
+  /// 平铺键名 → 本模型字段名 的映射（按真实 .mh_rules 样本校准，2026-09）。
+  /// 注意：ruleBookContent 是取图规则（CSS 或 `$js`），ruleContentUrl 在
+  /// ruleChapterUrl 缺省时充当章节链接规则。
   static const Map<String, String> ppcatFlatKeys = {
     'searchUrl': 'searchUrl',
     'exploreUrl': 'exploreUrl',
@@ -31,6 +33,7 @@ class RuleSet {
     'ruleSearchAuthor': 'searchAuthor',
     'ruleSearchCoverUrl': 'searchCoverUrl',
     'ruleSearchIntroduce': 'searchIntroduce',
+    'ruleSearchIntro': 'searchIntroduce',
     'ruleSearchKind': 'searchKind',
     'ruleSearchLastChapter': 'searchLastChapter',
     'ruleSearchUpdateTime': 'searchUpdateTime',
@@ -50,20 +53,21 @@ class RuleSet {
     'ruleBookName': 'bookName',
     'ruleBookAuthor': 'bookAuthor',
     'ruleBookKind': 'bookKind',
-    'ruleBookContent': 'bookCoverUrl', // 注意：ppcat 的 bookContent 存疑，Phase 0 样本校正
+    'ruleCoverUrl': 'bookCoverUrl',
     'ruleBookLastChapter': 'bookLastChapter',
-    'ruleBookIntroduce': 'bookIntroduce',
+    'ruleIntroduce': 'bookIntroduce',
     'ruleBookUpdateTime': 'bookUpdateTime',
     'ruleChapterList': 'chapterList',
     'ruleChapterName': 'chapterName',
     'ruleChapterCoverUrl': 'chapterCoverUrl',
     'ruleChapterTime': 'chapterTime',
     'ruleChapterGroup': 'chapterGroup',
+    'ruleContentUrl': 'chapterUrl',
     'ruleChapterUrl': 'chapterUrl',
     'ruleChapterUrlNext': 'chapterUrlNext',
     'ruleChapterInit': 'chapterInit',
     'ruleContentInit': 'contentInit',
-    'ruleContentUrl': 'contentUrl',
+    'ruleBookContent': 'contentUrl',
     'ruleContentUrlNext': 'contentUrlNext',
     'ruleContentWebUrl': 'contentWebUrl',
   };
@@ -240,18 +244,20 @@ class ComicSource {
     return s;
   }
 
-  /// 从 ppcat 平铺键 JSON 构建（兼容导入）。
+  /// 从 ppcat 平铺键 JSON 构建（兼容导入，含 bookSource* 头部字段）。
   static ComicSource fromPpcatFlat(Map<String, dynamic> j) {
     final s = ComicSource.fromJson({
-      'id': j['ruleId'] ?? j['sourceUrl'] ?? '',
-      'name': j['sourceName'] ?? j['name'] ?? '',
-      'group': j['sourceGroup'] ?? '',
+      'id': j['ruleId'] ?? j['bookSourceUrl'] ?? j['sourceUrl'] ?? '',
+      'name': j['sourceName'] ?? j['bookSourceName'] ?? j['name'] ?? '',
+      'group': j['sourceGroup'] ?? j['bookSourceGroup'] ?? '',
       'icon': j['sourceIcon'] ?? '',
-      'url': j['sourceUrl'] ?? '',
+      'url': j['sourceUrl'] ?? j['bookSourceUrl'] ?? '',
       'comment': j['sourceComment'] ?? '',
       'enabled': j['enabled'] ?? true,
       'weight': j['weight'] ?? 0,
     });
+    final ua = j['httpUserAgent'];
+    if (ua is String && ua.isNotEmpty) s.headers['User-Agent'] = ua;
     final fields = <String, String>{};
     RuleSet.ppcatFlatKeys.forEach((flat, nested) {
       final v = j[flat];

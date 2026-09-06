@@ -105,27 +105,42 @@ class RuleEvaluator {
     return selected.map((e) => _extract(e, attr)).toList();
   }
 
-  /// legado 简写：`id.x` `class.x`（首值精确/其余包含匹配）`tag.x`。
+  /// legado 简写：`id.x` `class.x`（多类匹配）`tag.x`，支持尾部数字下标
+  /// （`tag.span.0` = 第 0 个 span）。
   Iterable<hd.Element> _evalShorthand(hd.Element scope, String shorthand) sync* {
     final dot = shorthand.indexOf('.');
     if (dot < 0) return;
     final kind = shorthand.substring(0, dot);
     final rest = shorthand.substring(dot + 1);
     final parts = rest.split('.');
+    // 尾部数字 = 下标
+    int? index;
+    if (parts.isNotEmpty && int.tryParse(parts.last) != null) {
+      index = int.parse(parts.last);
+      parts.removeLast();
+    }
+    if (parts.isEmpty) return;
     final first = parts.first;
     final tail = parts.length > 1 ? '.${parts.skip(1).join('.')}' : '';
+    Iterable<hd.Element> selected;
     switch (kind) {
       case 'id':
-        yield* scope.querySelectorAll('#$first$tail');
+        selected = scope.querySelectorAll('#$first$tail');
       case 'class':
-        // class.a.b → 含 a 和 b 两个类
         final classes = parts.where((p) => p.isNotEmpty).toList();
-        yield* scope.querySelectorAll('*').where((e) {
+        selected = scope.querySelectorAll('*').where((e) {
           final cl = e.classes;
           return classes.every(cl.contains);
         });
       case 'tag':
-        yield* scope.querySelectorAll(rest);
+        selected = scope.querySelectorAll(parts.join('.'));
+      default:
+        return;
+    }
+    if (index != null) {
+      if (index < selected.length) yield selected.elementAt(index);
+    } else {
+      yield* selected;
     }
   }
 
