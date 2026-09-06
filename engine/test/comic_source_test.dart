@@ -93,6 +93,46 @@ void main() {
       expect(back.name, '甲');
     });
 
+    test('健康字段往返保真（失败计数/原因/时间）', () {
+      final s = ComicSource.fromJson({
+        'id': 'h1',
+        'name': '失效源',
+        'lastError': 'HTTP 404 for https://x.example.com/s',
+        'lastFailedAt': 1757150000000,
+        'failCount': 4,
+        'lastOkAt': 1757000000000,
+      });
+      expect(s.failCount, 4);
+      expect(s.isUnhealthy, isTrue);
+      final back = ComicSource.fromJson(
+          jsonDecode(jsonEncode(s.toJson())) as Map<String, dynamic>);
+      expect(back.lastError, s.lastError);
+      expect(back.lastFailedAt, 1757150000000);
+      expect(back.failCount, 4);
+      expect(back.lastOkAt, 1757000000000);
+    });
+
+    test('健康字段缺省与错型容错（老快照兼容）', () {
+      final s = ComicSource.fromJson({'id': 'h2', 'failCount': 'oops'});
+      expect(s.failCount, 0);
+      expect(s.isUnhealthy, isFalse);
+      expect(s.lastError, '');
+      final back = ComicSource.fromJson(
+          jsonDecode(jsonEncode(s.toJson())) as Map<String, dynamic>);
+      expect(back.toJson().containsKey('failCount'), isFalse);
+    });
+
+    test('fromPpcatFlat 导入的源健康字段为零值', () {
+      final s = ComicSource.fromPpcatFlat({
+        'bookSourceName': '新源',
+        'bookSourceUrl': 'https://m.example.com',
+        'ruleSearchUrl': '/search?q=searchKey',
+      });
+      expect(s.failCount, 0);
+      expect(s.lastOkAt, 0);
+      expect(s.isUnhealthy, isFalse);
+    });
+
     test('内置快照多数源导入后 searchUrl 非空', () {
       final snapshot = File('../store-snapshot/store.json');
       expect(snapshot.existsSync(), isTrue, reason: '需从 engine/ 目录运行 dart test');

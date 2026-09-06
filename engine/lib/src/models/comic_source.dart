@@ -199,6 +199,19 @@ class ComicSource {
   Map<String, String> headers;
   RuleSet rules;
 
+  // ---- 源健康（app 侧回报，随源持久化）----
+  /// 最近一次失败原因（成功时清空）。
+  String lastError = '';
+  /// 最近失败时间（epoch 毫秒；0 = 从未失败）。
+  int lastFailedAt = 0;
+  /// 连续失败计数（成功清零；≥3 视为失效候选，可一键禁用）。
+  int failCount = 0;
+  /// 最近成功时间（epoch 毫秒；0 = 从未成功）。
+  int lastOkAt = 0;
+
+  /// 失效候选：连续失败 ≥3 次。
+  bool get isUnhealthy => failCount >= 3;
+
   /// 原始 JSON（保持往返保真，未知键不丢）。
   Map<String, dynamic> raw = {};
 
@@ -213,6 +226,10 @@ class ComicSource {
         if (weight != 0) 'weight': weight,
         if (headers.isNotEmpty) 'headers': headers,
         'rules': rules.toJson(),
+        if (lastError.isNotEmpty) 'lastError': lastError,
+        if (lastFailedAt != 0) 'lastFailedAt': lastFailedAt,
+        if (failCount != 0) 'failCount': failCount,
+        if (lastOkAt != 0) 'lastOkAt': lastOkAt,
       };
 
   /// 从明文仓库（Track A）JSON 构建。
@@ -231,6 +248,11 @@ class ComicSource {
     if (h is Map) {
       h.forEach((k, v) => s.headers[k.toString()] = v.toString());
     }
+    // 源健康（容错：老快照/手改 JSON 里可能是错型）
+    s.lastError = j['lastError'] is String ? j['lastError'] as String : '';
+    s.lastFailedAt = j['lastFailedAt'] is int ? j['lastFailedAt'] as int : 0;
+    s.failCount = j['failCount'] is int ? j['failCount'] as int : 0;
+    s.lastOkAt = j['lastOkAt'] is int ? j['lastOkAt'] as int : 0;
     s.raw = Map<String, dynamic>.from(j);
     final r = j['rules'];
     if (r is Map) {

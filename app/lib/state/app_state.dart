@@ -58,7 +58,8 @@ class AppState extends ChangeNotifier {
         added++;
         continue;
       }
-      // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，保留启用与权重。
+      // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，
+      // 保留启用/权重/健康记录（避免抹掉已知失效信息）。
       final existing = sources[idx];
       final needsSearchUrl =
           existing.rules.searchUrl.isEmpty && s.rules.searchUrl.isNotEmpty;
@@ -66,6 +67,10 @@ class AppState extends ChangeNotifier {
       if (needsSearchUrl || needsHeaders) {
         s.enabled = existing.enabled;
         s.weight = existing.weight;
+        s.lastError = existing.lastError;
+        s.lastFailedAt = existing.lastFailedAt;
+        s.failCount = existing.failCount;
+        s.lastOkAt = existing.lastOkAt;
         sources[idx] = s;
         repaired++;
       }
@@ -75,6 +80,78 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     }
     return added + repaired;
+  }
+
+  /// 批量回报源健康：[okIds] 本轮成功的源；[errors] 失败 {源id: 错误摘要}。
+  /// 成功清零连续失败计数；失败累加并记原因/时间。一次持久化 + 一次通知。
+  Future<void> reportSourceHealth(
+      Iterable<String> okIds, Map<String, String> errors) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var changed = false;
+    for (final id in okIds) {
+      final s = _find(id);
+      if (s == null) continue;
+      if (s.failCount != 0 || s.lastError.isNotEmpty || s.lastOkAt == 0) {
+        changed = true;
+      }
+      s.failCount = 0;
+      s.lastError = '';
+      s.lastOkAt = now;
+    }
+    errors.forEach((id, err) {
+      final s = _find(id);
+      if (s == null) return;
+      final msg = err.length > 120 ? err.substring(0, 120) : err;
+      if (s.lastError != msg || s.lastFailedAt == 0) changed = true;
+      s.lastError = msg;
+      s.lastFailedAt = now;
+      s.failCount++;
+    });
+    if (changed) {
+      await _persistSources();
+      notifyListeners();
+    }
+  }
+
+  /// 一键禁用失效候选（连续失败 ≥3 的启用源）。返回禁用数量。
+  Future<int> disableUnhealthySources() async {
+    var n = 0;
+    for (final s in sources) {
+      if (s.enabled && s.isUnhealthy) {
+        s.enabled = false;
+        n++;
+      }
+    }
+    if (n > 0) {
+      await _persistSources();
+      notifyListeners();
+    }
+    return n;
+  }
+
+  /// 清空全部失败记录（重新探活时用）。
+  Future<int> resetSourceHealth() async {
+    var n = 0;
+    for (final s in sources) {
+      if (s.failCount != 0 || s.lastError.isNotEmpty || s.lastFailedAt != 0) {
+        s.failCount = 0;
+        s.lastError = '';
+        s.lastFailedAt = 0;
+        n++;
+      }
+    }
+    if (n > 0) {
+      await _persistSources();
+      notifyListeners();
+    }
+    return n;
+  }
+
+  ComicSource? _find(String id) {
+    for (final s in sources) {
+      if (s.id == id) return s;
+    }
+    return null;
   }
 
   Future<void> _persistSources() async {

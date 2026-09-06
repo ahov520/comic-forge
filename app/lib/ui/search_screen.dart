@@ -32,14 +32,20 @@ class _SearchScreenState extends State<SearchScreen> {
       _results.clear();
       _failed.clear();
     });
+    final okIds = <String>{};
+    final errors = <String, String>{};
     await Future.wait(enabled.map((s) async {
       try {
         final page = await SourceService.instance.runtimeFor(s).search(q);
         if (mounted) setState(() => _results.addAll(page.items));
+        okIds.add(s.id);
       } catch (e) {
         if (mounted) setState(() => _failed.add(s.name));
+        errors[s.id] = e.toString();
       }
     }));
+    // 健康回报：成功清零失败计数，失败累加（源页据此标红/一键禁用失效源）
+    await widget.state.reportSourceHealth(okIds, errors);
     if (mounted) setState(() => _searching = false);
   }
 

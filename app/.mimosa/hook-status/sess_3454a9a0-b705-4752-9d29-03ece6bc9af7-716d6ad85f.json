@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-09-06T14:20:41.240Z",
+  "sessionId": "sess_3454a9a0-b705-4752-9d29-03ece6bc9af7",
+  "event": "PostToolUse",
+  "toolName": "Write",
+  "file": "test/source_health_test.dart",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 3,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}

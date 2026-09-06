@@ -114,10 +114,21 @@ class _SourceScreenState extends State<SourceScreen> {
                     setState(() => _lastResult =
                         n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
                   }
+                } else if (v == 'disableUnhealthy') {
+                  final n = await widget.state.disableUnhealthySources();
+                  if (mounted) {
+                    setState(() => _lastResult =
+                        n > 0 ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）' : '没有连续失败≥3 的源');
+                  }
+                } else if (v == 'resetHealth') {
+                  final n = await widget.state.resetSourceHealth();
+                  if (mounted) {
+                    setState(() => _lastResult = '已清除 $n 个源的失败记录');
+                  }
                 }
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
                   value: 'backup',
                   child: ListTile(
                     leading: Icon(Icons.restore_outlined),
@@ -127,12 +138,36 @@ class _SourceScreenState extends State<SourceScreen> {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: 'builtin',
                   child: ListTile(
                     leading: Icon(Icons.inventory_2_outlined),
                     title: Text('恢复内置源'),
                     subtitle: Text('重新导入 APK 内置的 493 条社区源快照'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'disableUnhealthy',
+                  child: ListTile(
+                    leading: Icon(Icons.block_outlined,
+                        color: widget.state.sources.any((s) => s.isUnhealthy)
+                            ? scheme.error
+                            : null),
+                    title: const Text('禁用失效源'),
+                    subtitle: Text(
+                        '连续失败≥3 的启用源（当前 ${widget.state.sources.where((s) => s.isUnhealthy && s.enabled).length} 个）'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'resetHealth',
+                  child: ListTile(
+                    leading: Icon(Icons.health_and_safety_outlined),
+                    title: Text('清除失败记录'),
+                    subtitle: Text('重新探活前先重置标红状态'),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -199,20 +234,51 @@ class _SourceScreenState extends State<SourceScreen> {
                       itemCount: widget.state.sources.length,
                       itemBuilder: (context, i) {
                         final s = widget.state.sources[i];
+                        final unhealthy = s.isUnhealthy;
+                        final recentlyFailed =
+                            s.failCount > 0 && s.lastError.isNotEmpty;
+                        final subtitle = [
+                          if (s.group.isNotEmpty) s.group,
+                          s.url,
+                          if (recentlyFailed)
+                            '最近失败(${s.failCount}): ${s.lastError}',
+                        ]
+                            .where((e) => e.isNotEmpty)
+                            .join(' · ');
                         return ListTile(
-                          leading: const Icon(Icons.book_outlined),
-                          title: Text(s.name.isEmpty ? s.id : s.name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            [if (s.group.isNotEmpty) s.group, s.url]
-                                .where((e) => e.isNotEmpty)
-                                .join(' · '),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          leading: Icon(
+                            Icons.book_outlined,
+                            color: unhealthy
+                                ? scheme.error
+                                : (recentlyFailed ? scheme.secondary : null),
                           ),
-                          trailing: Switch(
-                            value: s.enabled,
-                            onChanged: (_) =>
-                                widget.state.toggleSource(s.id),
+                          title: Text(s.name.isEmpty ? s.id : s.name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: unhealthy
+                                  ? TextStyle(color: scheme.error)
+                                  : null),
+                          subtitle: Text(
+                            subtitle,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: unhealthy
+                                ? TextStyle(color: scheme.error)
+                                : null,
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (unhealthy)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Icon(Icons.error_outline,
+                                      size: 18, color: scheme.error),
+                                ),
+                              Switch(
+                                value: s.enabled,
+                                onChanged: (_) =>
+                                    widget.state.toggleSource(s.id),
+                              ),
+                            ],
                           ),
                           onLongPress: () =>
                               widget.state.removeSource(s.id),
