@@ -9,16 +9,25 @@ import 'skeleton.dart';
 import 'widgets.dart';
 
 /// 书架。
-class ShelfScreen extends StatelessWidget {
+class ShelfScreen extends StatefulWidget {
   const ShelfScreen({super.key, required this.state});
   final AppState state;
 
   @override
+  State<ShelfScreen> createState() => _ShelfScreenState();
+}
+
+class _ShelfScreenState extends State<ShelfScreen> {
+  /// 筛选：0=全部 1=连载中 2=已完结（按 book.kind 关键词，缺失归入全部）
+  int _filter = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
-      animation: state,
+      animation: widget.state,
       builder: (context, _) {
-        if (state.shelf.isEmpty) {
+        if (widget.state.shelf.isEmpty) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -34,59 +43,121 @@ class ShelfScreen extends StatelessWidget {
             ),
           );
         }
-        // 最近阅读优先：有进度的书按进度时间倒序排前，其余保持收藏序
-        final books = state.shelf.toList()
+        // 筛选：kind 含「完结」→ 已完结；kind 非空且不含「完结」→ 连载中；kind 空 → 仅「全部」可见
+        final books = widget.state.shelf.where((b) {
+          switch (_filter) {
+            case 2:
+              return b.kind.contains('完结');
+            case 1:
+              return b.kind.isNotEmpty && !b.kind.contains('完结');
+            default:
+              return true;
+          }
+        }).toList()
           ..sort((a, b) {
-            final pa = state.progress[a.bookUrl]?.at ?? 0;
-            final pb = state.progress[b.bookUrl]?.at ?? 0;
+            final pa = widget.state.progress[a.bookUrl]?.at ?? 0;
+            final pb = widget.state.progress[b.bookUrl]?.at ?? 0;
             return pb.compareTo(pa);
           });
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 120,
-            childAspectRatio: 0.62,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: books.length,
-          itemBuilder: (context, i) {
-            final b = books[i];
-            final prog = state.progress[b.bookUrl];
-            final progLabel =
-                prog == null || prog.chapterTitle.isEmpty ? '' : prog.chapterTitle;
-            return InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => BookDetailScreen(book: b, appState: state),
-              )),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: Stack(children: [
-                    Positioned.fill(child: BookCover(url: b.coverUrl)),
-                    if (progLabel.isNotEmpty)
-                      Positioned(
-                        left: 0, right: 0, bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
-                          color: Colors.black54,
-                          child: Text(progLabel,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.white)),
-                        ),
-                      ),
-                  ])),
-                  const SizedBox(height: 6),
-                  Text(b.name,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12)),
-                ],
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Text('书架',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
               ),
-            );
-          },
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                child: Row(
+                  children: ['全部', '连载中', '已完结']
+                      .asMap()
+                      .entries
+                      .map((e) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(e.value),
+                              selected: _filter == e.key,
+                              onSelected: (_) =>
+                                  setState(() => _filter = e.key),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ),
+            if (books.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                      child: Text('该分类暂无藏书',
+                          style: TextStyle(color: scheme.onSurfaceVariant))),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.all(12),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 120,
+                    childAspectRatio: 0.62,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      final b = books[i];
+                      final prog = widget.state.progress[b.bookUrl];
+                      final progLabel = prog == null || prog.chapterTitle.isEmpty
+                          ? ''
+                          : prog.chapterTitle;
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => BookDetailScreen(
+                                    book: b, appState: widget.state))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: Stack(children: [
+                              Positioned.fill(
+                                  child: BookCover(url: b.coverUrl)),
+                              if (progLabel.isNotEmpty)
+                                Positioned(
+                                  left: 0, right: 0, bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 2),
+                                    color: Colors.black54,
+                                    child: Text(progLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white)),
+                                  ),
+                                ),
+                            ])),
+                          const SizedBox(height: 6),
+                          Text(b.name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    );
+                  },
+                    childCount: books.length,
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
