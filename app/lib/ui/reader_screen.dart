@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'package:engine/engine.dart';
@@ -112,10 +113,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 onTap: () => setState(() => _chromeVisible = !_chromeVisible),
                 child: ListView.builder(
                   itemCount: urls.length,
-                  itemBuilder: (context, i) => Image.network(
-                    urls[i],
+                  itemBuilder: (context, i) => CachedNetworkImage(
+                    imageUrl: urls[i],
                     fit: BoxFit.fitWidth,
-                    errorBuilder: (_, _, _) => const SizedBox(
+                    httpHeaders: widget.runtime.source.headers, // 防盗链源常要求 Referer/UA
+                    fadeInDuration: const Duration(milliseconds: 120),
+                    placeholder: (_, _) => const SizedBox(
+                        height: 240,
+                        child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+                    errorWidget: (_, _, _) => const SizedBox(
                       height: 200,
                       child: Center(
                           child: Text('图片加载失败',

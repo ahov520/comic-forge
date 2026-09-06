@@ -147,4 +147,30 @@ void main() {
       expect(st.progress.length, 1);
     });
   });
+
+  group('AppState 离线目录缓存', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('保存后可取回（load() 路径还原），空章节不写入', () async {
+      final st = AppState();
+      final book = Book.fromJson({'name': '缓存书', 'bookUrl': 'https://m.example.com/b/9', 'sourceId': 's1'});
+      await st.saveDetailCache(book, []);
+      expect(st.detailCacheFor('https://m.example.com/b/9'), isNull);
+
+      await st.saveDetailCache(book, [
+        Chapter(title: '第1话', url: 'https://m.example.com/b/9/c1'),
+        Chapter(title: '第2话', url: 'https://m.example.com/b/9/c2'),
+      ]);
+      final hit = st.detailCacheFor('https://m.example.com/b/9');
+      expect(hit, isNotNull);
+      expect(hit!.chapters.length, 2);
+      expect(hit.chapters.last.title, '第2话');
+
+      final st2 = AppState();
+      await st2.load();
+      expect(st2.detailCacheFor('https://m.example.com/b/9')!.book.name, '缓存书');
+    });
+  });
 }

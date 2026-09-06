@@ -47,6 +47,30 @@ class ReadingProgress {
       );
 }
 
+/// 书籍详情离线缓存（章节目录 stale-while-revalidate）。
+class CachedDetail {
+  CachedDetail({required this.book, required this.chapters, required this.at});
+
+  final Book book;
+  final List<Chapter> chapters;
+  final int at;
+
+  Map<String, dynamic> toJson() => {
+        'book': book.toJson(),
+        'chapters': chapters.map((c) => c.toJson()).toList(),
+        'at': at,
+      };
+
+  static CachedDetail fromJson(Map<String, dynamic> j) => CachedDetail(
+        book: Book.fromJson(j['book'] as Map<String, dynamic>),
+        chapters: (j['chapters'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(Chapter.fromJson)
+            .toList(),
+        at: j['at'] as int? ?? 0,
+      );
+}
+
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
   static const _kSources = 'cf.sources';
@@ -54,11 +78,14 @@ class AppState extends ChangeNotifier {
   static const _kShelf = 'cf.shelf';
   static const _kDark = 'cf.dark';
   static const _kProgress = 'cf.progress';
+  static const _kDetailCache = 'cf.detailCache';
+  static const _detailCacheCap = 100;
 
   final List<ComicSource> sources = [];
   final List<String> repos = [];
   final List<Book> shelf = [];
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
+  final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   bool darkMode = true;
 
   Future<void> load() async {
@@ -81,6 +108,11 @@ class AppState extends ChangeNotifier {
       ..addAll((jsonDecode(sp.getString(_kProgress) ?? '{}') as Map<String, dynamic>)
           .map((k, v) => MapEntry(
               k, ReadingProgress.fromJson(v as Map<String, dynamic>))));
+    detailCache
+      ..clear()
+      ..addAll((jsonDecode(sp.getString(_kDetailCache) ?? '{}') as Map<String, dynamic>)
+          .map((k, v) =>
+              MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>))));
     darkMode = sp.getBool(_kDark) ?? true;
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
@@ -112,6 +144,32 @@ class AppState extends ChangeNotifier {
   }
 
   ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
+
+  /// 章节目录缓存（离线可见 + 秒开），成功拉取详情后调用；超上限按时间淘汰。
+  Future<void> saveDetailCache(Book book, List<Chapter> chapters) async {
+    if (book.bookUrl.isEmpty || chapters.isEmpty) return;
+    detailCache[book.bookUrl] = CachedDetail(
+        book: book,
+        chapters: chapters,
+        at: DateTime.now().millisecondsSinceEpoch);
+    while (detailCache.length > _detailCacheCap) {
+      String? oldest;
+      int? oldestAt;
+      detailCache.forEach((k, v) {
+        if (oldestAt == null || v.at < oldestAt!) {
+          oldest = k;
+          oldestAt = v.at;
+        }
+      });
+      if (oldest == null) break;
+      detailCache.remove(oldest);
+    }
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kDetailCache,
+        jsonEncode(detailCache.map((k, v) => MapEntry(k, v.toJson()))));
+  }
+
+  CachedDetail? detailCacheFor(String bookUrl) => detailCache[bookUrl];
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
   /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。

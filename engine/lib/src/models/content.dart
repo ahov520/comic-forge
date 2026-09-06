@@ -73,6 +73,14 @@ class Chapter {
         if (time.isNotEmpty) 'time': time,
         if (group.isNotEmpty) 'group': group,
       };
+
+  static Chapter fromJson(Map<String, dynamic> j) => Chapter(
+        title: j['title'] as String? ?? '',
+        url: j['url'] as String? ?? '',
+        coverUrl: j['coverUrl'] as String? ?? '',
+        time: j['time'] as String? ?? '',
+        group: j['group'] as String? ?? '',
+      );
 }
 
 /// 一次搜索/发现的分页结果。

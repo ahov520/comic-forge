@@ -20,6 +20,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   late Future<(Book, List<Chapter>)> _future;
   Book? _book;
   ComicSource? _source;
+  bool _fromCache = false;
 
   @override
   void initState() {
@@ -30,9 +31,42 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   void _load() {
     _book = null;
     _source = _findSource();
+    final cached = widget.appState.detailCacheFor(widget.book.bookUrl);
+    if (cached != null) {
+      // stale-while-revalidate：先秒开缓存，再后台刷新（失败静默回退缓存）
+      _fromCache = true;
+      final cachedPair = (cached.book, cached.chapters);
+      _future = Future<(Book, List<Chapter>)>.value(cachedPair);
+      _refreshInBackground(cachedPair);
+      return;
+    }
+    _fromCache = false;
     _future = _source == null
         ? Future.error('未找到来源源（可能已被移除或禁用）')
-        : SourceService.instance.runtimeFor(_source!).detail(widget.book.bookUrl);
+        : _fetchDetail();
+  }
+
+  Future<(Book, List<Chapter>)> _fetchDetail() async {
+    final (book, chapters) =
+        await SourceService.instance.runtimeFor(_source!).detail(widget.book.bookUrl);
+    await widget.appState.saveDetailCache(book, chapters);
+    return (book, chapters);
+  }
+
+  Future<void> _refreshInBackground((Book, List<Chapter>) cachedPair) async {
+    if (_source == null) return;
+    try {
+      final fresh = await _fetchDetail();
+      if (mounted) {
+        setState(() {
+          _fromCache = false;
+          _future = Future<(Book, List<Chapter>)>.value(fresh);
+        });
+      }
+    } catch (_) {
+      // 网络失败：保持缓存内容，不打断阅读
+      _future = Future<(Book, List<Chapter>)>.value(cachedPair);
+    }
   }
 
   ComicSource? _findSource() {
@@ -142,6 +176,15 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         Text('章节 (${chapters.length})',
                             style: Theme.of(context).textTheme.titleMedium),
                         const Spacer(),
+                        if (_fromCache)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Chip(
+                              label: const Text('离线目录', style: TextStyle(fontSize: 11)),
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: scheme.surfaceContainerHighest,
+                            ),
+                          ),
                         if (savedIdx >= 0)
                           FilledButton.tonalIcon(
                             onPressed: () {
