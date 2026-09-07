@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:engine/engine.dart';
@@ -55,6 +57,77 @@ void main() {
       expect(agg.sourcesHit, 1);
       expect(agg.books, hasLength(2));
       expect(agg.sourceIds, ['hit', 'hit']);
+    });
+  });
+
+  group('searchAggregateStatus', () {
+    test('搜索中尚无结果只报正在聚合的源数', () {
+      expect(
+        searchAggregateStatus(
+          sourceCount: 3,
+          successCount: 0,
+          timeoutCount: 0,
+          errorCount: 0,
+          searching: true,
+        ),
+        '正在聚合 3 个源',
+      );
+    });
+
+    test('对齐设计稿：成功与超时并列', () {
+      expect(
+        searchAggregateStatus(
+          sourceCount: 3,
+          successCount: 2,
+          timeoutCount: 1,
+          errorCount: 0,
+          searching: true,
+        ),
+        '正在聚合 3 个源 · 2 成功 1 超时',
+      );
+    });
+
+    test('结束后改用已聚合，失败单独计数', () {
+      expect(
+        searchAggregateStatus(
+          sourceCount: 3,
+          successCount: 1,
+          timeoutCount: 1,
+          errorCount: 1,
+          searching: false,
+        ),
+        '已聚合 3 个源 · 1 成功 1 超时 1 失败',
+      );
+    });
+  });
+
+  group('searchFailureTip / classifySearchFailure', () {
+    test('超时与失败分别点名', () {
+      expect(
+        searchFailureTip(const [
+          SearchSourceFailure(name: '咕咕漫画', kind: SearchSourceFailKind.timeout),
+          SearchSourceFailure(name: '备用源', kind: SearchSourceFailKind.error),
+          SearchSourceFailure(name: '拾荒漫画', kind: SearchSourceFailKind.timeout),
+        ]),
+        '2 个源超时：咕咕漫画、拾荒漫画 · 1 个源失败：备用源',
+      );
+    });
+
+    test('无失败返回 null', () {
+      expect(searchFailureTip(const []), isNull);
+    });
+
+    test('TimeoutException 与 timeout/超时文案归为超时', () {
+      expect(
+        classifySearchFailure(TimeoutException('source')),
+        SearchSourceFailKind.timeout,
+      );
+      expect(
+        classifySearchFailure(Exception('Fetch timeout')),
+        SearchSourceFailKind.timeout,
+      );
+      expect(classifySearchFailure(Exception('连接超时')), SearchSourceFailKind.timeout);
+      expect(classifySearchFailure(Exception('offline')), SearchSourceFailKind.error);
     });
   });
 }

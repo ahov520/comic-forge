@@ -214,10 +214,17 @@ class BookTile extends StatelessWidget {
                       ),
                     ],
                     if (source.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: SourceBadge(label: source),
+                      const SizedBox(height: 2),
+                      Tooltip(
+                        message: '来源：$source',
+                        child: Text(
+                          '源: $source',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ],
                   ],

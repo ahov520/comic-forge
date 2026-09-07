@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:engine/engine.dart';
@@ -5,13 +7,21 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/search_aggregator.dart';
+import 'skeleton.dart';
 import 'source_screen.dart';
 import 'widgets.dart';
 
 /// 聚合搜索：并发查所有启用源；结果带源标识、同名去重、按源权重排序。
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, required this.state});
+  const SearchScreen({
+    super.key,
+    required this.state,
+    this.sourceTimeout = const Duration(seconds: 12),
+  });
   final AppState state;
+
+  /// 单源搜索超时；超时计入聚合状态的「超时」而非笼统失败。
+  final Duration sourceTimeout;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -22,7 +32,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final _focusNode = FocusNode();
   final Map<String, List<Book>> _raw = {}; // 源id → 结果（到达序）
   AggregatedSearch? _agg;
-  final Map<String, String> _failed = {};
+  final Map<String, SearchSourceFailure> _failed = {};
   bool _searching = false;
   String _query = '';
   int _searchGeneration = 0;
@@ -99,8 +109,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final errors = <String, String>{};
     await Future.wait(
       enabled.map((s) async {
+        final future = SourceService.instance.runtimeFor(s).search(q);
         try {
-          final page = await SourceService.instance.runtimeFor(s).search(q);
+          final page = await future.timeout(widget.sourceTimeout);
           if (_isCurrentSearch(generation)) {
             setState(() {
               _raw[s.id] = page.items;
@@ -109,8 +120,14 @@ class _SearchScreenState extends State<SearchScreen> {
           }
           okIds.add(s.id);
         } catch (e) {
+          future.ignore();
           if (_isCurrentSearch(generation)) {
-            setState(() => _failed[s.id] = _sourceName(s.id));
+            setState(() {
+              _failed[s.id] = SearchSourceFailure(
+                name: _sourceName(s.id),
+                kind: classifySearchFailure(e),
+              );
+            });
           }
           errors[s.id] = e.toString();
         }
@@ -130,10 +147,111 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
+  String _statusLine() {
+    final timeouts = _failed.values
+        .where((f) => f.kind == SearchSourceFailKind.timeout)
+        .length;
+    return searchAggregateStatus(
+      sourceCount: _sourceCount,
+      successCount: _raw.length,
+      timeoutCount: timeouts,
+      errorCount: _failed.length - timeouts,
+      searching: _searching,
+    );
+  }
+
+  Widget _titleBar(BuildContext context, bool canPop) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 12, 20, 12),
+      child: Row(
+        children: [
+          if (canPop)
+            IconButton(
+              tooltip: '返回',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                '搜索',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchField(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final surface = scheme.brightness == Brightness.light
+        ? scheme.surfaceContainerLowest
+        : scheme.surfaceContainerLow;
+    final canSearch = !_searching && _controller.text.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => _doSearch(),
+        decoration: InputDecoration(
+          hintText: '搜索书名、作者…',
+          isDense: true,
+          filled: true,
+          fillColor: surface,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: scheme.primary),
+          ),
+          suffixIconConstraints: const BoxConstraints(minHeight: 48),
+          suffixIcon: Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_controller.text.isNotEmpty)
+                  IconButton(
+                    tooltip: '清空输入',
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _controller.clear();
+                      _focusNode.requestFocus();
+                    },
+                  ),
+                IconButton(
+                  tooltip: '搜索',
+                  icon: const Icon(Icons.search),
+                  onPressed: canSearch ? _doSearch : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _historyView(BuildContext context) {
     final history = widget.state.searchHistory;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       children: [
         Row(
           children: [
@@ -182,33 +300,65 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _resultsView(BuildContext context) {
-    final agg = _agg;
+  Widget _statusAndTips(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final completed = _raw.length + _failed.length;
-    return Column(
-      children: [
-        if (_searching)
-          LinearProgressIndicator(
-            value: _sourceCount == 0 ? null : completed / _sourceCount,
-            semanticsLabel: '搜索进度',
-          ),
-        if (_query.isNotEmpty && _sourceCount > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _searching
-                    ? '正在搜索 $completed/$_sourceCount 个源 · 已找到 ${agg?.books.length ?? 0} 条'
-                    : '${agg?.books.length ?? 0} 条结果 · ${agg?.sourcesHit ?? 0} 个源命中'
-                          '${(agg?.duplicatesRemoved ?? 0) > 0 ? ' · 去重 ${agg!.duplicatesRemoved}' : ''}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
+    final tip = searchFailureTip(_failed.values);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _statusLine(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
+          if (tip != null) ...[
+            const SizedBox(height: 8),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.errorContainer.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_off_outlined,
+                      size: 18,
+                      color: scheme.onErrorContainer,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tip,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _resultsView(BuildContext context) {
+    return Column(
+      children: [
+        if (_query.isNotEmpty && _sourceCount > 0) _statusAndTips(context),
         Expanded(
           child: AnimatedSwitcher(
             duration: MediaQuery.disableAnimationsOf(context)
@@ -217,35 +367,6 @@ class _SearchScreenState extends State<SearchScreen> {
             child: _resultContent(),
           ),
         ),
-        if (_failed.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: scheme.errorContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.cloud_off_outlined,
-                  size: 20,
-                  color: scheme.onErrorContainer,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${_failed.length} 个源暂时不可用：${_failed.values.join('、')}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onErrorContainer,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -275,7 +396,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (agg != null && agg.books.isNotEmpty) {
       return ListView.builder(
         key: ValueKey('results-$_query'),
-        padding: const EdgeInsets.only(top: 6, bottom: 12),
+        padding: const EdgeInsets.only(top: 4, bottom: 12),
         itemCount: agg.books.length,
         itemBuilder: (context, i) => BookTile(
           key: ObjectKey(agg.books[i]),
@@ -286,7 +407,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     if (_searching) {
-      return const Center(key: ValueKey('loading'), child: Text('搜索中…'));
+      return const BookListSkeleton(key: ValueKey('loading'));
     }
     if (_raw.isEmpty && _failed.isNotEmpty) {
       return EmptyStateView(
@@ -318,52 +439,26 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.state,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 72,
-          title: TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _doSearch(),
-            decoration: InputDecoration(
-              hintText: '搜索书名、作者…',
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
-              ),
-              suffixIcon: _controller.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清空输入',
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        _controller.clear();
-                        _focusNode.requestFocus();
-                      },
-                    ),
+      builder: (context, _) {
+        final canPop = Navigator.of(context).canPop();
+        return Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _titleBar(context, canPop),
+                _searchField(context),
+                Expanded(
+                  child: _controller.text.trim().isEmpty
+                      ? _historyView(context)
+                      : _resultsView(context),
+                ),
+              ],
             ),
           ),
-          actions: [
-            IconButton.filledTonal(
-              tooltip: '搜索',
-              icon: const Icon(Icons.search),
-              onPressed: _searching || _controller.text.trim().isEmpty
-                  ? null
-                  : _doSearch,
-            ),
-          ],
-        ),
-        body: _controller.text.trim().isEmpty
-            ? _historyView(context)
-            : _resultsView(context),
-      ),
+        );
+      },
     );
   }
 }

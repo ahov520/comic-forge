@@ -49,6 +49,7 @@ void main() {
     expect(title.bottom, lessThan(metadata.top));
     expect(metadata.bottom, lessThan(chapter.top));
     expect(title.right, lessThanOrEqualTo(favorite.left));
+    expect(find.textContaining('源:'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -66,7 +67,8 @@ void main() {
     );
     expect(find.text('尾田荣一郎 · 冒险'), findsOneWidget);
     expect(find.text('更新至 第 1080 话'), findsOneWidget);
-    expect(find.text('社区源 A'), findsOneWidget);
+    expect(find.text('源: 社区源 A'), findsOneWidget);
+    expect(find.byTooltip('来源：社区源 A'), findsOneWidget);
 
     await tester.tap(find.byTooltip('加入书架'));
     await tester.pumpAndSettle();
