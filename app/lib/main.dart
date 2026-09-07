@@ -6,9 +6,9 @@ import 'ui/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
+  );
   final state = AppState();
   await state.load();
   // 启动后台检查订阅仓库更新（节流 6h，静默失败，不打断首屏）
@@ -38,13 +38,60 @@ class ComicForgeApp extends StatelessWidget {
           themeMode: state.darkMode ? ThemeMode.dark : ThemeMode.light,
           theme: _theme(scheme),
           darkTheme: _theme(scheme),
+          builder: (context, child) {
+            final theme = Theme.of(context);
+            final dark = theme.brightness == Brightness.dark;
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value:
+                  (dark
+                          ? SystemUiOverlayStyle.light
+                          : SystemUiOverlayStyle.dark)
+                      .copyWith(
+                        statusBarColor: Colors.transparent,
+                        systemNavigationBarColor:
+                            theme.colorScheme.surfaceContainerLow,
+                        systemNavigationBarIconBrightness: dark
+                            ? Brightness.light
+                            : Brightness.dark,
+                        systemNavigationBarDividerColor: Colors.transparent,
+                        systemNavigationBarContrastEnforced: false,
+                      ),
+              child: child!,
+            );
+          },
           home: HomeShell(state: state),
         );
       },
     );
   }
 
-  ThemeData _theme(ColorScheme scheme) {
+  ThemeData _theme(ColorScheme generated) {
+    const background = Color(0xFFEFF2F4);
+    const border = Color(0xFFDBDFE2);
+    // 设计稿的中性底色不随种子色染绿；强调色略加深以保证白字对比度。
+    const accent = Color(0xFF008668);
+    final scheme = generated.brightness == Brightness.light
+        ? generated.copyWith(
+            primary: accent,
+            onPrimary: Colors.white,
+            primaryContainer: Color.alphaBlend(
+              accent.withValues(alpha: 0.12),
+              background,
+            ),
+            surface: background,
+            surfaceBright: Colors.white,
+            surfaceDim: border,
+            surfaceContainerLowest: Colors.white,
+            surfaceContainerLow: Colors.white,
+            surfaceContainer: const Color(0xFFE9EDF0),
+            surfaceContainerHigh: const Color(0xFFE3E8EC),
+            surfaceContainerHighest: border,
+            onSurface: const Color(0xFF0E171E),
+            onSurfaceVariant: const Color(0xFF5A656D),
+            outline: const Color(0xFF73808A),
+            outlineVariant: border,
+          )
+        : generated;
     final base = ThemeData(colorScheme: scheme, useMaterial3: true);
     return base.copyWith(
       scaffoldBackgroundColor: scheme.surface,
@@ -67,8 +114,28 @@ class ComicForgeApp extends StatelessWidget {
         centerTitle: false,
       ),
       navigationBarTheme: NavigationBarThemeData(
+        height: 64,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         backgroundColor: scheme.surfaceContainerLow,
-        indicatorColor: scheme.primaryContainer,
+        indicatorColor: Colors.transparent,
+        labelPadding: EdgeInsets.zero,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 10.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            size: 20,
+            color: states.contains(WidgetState.selected)
+                ? scheme.primary
+                : scheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }

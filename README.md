@@ -78,7 +78,7 @@ flutter build apk --release            # 出包
 ## 设计
 
 界面按 Open Design 的 `human-approachable` 方向（Airbnb/Duolingo 系）设计：
-accent `#169876`、圆角 12–18px、浅描边卡片。设计稿 [design/six-screens.html](design/six-screens.html)。
+浅色背景 `#EFF2F4`、accent `#008668`（兼顾白字对比度）、圆角 12–18px、浅描边卡片。设计稿 [design/six-screens.html](design/six-screens.html)。
 
 ## 目录结构
 

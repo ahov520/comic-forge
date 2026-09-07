@@ -30,16 +30,38 @@ class _HomeShellState extends State<HomeShell> {
           3 => SourceScreen(state: s),
           _ => SettingsScreen(state: s),
         },
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.collections_bookmark_outlined), label: '书架'),
-            NavigationDestination(icon: Icon(Icons.explore_outlined), label: '探索'),
-            NavigationDestination(icon: Icon(Icons.search), label: '搜索'),
-            NavigationDestination(icon: Icon(Icons.source_outlined), label: '源'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), label: '设置'),
-          ],
+        bottomNavigationBar: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+          ),
+          child: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (i) => setState(() => _tab = i),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.collections_bookmark_outlined),
+                label: '书架',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.explore_outlined),
+                label: '探索',
+              ),
+              NavigationDestination(icon: Icon(Icons.search), label: '搜索'),
+              NavigationDestination(
+                icon: Icon(Icons.source_outlined),
+                label: '源',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.settings_outlined),
+                label: '设置',
+              ),
+            ],
+          ),
         ),
       ),
     );
