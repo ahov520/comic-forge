@@ -207,6 +207,10 @@ class BookTile extends StatelessWidget {
       if (book.kind.trim().isNotEmpty) book.kind.trim(),
     ].join(' · ');
     final source = sourceLabel?.trim() ?? '';
+    final chapter = book.lastChapter.trim();
+    final chapterLabel = chapter.startsWith('更新') || chapter.startsWith('最新')
+        ? chapter
+        : '更新至 $chapter';
     return Card(
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       color: scheme.brightness == Brightness.light
@@ -262,10 +266,10 @@ class BookTile extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (book.lastChapter.trim().isNotEmpty) ...[
+                    if (chapter.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '更新至 ${book.lastChapter.trim()}',
+                        chapterLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: textTheme.bodySmall?.copyWith(
