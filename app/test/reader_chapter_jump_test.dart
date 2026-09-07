@@ -17,6 +17,57 @@ List<Chapter> _chapters() => List.generate(
 );
 
 void main() {
+  testWidgets('短目录贴合章节并避让手势区，长目录仍限制高度并定位当前话', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(bottom: 24);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    for (final scale in [1.0, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      for (final count in [3, 1300]) {
+        final current = count == 3 ? 1 : 1043;
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey((scale, count)),
+            home: ReaderScreen(
+              runtime: SourceRuntime(
+                source: ComicSource.fromJson({
+                  'id': 'catalog-height-$count',
+                  'url': 'https://jump.example',
+                }),
+                fetcher: FakeFetcher((_) => '<html></html>'),
+              ),
+              book: Book(name: '漫画'),
+              chapters: _chapters().take(count).toList(),
+              initialIndex: current,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('目录'));
+        await tester.pumpAndSettle();
+
+        final sheet = tester.getRect(find.byType(ReaderCatalogSheet));
+        expect(sheet.height, lessThanOrEqualTo(720 * 0.7 + 0.1));
+        expect(find.text('第${current + 1}话').hitTestable(), findsOneWidget);
+        if (count == 3) {
+          final lastRow = tester.getRect(find.widgetWithText(ListTile, '第3话'));
+          expect(sheet.bottom - lastRow.bottom, closeTo(24, 0.1));
+          expect(sheet.height, lessThan(720 * 0.7));
+        }
+        await tester.tap(find.text('第${current + 2}话'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ReaderCatalogSheet), findsNothing);
+        expect(find.text('漫画 · 第${current + 2}话'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    }
+  });
+
   testWidgets('目录可输入序号跳到指定话，首末话也更新阅读进度并关闭面板', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = AppState();

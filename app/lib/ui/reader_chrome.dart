@@ -292,6 +292,7 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
       child: SafeArea(
         top: false,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
@@ -319,7 +320,7 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
                 ],
               ),
             ),
-            Expanded(
+            Flexible(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // 首次展开直接定位当前话，长目录和大字号都无需从头滚动。
@@ -337,6 +338,7 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
                   );
                   return ListView.builder(
                     controller: _controller,
+                    shrinkWrap: true,
                     padding: EdgeInsets.zero,
                     itemExtent: rowExtent,
                     itemCount: widget.chapters.length,
