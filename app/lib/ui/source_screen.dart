@@ -46,26 +46,84 @@ class SourceScreen extends StatefulWidget {
 
 class _SourceScreenState extends State<SourceScreen> {
   bool _subscribing = false;
-  String? _lastResult;
+  final _feedback = ValueNotifier<String?>(null);
   String? _refreshingRepo;
   bool _probing = false;
+
+  @override
+  void dispose() {
+    _feedback.dispose();
+    super.dispose();
+  }
+
+  void _showFeedback() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          '操作详情',
+                          style: Theme.of(sheetContext).textTheme.titleMedium,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭详情',
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: _feedback,
+                    builder: (context, message, _) => SelectableText(
+                      message ?? '暂无操作信息',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   /// 源健康体检：真实搜索探测全部启用源，实时显示进度。
   Future<void> _probeHealth() async {
     if (_probing) return;
     setState(() {
       _probing = true;
-      _lastResult = '体检中… 0';
+      _feedback.value = '体检中… 0';
     });
     final (ok, total) = await widget.state.probeSources(
       onProgress: (done, t) {
-        if (mounted) setState(() => _lastResult = '体检中… $done/$t');
+        if (mounted) setState(() => _feedback.value = '体检中… $done/$t');
       },
     );
     if (mounted) {
       setState(() {
         _probing = false;
-        _lastResult = '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
+        _feedback.value = '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
       });
     }
   }
@@ -78,7 +136,7 @@ class _SourceScreenState extends State<SourceScreen> {
     if (mounted) {
       setState(() {
         _refreshingRepo = null;
-        _lastResult = r.summary;
+        _feedback.value = r.summary;
       });
     }
   }
@@ -91,7 +149,7 @@ class _SourceScreenState extends State<SourceScreen> {
     if (mounted) {
       setState(() {
         _refreshingRepo = null;
-        _lastResult = results.map((r) => r.summary).join('；');
+        _feedback.value = results.map((r) => r.summary).join('；');
       });
     }
   }
@@ -104,7 +162,7 @@ class _SourceScreenState extends State<SourceScreen> {
         dialogTitle: '选择皮皮喵备份文件(.pbak)',
       );
       final path = picked?.path;
-      if (path == null) return;
+      if (path == null || !mounted) return;
       final bytes = File(path).readAsBytesSync();
       final backup = PipimiaoBackup.parse(bytes);
       // 1) 订阅仓库直接搬过来
@@ -118,14 +176,15 @@ class _SourceScreenState extends State<SourceScreen> {
       for (final s in sources) {
         await widget.state.addSourceManual(s);
       }
+      if (!mounted) return;
       setState(
-        () => _lastResult = sources.isEmpty
+        () => _feedback.value = sources.isEmpty
             ? '备份读取成功：${backup.sharedRules.length} 条分享源（加密部分待密钥），'
                   '已同步 ${backup.storeSubscriptions.length} 个订阅仓库'
             : '导入成功：${sources.length} 个源（来自 ${backup.sharedRules.length} 条分享记录）',
       );
     } catch (e) {
-      setState(() => _lastResult = '备份导入失败：$e');
+      if (mounted) setState(() => _feedback.value = '备份导入失败：$e');
     }
   }
 
@@ -144,12 +203,12 @@ class _SourceScreenState extends State<SourceScreen> {
       await state.addRepoSubscribed(url, bundle.sources);
       if (!mounted) return;
       setState(
-        () => _lastResult =
+        () => _feedback.value =
             '订阅成功：${bundle.ref.canonical} 导入 ${bundle.sources.length} 个源'
             '${bundle.track == 'B-partial' ? '（部分源暂不支持）' : ''}',
       );
     } catch (e) {
-      if (mounted) setState(() => _lastResult = '订阅失败：$e');
+      if (mounted) setState(() => _feedback.value = '订阅失败：$e');
     } finally {
       if (mounted) setState(() => _subscribing = false);
     }
@@ -174,11 +233,11 @@ class _SourceScreenState extends State<SourceScreen> {
           await widget.state.addSourceManual(s);
         }
         if (mounted) {
-          setState(() => _lastResult = '剪贴板导入成功：${sources.length} 个源');
+          setState(() => _feedback.value = '剪贴板导入成功：${sources.length} 个源');
         }
       case ClipboardImportInvalid(:final message):
         if (mounted) {
-          setState(() => _lastResult = '剪贴板导入失败：$message');
+          setState(() => _feedback.value = '剪贴板导入失败：$message');
         }
     }
   }
@@ -231,7 +290,9 @@ class _SourceScreenState extends State<SourceScreen> {
     } else if (v == 'builtin') {
       final n = await widget.state.importBuiltinSources();
       if (mounted) {
-        setState(() => _lastResult = n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
+        setState(
+          () => _feedback.value = n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列',
+        );
       }
     } else if (v == 'probeHealth') {
       _probeHealth();
@@ -241,7 +302,7 @@ class _SourceScreenState extends State<SourceScreen> {
       final n = await widget.state.disableUnhealthySources();
       if (mounted) {
         setState(
-          () => _lastResult = n > 0
+          () => _feedback.value = n > 0
               ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）'
               : '没有连续失败≥3 的源',
         );
@@ -249,7 +310,7 @@ class _SourceScreenState extends State<SourceScreen> {
     } else if (v == 'resetHealth') {
       final n = await widget.state.resetSourceHealth();
       if (mounted) {
-        setState(() => _lastResult = '已清除 $n 个源的失败记录');
+        setState(() => _feedback.value = '已清除 $n 个源的失败记录');
       }
     }
   }
@@ -283,19 +344,34 @@ class _SourceScreenState extends State<SourceScreen> {
                   onSubscribe: _subscribing ? null : _subscribeDialog,
                   onMore: _onMoreSelected,
                 ),
-                if (_lastResult != null)
+                if (_feedback.value != null)
                   Material(
                     color: scheme.surfaceContainerHighest,
-                    child: ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.info_outline),
-                      title: Text(
-                        _lastResult!,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        onPressed: () => setState(() => _lastResult = null),
+                    child: Tooltip(
+                      message: '查看操作详情',
+                      child: ListTile(
+                        dense: true,
+                        minVerticalPadding: 4,
+                        leading: const Icon(Icons.info_outline, size: 20),
+                        title: Text(
+                          _feedback.value!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, height: 1.35),
+                        ),
+                        onTap: _showFeedback,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.chevron_right, size: 18),
+                            IconButton(
+                              tooltip: '关闭提示',
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () =>
+                                  setState(() => _feedback.value = null),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
