@@ -531,8 +531,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
               Positioned(
                 top: pad.top,
-                left: 12,
-                right: 12,
+                left: pad.left + 12,
+                right: pad.right + 12,
                 child: ReaderTopChrome(
                   visible: _chromeVisible,
                   title: _chromeTitle,
