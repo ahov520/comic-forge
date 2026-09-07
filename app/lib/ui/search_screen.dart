@@ -346,34 +346,61 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _historyView(BuildContext context) {
     final history = widget.state.searchHistory;
     if (history.isEmpty) return _searchPrompt;
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       children: [
         Row(
           children: [
             Expanded(
-              child: Text(
-                '最近10词',
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  '最近10词',
+                  style: textTheme.labelMedium?.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
-            TextButton.icon(
+            TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                textStyle: textTheme.labelLarge?.copyWith(fontSize: 13),
+              ),
               onPressed: widget.state.clearSearchHistory,
-              icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-              label: const Text('清空'),
+              child: const Text('清空'),
             ),
           ],
         ),
-        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
-          runSpacing: 8,
+          // 胶囊之间的垂直留白由 48px 点击区提供，不再叠加行间距。
           children: [
             for (final query in history)
               Tooltip(
                 message: query,
                 child: ActionChip(
-                  avatar: const Icon(Icons.history, size: 18),
+                  shape: const StadiumBorder(),
+                  visualDensity: VisualDensity.standard,
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                  backgroundColor: scheme.brightness == Brightness.light
+                      ? scheme.surfaceContainerLowest
+                      : scheme.surfaceContainerLow,
+                  side: BorderSide(
+                    color: scheme.outlineVariant.withValues(alpha: 0.6),
+                  ),
+                  labelStyle: textTheme.labelLarge?.copyWith(
+                    fontSize: 13,
+                    height: 1,
+                    fontWeight: FontWeight.w400,
+                    color: scheme.onSurfaceVariant,
+                  ),
                   label: Text(
                     query,
                     maxLines: 1,

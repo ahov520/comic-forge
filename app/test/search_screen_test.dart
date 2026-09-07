@@ -394,21 +394,50 @@ void main() {
     expect(field.top, greaterThan(title.bottom));
   });
 
-  testWidgets('窄屏长历史词可回填完整内容且不溢出', (tester) async {
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    const query = '很长的漫画名称包含特别篇和番外篇以及完整的搜索关键词';
-    await state.recordSearch(query);
-    await _showSearch(tester, state);
-    await tester.tap(find.byType(ActionChip));
-    await tester.pumpAndSettle();
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('窄屏键盘展开时可滚动到长历史词并完整回填：字号 $scale', (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 180);
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const query = '很长的漫画名称包含特别篇和番外篇以及完整的搜索关键词';
+      await state.recordSearch(query);
+      for (var i = 0; i < 9; i++) {
+        await state.recordSearch('其他漫画的完整名称 $i');
+      }
+      await _showSearch(tester, state);
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
 
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).controller!.text,
-      query,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      final chip = find.widgetWithText(ActionChip, query);
+      await tester.scrollUntilVisible(
+        chip,
+        100,
+        scrollable: find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final bounds = tester.getRect(chip);
+      expect(bounds.left, greaterThanOrEqualTo(20));
+      expect(bounds.right, lessThanOrEqualTo(300));
+      expect(bounds.height, greaterThanOrEqualTo(48));
+      expect(chip.hitTestable(), findsOneWidget);
+      expect(find.byTooltip(query), findsOneWidget);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+
+      final input = tester.widget<TextField>(find.byType(TextField));
+      expect(input.controller!.text, query);
+      expect(input.focusNode!.hasFocus, isTrue);
+      expect(state.searchHistory.last, query);
+      expect(fetcher.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
