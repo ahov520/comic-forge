@@ -48,6 +48,13 @@ jobs:
         working-directory: app
         run: flutter build apk --release
 
+      - name: Verify release APK network access
+        working-directory: app
+        run: |
+          python3 tool/check_apk_network.py \
+            --apkanalyzer "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" \
+            build/app/outputs/flutter-apk/app-release.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

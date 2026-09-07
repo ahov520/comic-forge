@@ -111,7 +111,10 @@ void main() {
       final n = await st.importBuiltinSources();
       expect(n, greaterThanOrEqualTo(1));
       final fixed = st.sources.firstWhere((s) => s.id == 'https://m.ac.qq.com');
+      expect(fixed.url, 'https://m.ac.qq.com');
       expect(fixed.rules.searchUrl, isNotEmpty, reason: '内置快照应补回 searchUrl');
+      expect(fixed.rules.searchList, isNotEmpty, reason: '只有源 ID 的旧数据也需补齐列表规则');
+      expect(fixed.rules.searchName, isNotEmpty);
       expect(fixed.failCount, failCountBefore, reason: '修复不应抹掉健康记录');
     });
 

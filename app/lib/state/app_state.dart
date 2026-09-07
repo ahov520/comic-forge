@@ -214,6 +214,11 @@ class AppState extends ChangeNotifier {
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
+    } else if (sources.any((s) =>
+        s.rules.searchUrl.isEmpty && s.rules.searchList.isNotEmpty)) {
+      // 旧版曾漏映射 ruleSearchUrl；非空源库也需修复，否则搜索仍为 0 源。
+      // 升级只修复已有内置源，不重新添加用户删掉的源。
+      await _importBuiltinSources(addMissing: false);
     }
   }
 
@@ -670,9 +675,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
-  /// 按 id 去重：新源追加；已有源若缺 searchUrl/headers 则补回规则（保留启用与权重）。
+  /// 按 id 去重：新源追加；修复缺失地址/请求头的旧源，保留已有字段和用户编辑。
   /// 返回新增 + 修复数量。
-  Future<int> importBuiltinSources() async {
+  Future<int> importBuiltinSources() => _importBuiltinSources(addMissing: true);
+
+  Future<int> _importBuiltinSources({required bool addMissing}) async {
     final txt = await rootBundle.loadString('assets/store.json');
     final j = jsonDecode(txt) as Map<String, dynamic>;
     final list = (j['sources'] as List? ?? [])
@@ -683,24 +690,32 @@ class AppState extends ChangeNotifier {
     for (final s in list) {
       final idx = sources.indexWhere((e) => e.id == s.id);
       if (idx < 0) {
-        sources.add(s);
-        added++;
+        if (addMissing) {
+          sources.add(s);
+          added++;
+        }
         continue;
       }
       // 只增不删会让旧版映射丢掉的 searchUrl 永久空着；恢复时补回规则/请求头，
       // 保留启用/权重/健康记录（避免抹掉已知失效信息）。
       final existing = sources[idx];
+      if (existing.url.isNotEmpty && existing.url != s.url) continue;
+      final needsUrl = existing.url.isEmpty && s.url.isNotEmpty;
       final needsSearchUrl =
           existing.rules.searchUrl.isEmpty && s.rules.searchUrl.isNotEmpty;
       final needsHeaders = existing.headers.isEmpty && s.headers.isNotEmpty;
-      if (needsSearchUrl || needsHeaders) {
-        s.enabled = existing.enabled;
-        s.weight = existing.weight;
-        s.lastError = existing.lastError;
-        s.lastFailedAt = existing.lastFailedAt;
-        s.failCount = existing.failCount;
-        s.lastOkAt = existing.lastOkAt;
-        sources[idx] = s;
+      if (needsUrl || needsSearchUrl || needsHeaders) {
+        // 替换对象以刷新运行时缓存，但不覆盖已有列表规则、名称等用户编辑。
+        sources[idx] = ComicSource.fromJson({
+          ...existing.toJson(),
+          if (needsUrl) 'url': s.url,
+          if (needsUrl || needsSearchUrl)
+            'rules': {
+              ...s.rules.toJson(),
+              ...existing.rules.toJson(),
+            },
+          if (needsHeaders) 'headers': s.headers,
+        });
         repaired++;
       }
     }
