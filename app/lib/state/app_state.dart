@@ -14,6 +14,7 @@ import 'shelf_updates.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
 import 'shelf_groups.dart';
+import 'search_filters.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -121,6 +122,7 @@ class AppState extends ChangeNotifier {
   static const _kAdBlock = 'cf.adBlock';
   static const _kWebDav = 'cf.webdav';
   static const _kSearchHistory = 'cf.searchHistory';
+  static const _kSearchFilters = 'cf.searchFilters';
   static const _searchHistoryLimit = 10;
   static const _detailCacheCap = 100;
 
@@ -136,6 +138,8 @@ class AppState extends ChangeNotifier {
 
   bool get checkingShelfUpdates => _shelfRefresh != null;
   final List<String> _searchHistory = [];
+  SearchFilters _searchFilters = SearchFilters();
+  SearchFilters get searchFilters => _searchFilters;
 
   /// 最近提交的搜索词（新到旧、去重、最多 10 条）。
   List<String> get searchHistory => List.unmodifiable(_searchHistory);
@@ -166,6 +170,12 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
     _restoreSearchHistory(sp.get(_kSearchHistory));
+    final filterData = sp.get(_kSearchFilters);
+    try {
+      _searchFilters = SearchFilters.fromJson(filterData is String ? jsonDecode(filterData) : null);
+    } on FormatException {
+      _searchFilters = SearchFilters();
+    }
     sources
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kSources) ?? '[]') as List)
@@ -294,6 +304,14 @@ class AppState extends ChangeNotifier {
   Future<void> clearSearchHistory() async {
     _searchHistory.clear();
     await _persistSearchHistory();
+  }
+
+  Future<void> setSearchFilters(SearchFilters filters) async {
+    if (_searchFilters == filters) return;
+    _searchFilters = filters;
+    notifyListeners();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kSearchFilters, jsonEncode(_searchFilters.toJson()));
   }
 
   Future<void> _persistSearchHistory() async {

@@ -7,6 +7,8 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/search_aggregator.dart';
+import '../state/search_filters.dart';
+import 'search_filter_sheet.dart';
 import 'search_failure_panel.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
@@ -47,10 +49,13 @@ class _SearchScreenState extends State<SearchScreen> {
   int _sourceCount = 0;
   Map<String, ComicSource>? _searchedSources;
   bool _sourcesChanged = false;
+  bool _filtersChanged = false;
+  late SearchFilters _filters;
 
   @override
   void initState() {
     super.initState();
+    _filters = widget.state.searchFilters;
     _controller.addListener(_onQueryChanged);
     widget.state.addListener(_onStateChanged);
   }
@@ -61,7 +66,10 @@ class _SearchScreenState extends State<SearchScreen> {
     if (oldWidget.state != widget.state) {
       oldWidget.state.removeListener(_onStateChanged);
       widget.state.addListener(_onStateChanged);
-      if (_searchedSources != null) _invalidateSearch(_searchableSources());
+      _filters = widget.state.searchFilters;
+      if (_searchedSources != null) {
+        _invalidateSearch(_searchableSources(ignoreHealth: true));
+      }
     }
   }
 
@@ -74,21 +82,28 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
-  Map<String, ComicSource> _searchableSources() => {
+  Map<String, ComicSource> _searchableSources({bool ignoreHealth = false}) => {
     for (final source in widget.state.sources)
-      if (source.enabled && source.rules.searchUrl.isNotEmpty)
+      if (widget.state.searchFilters.accepts(
+        source,
+        ignoreHealth: ignoreHealth,
+      ))
         source.id: source,
   };
 
   void _onStateChanged() {
     setState(() {
+      final filtersChanged = _filters != widget.state.searchFilters;
+      _filters = widget.state.searchFilters;
       final searched = _searchedSources;
       if (searched == null) return;
-      final current = _searchableSources();
-      // 健康、收藏等通知不改变源定义，不打断搜索或清空结果。
-      if (current.length != searched.length ||
+      // 健康回报仅影响下一次搜索，避免本次失败达到阈值时清空成功结果。
+      final current = _searchableSources(ignoreHealth: true);
+      if (filtersChanged ||
+          current.length != searched.length ||
           current.entries.any((e) => !identical(e.value, searched[e.key]))) {
         _invalidateSearch(current);
+        _filtersChanged = filtersChanged;
       }
     });
   }
@@ -98,7 +113,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _searching = false;
     _sourcesChanged = true;
     _searchedSources = sources;
-    _sourceCount = sources.length;
+    _sourceCount = _searchableSources().length;
     _raw.clear();
     _agg = null;
     _failed.value = {};
@@ -114,6 +129,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _sourceCount = 0;
         _searchedSources = null;
         _sourcesChanged = false;
+        _filtersChanged = false;
         _raw.clear();
         _agg = null;
         _failed.value = {};
@@ -127,6 +143,23 @@ class _SearchScreenState extends State<SearchScreen> {
       selection: TextSelection.collapsed(offset: query.length),
     );
     _focusNode.requestFocus();
+  }
+
+  Future<void> _showFilters() async {
+    _focusNode.unfocus();
+    final filters = await showModalBottomSheet<SearchFilters>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => SearchFilterSheet(state: widget.state),
+    );
+    if (!mounted || filters == null || filters == widget.state.searchFilters) {
+      return;
+    }
+    final repeat = _query.isNotEmpty;
+    await widget.state.setSearchFilters(filters);
+    if (mounted && repeat) await _doSearch();
   }
 
   /// 源 id → 显示名（结果标签用）。
@@ -152,8 +185,9 @@ class _SearchScreenState extends State<SearchScreen> {
       _searching = true;
       _query = q;
       _sourceCount = enabled.length;
-      _searchedSources = sources;
+      _searchedSources = _searchableSources(ignoreHealth: true);
       _sourcesChanged = false;
+      _filtersChanged = false;
       _raw.clear();
       _agg = null;
       _failed.value = {};
@@ -264,6 +298,14 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: ScreenTitle('搜索'),
+            ),
+          ),
+          IconButton(
+            tooltip: '搜索筛选',
+            onPressed: _showFilters,
+            icon: Badge(
+              isLabelVisible: widget.state.searchFilters.isActive,
+              child: const Icon(Icons.filter_list),
             ),
           ),
         ],
@@ -506,6 +548,16 @@ class _SearchScreenState extends State<SearchScreen> {
       return _searchPrompt;
     }
     if (_sourceCount == 0) {
+      if (widget.state.searchFilters.isActive) {
+        return EmptyStateView(
+          key: const ValueKey('filtered-no-sources'),
+          icon: Icons.filter_list_off_outlined,
+          title: '当前筛选下没有可搜索的源',
+          message: '调整健康筛选或指定源，也可重置为全部源。',
+          actionLabel: '调整筛选',
+          onAction: _showFilters,
+        );
+      }
       return EmptyStateView(
         key: const ValueKey('no-sources'),
         icon: Icons.travel_explore,
@@ -521,7 +573,7 @@ class _SearchScreenState extends State<SearchScreen> {
       return EmptyStateView(
         key: const ValueKey('sources-changed'),
         icon: Icons.manage_search_outlined,
-        title: '漫画源已更新',
+        title: _filtersChanged ? '搜索筛选已更新' : '漫画源已更新',
         message: '关键词已保留，重新搜索获取最新结果。',
         actionLabel: '重新搜索',
         onAction: _doSearch,
