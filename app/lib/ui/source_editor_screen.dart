@@ -64,7 +64,12 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
     _searchAuthor = TextEditingController(text: s?.rules.searchAuthor ?? '');
     _searchCover = TextEditingController(text: s?.rules.searchCoverUrl ?? '');
     _searchBookUrl = TextEditingController(text: s?.rules.searchBookUrl ?? '');
-    _findUrl = TextEditingController(text: s?.rules.findUrl ?? '');
+    _findUrl = TextEditingController(
+        text: s == null
+            ? ''
+            : s.rules.findUrl.isNotEmpty
+                ? s.rules.findUrl
+                : s.rules.exploreUrl);
     _chapterList = TextEditingController(text: s?.rules.chapterList ?? '');
     _chapterName = TextEditingController(text: s?.rules.chapterName ?? '');
     _chapterUrl = TextEditingController(text: s?.rules.chapterUrl ?? '');
@@ -85,7 +90,7 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
   }
 
   SourceBuildResult _build() => SourceForm.build(
-        existingId: widget.source?.id,
+        existing: widget.source,
         name: _name.text,
         url: _url.text,
         group: _group.text,

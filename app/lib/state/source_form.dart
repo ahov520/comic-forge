@@ -14,7 +14,9 @@ class SourceForm {
     if (host.isEmpty || !host.contains('.')) return false;
     if (host == 'localhost' || host.endsWith('.localhost')) return false;
     if (host.endsWith('.local') || host.endsWith('.internal')) return false;
-    final ip = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(host);
+    final ip = RegExp(
+      r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$',
+    ).firstMatch(host);
     if (ip != null) {
       final o = [1, 2, 3, 4].map((i) => int.parse(ip.group(i)!)).toList();
       if (o.any((x) => x > 255)) return false;
@@ -29,8 +31,9 @@ class SourceForm {
     return true;
   }
 
-  /// 表单数据。
+  /// 覆盖可编辑字段；[existing] 未展示的规则与设置保持不变。
   static SourceBuildResult build({
+    ComicSource? existing,
     String? existingId,
     required String name,
     required String url,
@@ -72,14 +75,16 @@ class SourceForm {
       if (k.isNotEmpty && v.isNotEmpty) h[k] = v;
     }
 
-    final id = existingId?.isNotEmpty == true ? existingId! : u;
-    final s = ComicSource(
-      id: id,
-      name: n,
-      group: group.trim(),
-      url: u,
-      headers: h,
-    );
+    // 编辑时保留表单未展示的规则与源设置；试跑/取消不能改动已保存对象。
+    final s = existing == null
+        ? ComicSource(id: existingId?.isNotEmpty == true ? existingId! : u)
+        : ComicSource.fromJson(existing.toJson());
+    s
+      ..name = n
+      ..group = group.trim()
+      ..url = u
+      ..headers = h;
+    // 发现入口统一使用 findUrl，清空时不回退旧 exploreUrl 别名。
     s.rules
       ..searchUrl = searchUrl.trim()
       ..searchList = searchList.trim()
@@ -88,11 +93,14 @@ class SourceForm {
       ..searchCoverUrl = searchCoverUrl.trim()
       ..searchBookUrl = searchBookUrl.trim()
       ..findUrl = findUrl.trim()
+      ..exploreUrl = ''
       ..chapterList = chapterList.trim()
       ..chapterName = chapterName.trim()
       ..chapterUrl = chapterUrl.trim()
       ..contentUrl = contentUrl.trim()
       ..contentUrlNext = contentUrlNext.trim();
+    // 编辑结果按当前字段分享，不能复用修改前的原始快照。
+    s.raw = {};
     return SourceBuilt(s);
   }
 }
