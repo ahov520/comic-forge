@@ -82,7 +82,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// 翻一“屏”：翻页模式走 PageView，滚动模式直接跨话。
   void _pageTurn(int delta) {
     if (_isPaged) {
-      final page = (_pageController.hasClients ? _pageController.page ?? 0 : 0) + delta;
+      final page =
+          (_pageController.hasClients ? _pageController.page ?? 0 : 0) + delta;
       if (page < 0) return;
       _pageController.animateToPage(
         page.round(),
@@ -97,16 +98,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _loadChapter(int index, {bool save = false}) {
     setState(() {
       _index = index;
-      _images = SourceService.instance
-          .imagesFor(widget.runtime, widget.chapters[index].url);
+      _images = SourceService.instance.imagesFor(
+        widget.runtime,
+        widget.chapters[index].url,
+      );
     });
     _nextChapterWarmed = false;
     _offsetRestored = false;
     _offsetSaveTimer?.cancel();
     // 预加载下一话 URL 列表（失败静默）
     if (index + 1 < widget.chapters.length) {
-      SourceService.instance
-          .prefetchImages(widget.runtime, widget.chapters[index + 1].url);
+      SourceService.instance.prefetchImages(
+        widget.runtime,
+        widget.chapters[index + 1].url,
+      );
     }
     if (save && widget.appState != null) {
       widget.appState!.saveProgress(
@@ -127,9 +132,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (next >= widget.chapters.length) return;
     _nextChapterWarmed = true;
     SourceService.instance.prefetchImages(
-        widget.runtime, widget.chapters[next].url);
+      widget.runtime,
+      widget.chapters[next].url,
+    );
     SourceService.instance.precacheLeadingImages(
-        context, widget.runtime, widget.chapters[next].url);
+      context,
+      widget.runtime,
+      widget.chapters[next].url,
+    );
   }
 
   /// 滚动模式接近底部时同样触发（由 ScrollController 调用）。
@@ -143,9 +153,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (next >= widget.chapters.length) return;
       _nextChapterWarmed = true;
       SourceService.instance.prefetchImages(
-          widget.runtime, widget.chapters[next].url);
+        widget.runtime,
+        widget.chapters[next].url,
+      );
       SourceService.instance.precacheLeadingImages(
-          context, widget.runtime, widget.chapters[next].url);
+        context,
+        widget.runtime,
+        widget.chapters[next].url,
+      );
     }
   }
 
@@ -157,8 +172,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _offsetSaveTimer?.cancel();
     _offsetSaveTimer = Timer(const Duration(milliseconds: 600), () {
       if (!c.hasClients || widget.appState == null) return;
-      widget.appState!
-          .saveScrollOffset(_chapter.url, c.offset);
+      widget.appState!.saveScrollOffset(_chapter.url, c.offset);
     });
   }
 
@@ -195,12 +209,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
           },
           fadeInDuration: const Duration(milliseconds: 120),
           placeholder: (_, _) => SizedBox(
-              height: fit == BoxFit.contain ? double.infinity : 240,
-              child: const Center(child: SkeletonBox(height: 220))),
+            height: fit == BoxFit.contain ? double.infinity : 240,
+            child: const Center(child: SkeletonBox(height: 220)),
+          ),
           errorWidget: (_, _, _) => const SizedBox(
             height: 200,
             child: Center(
-                child: Text('图片加载失败', style: TextStyle(color: Colors.white38))),
+              child: Text('图片加载失败', style: TextStyle(color: Colors.white38)),
+            ),
           ),
         );
 
@@ -219,10 +235,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
               if (saved != null && saved > 0) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scrollController.hasClients) {
-                    _scrollController.jumpTo(resolveRestoredScroll(
-                      saved: saved,
-                      maxExtent: _scrollController.position.maxScrollExtent,
-                    ));
+                    _scrollController.jumpTo(
+                      resolveRestoredScroll(
+                        saved: saved,
+                        maxExtent: _scrollController.position.maxScrollExtent,
+                      ),
+                    );
                   }
                 });
               }
@@ -236,9 +254,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // 翻页模式：点击左 1/3 = 上一页，中 = 工具栏，右 1/3 = 下一页；
     // 末页右翻进入下一话（已到末话则提示）。
     Widget pageContent(int i) => InteractiveViewer(
-          maxScale: 4,
-          child: Center(child: img(urls[i], fit: BoxFit.contain)),
-        );
+      maxScale: 4,
+      child: Center(child: img(urls[i], fit: BoxFit.contain)),
+    );
     return PageView.builder(
       controller: _pageController,
       itemCount: urls.length,
@@ -248,68 +266,83 @@ class _ReaderScreenState extends State<ReaderScreen> {
       },
       itemBuilder: (context, i) {
         final isLast = i == urls.length - 1;
-        return Stack(children: [
-          pageContent(i),
-          Positioned.fill(
-            child: Row(children: [
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => i > 0
-                      ? _pageController.previousPage(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut)
-                      : _go(-1),
-                ),
+        return Stack(
+          children: [
+            pageContent(i),
+            Positioned.fill(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => i > 0
+                          ? _pageController.previousPage(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                            )
+                          : _go(-1),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
+                          setState(() => _chromeVisible = !_chromeVisible),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (!isLast) {
+                          _pageController.nextPage(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                          );
+                        } else if (_index + 1 < widget.chapters.length) {
+                          _go(1); // 跨章：翻到末页继续右翻 = 下一话
+                        } else if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已是最后一话')),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _chromeVisible = !_chromeVisible),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    if (!isLast) {
-                      _pageController.nextPage(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut);
-                    } else if (_index + 1 < widget.chapters.length) {
-                      _go(1); // 跨章：翻到末页继续右翻 = 下一话
-                    } else if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已是最后一话')));
-                    }
-                  },
-                ),
-              ),
-            ]),
-          ),
-        ]);
+            ),
+          ],
+        );
       },
     );
   }
+
+  String get _chromeTitle =>
+      '${widget.runtime.source.name} · ${widget.book.name} · ${_chapter.title}';
 
   @override
   Widget build(BuildContext context) {
     final brightness = widget.appState?.readerBrightness ?? 1.0;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0C0C0E),
       body: FutureBuilder<List<String>>(
         future: _images,
         builder: (context, snap) {
+          final Widget page;
+          var showBottom = false;
           if (snap.hasError) {
-            return Center(
+            page = Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('加载失败：${snap.error}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white70)),
+                    Text(
+                      '加载失败：${snap.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white70),
+                    ),
                     const SizedBox(height: 12),
                     FilledButton.tonal(
                       onPressed: () => _loadChapter(_index),
@@ -319,27 +352,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
               ),
             );
+          } else if (!snap.hasData) {
+            page = const Center(
+              child: SkeletonBox(width: 160, height: 220, radius: 12),
+            );
+          } else {
+            final urls = snap.data!;
+            if (urls.isEmpty) {
+              page = const Center(
+                child: Text(
+                  '本章节解析不到图片（源规则可能不完整）',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              );
+            } else {
+              showBottom = true;
+              page = _buildReaderBody(context, urls);
+            }
           }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final urls = snap.data!;
-          if (urls.isEmpty) {
-            return const Center(
-                child: Text('本章节解析不到图片（源规则可能不完整）',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70)));
-          }
+          final pad = MediaQuery.of(context).padding;
           return Stack(
             children: [
-              _buildReaderBody(context, urls),
-              // 工具栏渐变遮罩：白字在浅色漫画上也可读（点击穿透到翻页点区）
+              page,
               ReaderChromeOverlay(
                 visible: _chromeVisible,
-                topInset: MediaQuery.of(context).padding.top,
-                bottomInset: MediaQuery.of(context).padding.bottom,
+                topInset: pad.top,
+                bottomInset: pad.bottom,
               ),
-              // 亮度遮罩（夜间调暗，不影响截图系统亮度）
               if (brightness < 1.0)
                 IgnorePointer(
                   child: ColoredBox(
@@ -348,70 +388,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ),
               Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                left: 8,
-                right: 8,
-                child: AnimatedOpacity(
-                  opacity: _chromeVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Row(
-                    children: [
-                      const CloseButton(color: Colors.white),
-                      Expanded(
-                        child: Text(
-                          '${widget.runtime.source.name} · ${widget.book.name} · ${_index + 1}/${widget.chapters.length} ${_chapter.title}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
+                top: pad.top + 8,
+                left: 12,
+                right: 12,
+                child: ReaderTopChrome(
+                  visible: _chromeVisible,
+                  title: _chromeTitle,
+                  onMore: widget.appState == null
+                      ? null
+                      : () => _showReaderSettingsSheet(context),
                 ),
               ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: MediaQuery.of(context).padding.bottom + 16,
-                child: AnimatedOpacity(
-                  opacity: _chromeVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        color: Colors.white,
-                        tooltip: '上一话',
-                        onPressed: _index > 0 ? () => _go(-1) : null,
-                        icon: const Icon(Icons.skip_previous_outlined),
-                      ),
-                      IconButton(
-                        color: Colors.white70,
-                        tooltip: '亮度',
-                        icon: Icon(brightness < 1.0
-                            ? Icons.brightness_4_outlined
-                            : Icons.brightness_6_outlined),
-                        onPressed: () => _showReaderSettingsSheet(context),
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: Text(
-                            '${_index + 1} / ${widget.chapters.length}',
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        color: Colors.white,
-                        tooltip: '下一话',
-                        onPressed: _index + 1 < widget.chapters.length
-                            ? () => _go(1)
-                            : null,
-                        icon: const Icon(Icons.skip_next_outlined),
-                      ),
-                    ],
+              if (showBottom)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: pad.bottom + 12,
+                  child: ReaderBottomChrome(
+                    visible: _chromeVisible,
+                    progressLabel: '${_index + 1}/${widget.chapters.length}',
+                    canPrev: _index > 0,
+                    canNext: _index + 1 < widget.chapters.length,
+                    onPrev: () => _go(-1),
+                    onNext: () => _go(1),
+                    onBrightness: widget.appState == null
+                        ? null
+                        : () => _showReaderSettingsSheet(context),
                   ),
                 ),
-              ),
             ],
           );
         },
@@ -434,31 +438,45 @@ class _ReaderScreenState extends State<ReaderScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                const Icon(Icons.brightness_low, color: Colors.white54, size: 18),
-                Expanded(
-                  child: Slider(
-                    value: appState.readerBrightness,
-                    min: 0.15,
-                    max: 1.0,
-                    onChanged: appState.setReaderBrightness,
+              Row(
+                children: [
+                  const Icon(
+                    Icons.brightness_low,
+                    color: Colors.white54,
+                    size: 18,
                   ),
-                ),
-                const Icon(Icons.brightness_high, color: Colors.white70, size: 20),
-              ]),
-              Text('亮度 ${(appState.readerBrightness * 100).round()}%',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  Expanded(
+                    child: Slider(
+                      value: appState.readerBrightness,
+                      min: 0.15,
+                      max: 1.0,
+                      onChanged: appState.setReaderBrightness,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.brightness_high,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
+                ],
+              ),
+              Text(
+                '亮度 ${(appState.readerBrightness * 100).round()}%',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
               const Divider(color: Colors.white24),
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(
-                      value: 'scroll',
-                      icon: Icon(Icons.swap_vert, size: 18),
-                      label: Text('滚动')),
+                    value: 'scroll',
+                    icon: Icon(Icons.swap_vert, size: 18),
+                    label: Text('滚动'),
+                  ),
                   ButtonSegment(
-                      value: 'paged',
-                      icon: Icon(Icons.swap_horiz, size: 18),
-                      label: Text('翻页')),
+                    value: 'paged',
+                    icon: Icon(Icons.swap_horiz, size: 18),
+                    label: Text('翻页'),
+                  ),
                 ],
                 selected: {appState.readerMode},
                 onSelectionChanged: (s) => appState.setReaderMode(s.first),
@@ -468,10 +486,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 activeThumbColor: Colors.white70,
-                title: const Text('音量键翻页',
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
-                subtitle: const Text('音量+ 上一页 · 音量- 下一页（Android）',
-                    style: TextStyle(color: Colors.white38, fontSize: 11)),
+                title: const Text(
+                  '音量键翻页',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                subtitle: const Text(
+                  '音量+ 上一页 · 音量- 下一页（Android）',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
                 value: appState.readerVolumeKeys,
                 onChanged: appState.setReaderVolumeKeys,
               ),
