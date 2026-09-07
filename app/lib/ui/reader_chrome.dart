@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// 阅读器工具栏渐变遮罩：顶/底黑→透明渐变，保证白字工具栏在浅色漫画上可读。
 /// [visible] 为 false 时整体收起（不渲染、不拦截）。
@@ -263,6 +264,17 @@ class ReaderCatalogSheet extends StatefulWidget {
 class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
   ScrollController? _controller;
 
+  Future<void> _jumpToChapter() async {
+    final index = await showDialog<int>(
+      context: context,
+      builder: (context) => _ReaderChapterJumpDialog(
+        currentIndex: widget.currentIndex,
+        chapterCount: widget.chapters.length,
+      ),
+    );
+    if (mounted && index != null) widget.onPick(index);
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -282,22 +294,29 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    '目录 · ${widget.chapters.length} 话',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
+              padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        '目录 · ${widget.chapters.length} 话',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  TextButton(
+                    onPressed: widget.chapters.isEmpty ? null : _jumpToChapter,
+                    child: const Text('跳转'),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -353,6 +372,84 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ReaderChapterJumpDialog extends StatefulWidget {
+  const _ReaderChapterJumpDialog({
+    required this.currentIndex,
+    required this.chapterCount,
+  });
+
+  final int currentIndex;
+  final int chapterCount;
+
+  @override
+  State<_ReaderChapterJumpDialog> createState() =>
+      _ReaderChapterJumpDialogState();
+}
+
+class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = '${widget.currentIndex + 1}';
+    _controller = TextEditingController(text: initial)
+      ..selection = TextSelection(baseOffset: 0, extentOffset: initial.length);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState!.validate()) {
+      Navigator.of(context).pop(int.parse(_controller.text) - 1);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF161619),
+      scrollable: true,
+      title: const Text('跳转章节'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.go,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            labelText: '章节序号',
+            helperText: '共 ${widget.chapterCount} 话',
+            errorMaxLines: 2,
+          ),
+          validator: (value) {
+            final number = int.tryParse(value ?? '');
+            if (number == null || number < 1 || number > widget.chapterCount) {
+              return '请输入 1–${widget.chapterCount} 之间的序号';
+            }
+            return null;
+          },
+          onFieldSubmitted: (_) => _submit(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('跳转')),
+      ],
     );
   }
 }
