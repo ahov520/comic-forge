@@ -41,6 +41,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   int _detailGeneration = 0;
   bool _fromCache = false;
   bool _carryDone = false;
+  bool _chaptersReversed = false;
   int? _switchCount; // 换源可命中数（后台预扫完成后显示角标）
   final _switchTargets = ValueNotifier<Future<List<(ComicSource, Book)>>?>(
     null,
@@ -427,6 +428,17 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                               visualDensity: VisualDensity.compact,
                               backgroundColor: scheme.surfaceContainerHighest,
                             ),
+                          if (chapters.length > 1)
+                            Tooltip(
+                              message: _chaptersReversed ? '切换为正序' : '切换为倒序',
+                              child: TextButton.icon(
+                                onPressed: () => setState(
+                                  () => _chaptersReversed = !_chaptersReversed,
+                                ),
+                                icon: const Icon(Icons.swap_vert, size: 18),
+                                label: Text(_chaptersReversed ? '倒序' : '正序'),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -450,11 +462,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     SliverList.builder(
                       itemCount: chapters.length,
                       itemBuilder: (context, i) {
+                        final index = _chaptersReversed
+                            ? chapters.length - 1 - i
+                            : i;
                         return ChapterTile(
-                          index: i,
-                          title: chapters[i].title,
-                          isCurrent: i == savedIdx,
-                          onTap: canRead ? () => openAt(i) : null,
+                          index: index,
+                          title: chapters[index].title,
+                          isCurrent: index == savedIdx,
+                          onTap: canRead ? () => openAt(index) : null,
                         );
                       },
                     ),
