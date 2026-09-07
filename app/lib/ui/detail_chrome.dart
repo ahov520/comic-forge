@@ -136,14 +136,9 @@ class DetailHero extends StatelessWidget {
             ),
             if (book.introduce.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(
-                book.introduce,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
+              _DetailIntroduction(
+                key: ValueKey(book.bookUrl),
+                text: book.introduce,
               ),
             ],
             if (onRead != null && readLabel != null) ...[
@@ -167,6 +162,77 @@ class DetailHero extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 简介保持三行预览；只有实际溢出时才提供展开入口。
+class _DetailIntroduction extends StatefulWidget {
+  const _DetailIntroduction({super.key, required this.text});
+
+  final String text;
+
+  @override
+  State<_DetailIntroduction> createState() => _DetailIntroductionState();
+}
+
+class _DetailIntroductionState extends State<_DetailIntroduction> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = DefaultTextStyle.of(context).style.merge(
+      theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        height: 1.4,
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final preview = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          maxLines: 3,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = preview.didExceedMaxLines;
+        preview.dispose();
+        return AnimatedSize(
+          alignment: Alignment.topCenter,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.text,
+                maxLines: _expanded ? null : 3,
+                overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+                style: style,
+              ),
+              if (overflows)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Semantics(
+                    expanded: _expanded,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _expanded = !_expanded),
+                      icon: Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                      ),
+                      iconAlignment: IconAlignment.end,
+                      label: Text(_expanded ? '收起简介' : '展开简介'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

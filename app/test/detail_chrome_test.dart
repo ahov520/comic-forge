@@ -59,6 +59,7 @@ void main() {
     expect(find.text('冒险'), findsOneWidget);
     expect(find.text('热血'), findsOneWidget);
     expect(find.text('伟大航道上的冒险。'), findsOneWidget);
+    expect(find.text('展开简介'), findsNothing);
     expect(find.text('开始阅读'), findsOneWidget);
     expect(find.byType(BookCover), findsOneWidget);
     expect(find.byTooltip('换源：社区源 A'), findsOneWidget);
@@ -67,6 +68,79 @@ void main() {
     expect(switched, isTrue);
     await tester.tap(find.text('开始阅读'));
     expect(read, isTrue);
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('窄屏大字号长简介可展开和收起，封面稳定且阅读按钮可操作：${brightness.name}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final introduction = List.filled(6, '少年和伙伴们踏上新的冒险，寻找传说中的岛屿。').join();
+      var read = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: DetailHero(
+                book: _book(introduce: introduction),
+                readLabel: '开始阅读',
+                onRead: () => read = true,
+              ),
+            ),
+          ),
+        ),
+      );
+      final intro = find.text(introduction);
+      final collapsedHeight = tester.getSize(intro).height;
+      final coverHeight = tester.getSize(find.byType(BookCover)).height;
+      await tester.ensureVisible(find.text('展开简介'));
+      await tester.tap(find.text('展开简介'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(intro).height, greaterThan(collapsedHeight * 2));
+      expect(tester.getSize(find.byType(BookCover)).height, coverHeight);
+      expect(tester.widget<Text>(intro).maxLines, isNull);
+      await tester.ensureVisible(find.text('开始阅读'));
+      await tester.tap(find.text('开始阅读'));
+      expect(read, isTrue);
+      await tester.ensureVisible(find.text('收起简介'));
+      await tester.tap(find.text('收起简介'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(intro).height, collapsedHeight);
+      expect(find.text('展开简介'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('屏幕变窄导致三行预览溢出时才显示展开入口', (tester) async {
+    tester.view.physicalSize = const Size(800, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final introduction = List.filled(80, '漫').join();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DetailHero(book: _book(introduce: introduction)),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('展开简介'), findsNothing);
+    tester.view.physicalSize = const Size(320, 720);
+    await tester.pumpAndSettle();
+    expect(find.text('展开简介'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('当前章节行更紧凑并高亮书签', (tester) async {
