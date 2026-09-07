@@ -119,6 +119,8 @@ class ReaderTopChrome extends StatelessWidget {
       child: IgnorePointer(
         ignoring: !visible,
         child: ReaderFrostedBar(
+          // 将原有留白纳入按钮点击区域，保持图标与标题的位置。
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             children: [
               IconButton(
@@ -126,14 +128,14 @@ class ReaderTopChrome extends StatelessWidget {
                 color: const Color(0xFFEEEEEE),
                 iconSize: 18,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 style: IconButton.styleFrom(
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 onPressed: onClose ?? () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.close),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 2),
               Expanded(
                 child: Tooltip(
                   message: title,
@@ -149,13 +151,13 @@ class ReaderTopChrome extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 2),
               IconButton(
                 tooltip: '阅读设置',
                 color: const Color(0xFFEEEEEE),
                 iconSize: 18,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 style: IconButton.styleFrom(
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),

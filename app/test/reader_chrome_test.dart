@@ -21,6 +21,7 @@ void main() {
 
   testWidgets('顶栏可见显示标题，隐藏时 IgnorePointer 不拦点击', (tester) async {
     var closed = false;
+    var settings = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -29,13 +30,23 @@ void main() {
             visible: true,
             title: '源A · 海贼王 · 第1044话',
             onClose: () => closed = true,
+            onMore: () => settings++,
           ),
         ),
       ),
     );
     expect(find.text('源A · 海贼王 · 第1044话'), findsOneWidget);
-    await tester.tap(find.byTooltip('关闭'));
+    expect(tester.getSize(find.byType(ReaderTopChrome)).height, 48);
+    final close = tester.getRect(find.byTooltip('关闭'));
+    final more = tester.getRect(find.byTooltip('阅读设置'));
+    for (final button in [close, more]) {
+      expect(button.width, greaterThanOrEqualTo(48));
+      expect(button.height, greaterThanOrEqualTo(48));
+    }
+    await tester.tapAt(Offset(close.center.dx, close.top + 2));
     expect(closed, isTrue);
+    await tester.tapAt(Offset(more.center.dx, more.bottom - 2));
+    expect(settings, 1);
 
     await tester.pumpWidget(
       const MaterialApp(
