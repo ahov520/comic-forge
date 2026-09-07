@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -6,6 +8,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
+import 'book_tile_typography.dart';
 import 'explore_results.dart';
 import 'search_screen.dart';
 import 'skeleton.dart';
@@ -23,11 +26,16 @@ class ShelfScreen extends StatefulWidget {
 }
 
 class _ShelfScreenState extends State<ShelfScreen> {
+  // six-screens ①：340px 屏宽下约 92×118 的封面，标题另占一行。
+  static const _coverAspectRatio = 92 / 118;
+
   /// 筛选：0=全部 1=连载中 2=已完结（按 book.kind 关键词，缺失归入全部）
   int _filter = 0;
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = BookTileTypography.shelfTitle(context);
+    final titleHeight = BookTileTypography.lineHeight(context, titleStyle);
     return AnimatedBuilder(
       animation: widget.state,
       builder: (context, _) {
@@ -99,86 +107,95 @@ class _ShelfScreenState extends State<ShelfScreen> {
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 120,
-                          childAspectRatio: 0.66,
+                  sliver: SliverLayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns = math.max(
+                        1,
+                        (constraints.crossAxisExtent / (120 + 12)).ceil(),
+                      );
+                      final coverWidth =
+                          (constraints.crossAxisExtent - 12 * (columns - 1)) /
+                          columns;
+                      return SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          mainAxisExtent:
+                              coverWidth / _coverAspectRatio + 6 + titleHeight,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                         ),
-                    delegate: SliverChildBuilderDelegate((context, i) {
-                      final b = books[i];
-                      final prog = widget.state.progress[b.bookUrl];
-                      final progLabel =
-                          prog == null || prog.chapterTitle.isEmpty
-                          ? ''
-                          : prog.chapterTitle;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => BookDetailScreen(
-                              book: b,
-                              appState: widget.state,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: BookCover(url: b.coverUrl),
-                                    ),
-                                    if (progLabel.isNotEmpty)
-                                      Positioned(
-                                        left: 0,
-                                        right: 0,
-                                        bottom: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 2,
-                                          ),
-                                          color: Colors.black54,
-                                          child: Text(
-                                            progLabel,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                        delegate: SliverChildBuilderDelegate((context, i) {
+                          final b = books[i];
+                          final prog = widget.state.progress[b.bookUrl];
+                          final progLabel =
+                              prog == null || prog.chapterTitle.isEmpty
+                              ? ''
+                              : prog.chapterTitle;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => BookDetailScreen(
+                                  book: b,
+                                  appState: widget.state,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Tooltip(
-                              message: b.name,
-                              child: Text(
-                                b.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                AspectRatio(
+                                  aspectRatio: _coverAspectRatio,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: BookCover(url: b.coverUrl),
+                                        ),
+                                        if (progLabel.isNotEmpty)
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 2,
+                                                  ),
+                                              color: Colors.black54,
+                                              child: Text(
+                                                progLabel,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                              ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Tooltip(
+                                  message: b.name,
+                                  child: Text(
+                                    b.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: titleStyle,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          );
+                        }, childCount: books.length),
                       );
-                    }, childCount: books.length),
+                    },
                   ),
                 ),
             ],

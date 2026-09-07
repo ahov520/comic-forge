@@ -71,25 +71,14 @@ class BookListSkeleton extends StatelessWidget {
 
   final bool showShelfAction;
 
-  double _lineHeight(BuildContext context, TextStyle style) {
-    final painter = TextPainter(
-      text: TextSpan(text: ' ', style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
-      locale: Localizations.maybeLocaleOf(context),
-      maxLines: 1,
-    )..layout();
-    final height = painter.height;
-    painter.dispose();
-    return height;
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final titleHeight = _lineHeight(context, BookTileTypography.title(context));
-    final metadataHeight = _lineHeight(
+    final titleHeight = BookTileTypography.lineHeight(
+      context,
+      BookTileTypography.title(context),
+    );
+    final metadataHeight = BookTileTypography.lineHeight(
       context,
       BookTileTypography.metadata(context),
     );

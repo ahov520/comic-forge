@@ -24,6 +24,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      final textScale = ValueNotifier(1.0);
+      addTearDown(textScale.dispose);
       for (var i = 0; i < 6; i++) {
         await state.toggleShelf(
           Book(
@@ -35,11 +37,14 @@ void main() {
       }
       await tester.pumpWidget(
         MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(2)),
-            child: child!,
+          builder: (context, child) => ValueListenableBuilder(
+            valueListenable: textScale,
+            builder: (context, scale, _) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
           ),
           home: Scaffold(
             body: ShelfScreen(state: state, onExplore: () {}),
@@ -47,6 +52,13 @@ void main() {
         ),
       );
       final covers = find.byType(BookCover);
+      final coverSize = tester.getSize(covers.first);
+      final title = find.text('很长的漫画名称与番外篇 0');
+      final titleHeight = tester.getSize(title).height;
+      textScale.value = 2;
+      await tester.pumpAndSettle();
+      expect(tester.getSize(covers.first), coverSize);
+      expect(tester.getSize(title).height, greaterThan(titleHeight));
       final first = tester.getRect(covers.at(0));
       final third = tester.getRect(covers.at(2));
       final fourth = tester.getRect(covers.at(3));
