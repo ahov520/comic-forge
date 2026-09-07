@@ -329,4 +329,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('刷新失败保留漫画列表并提示重试，重试恢复后更新内容和源健康', (tester) async {
+    await _showExplore(tester, state);
+    await tester.tap(_category('连载'));
+    await tester.pumpAndSettle();
+    respond = (_) => throw FetchException('offline');
+    await tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pumpAndSettle();
+    expect(find.text('发现的漫画'), findsOneWidget);
+    expect(find.text('刷新失败，已保留原列表'), findsOneWidget);
+    expect(find.text('暂时无法加载漫画'), findsNothing);
+    expect(state.sources.single.failCount, 1);
+    expect(tester.takeException(), isNull);
+
+    respond = (_) => _books('重试后的漫画');
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(find.text('重试后的漫画'), findsOneWidget);
+    expect(find.text('发现的漫画'), findsNothing);
+    expect(state.sources.single.failCount, 0);
+    expect(fetcher.requests, hasLength(3));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('刷新中保留当前结果，成功后的首帧直接显示新列表而不闪骨架', (tester) async {
+    await _showExplore(tester, state);
+    await tester.tap(_category('连载'));
+    await tester.pumpAndSettle();
+    final pending = Completer<String>();
+    respond = (_) => pending.future;
+    final refreshed = tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pump();
+    expect(find.text('发现的漫画'), findsOneWidget);
+    expect(find.byType(BookListSkeleton), findsNothing);
+    pending.complete(_books('刷新后的漫画'));
+    await refreshed;
+    await tester.pump();
+    expect(find.text('刷新后的漫画'), findsOneWidget);
+    expect(find.byType(BookListSkeleton), findsNothing);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final fails in [false, true]) {
+    testWidgets('同一分类重新加载后，旧刷新${fails ? '失败' : '晚到'}不能覆盖当前结果', (tester) async {
+      await _showExplore(tester, state);
+      await tester.tap(_category('连载'));
+      await tester.pumpAndSettle();
+      final pending = Completer<String>();
+      respond = (_) => pending.future;
+      final refreshed = tester
+          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+          .onRefresh();
+      await tester.pump();
+      respond = (_) => _books('重新加载的漫画');
+      await tester.tap(_category('连载'));
+      await tester.pumpAndSettle();
+      expect(find.text('重新加载的漫画'), findsOneWidget);
+
+      if (fails) {
+        pending.completeError(FetchException('old refresh failed'));
+      } else {
+        pending.complete(_books('旧刷新的漫画'));
+      }
+      await refreshed;
+      await tester.pumpAndSettle();
+      expect(find.text('重新加载的漫画'), findsOneWidget);
+      expect(find.text('旧刷新的漫画'), findsNothing);
+      expect(find.text('刷新失败，已保留原列表'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

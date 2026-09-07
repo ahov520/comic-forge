@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:engine/engine.dart';
@@ -197,6 +198,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   ComicSource? _source;
   (String, String)? _entry;
   Future<Paged<Book>>? _future;
+  int _entryGeneration = 0;
+  final _refreshKey = GlobalKey<RefreshIndicatorState>();
 
   @override
   void initState() {
@@ -213,6 +216,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       _source = null;
       _entry = null;
       _future = null;
+      _entryGeneration++;
       _syncSource();
       widget.state.addListener(_onStateChanged);
     }
@@ -232,6 +236,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         enabled.where((s) => s.id == _source?.id).firstOrNull ??
         enabled.firstOrNull;
     if (!identical(source, _source)) {
+      _entryGeneration++;
       _source = source;
       _entry = null;
       _future = null;
@@ -244,6 +249,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         .firstOrNull;
     if (source == null || source.id == _source?.id) return;
     setState(() {
+      _entryGeneration++;
       _source = source;
       _entry = null;
       _future = null;
@@ -254,6 +260,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final source = _source;
     if (source == null) return;
     setState(() {
+      _entryGeneration++;
       _entry = entry;
       _future = _fetchEntry(source, entry.$2);
       // 下一帧 FutureBuilder 才订阅；即时失败或提前离页也要接住异常。
@@ -287,19 +294,30 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final entry = _entry;
     final source = _source;
     if (entry == null || source == null) return;
+    final generation = ++_entryGeneration;
     final future = _fetchEntry(source, entry.$2);
     future.ignore();
     try {
       final page = await future;
-      if (!mounted || !identical(_entry, entry)) return;
+      if (!mounted || generation != _entryGeneration) return;
       setState(() {
-        _future = Future<Paged<Book>>.value(page);
+        _future = SynchronousFuture(page);
       });
-    } catch (e) {
-      if (!mounted || !identical(_entry, entry)) return;
-      setState(() {
-        _future = Future<Paged<Book>>.error(e);
-      });
+    } catch (_) {
+      if (!mounted || generation != _entryGeneration) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('刷新失败，已保留原列表'),
+          action: SnackBarAction(
+            label: '重试',
+            onPressed: () {
+              if (mounted && generation == _entryGeneration) {
+                _refreshKey.currentState?.show();
+              }
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -500,7 +518,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   onAction: () => _loadEntry(entry),
                 )
               : RefreshIndicator(
-                  key: const ValueKey('results'),
+                  key: _refreshKey,
                   onRefresh: _refreshCurrent,
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
