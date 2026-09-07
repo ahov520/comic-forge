@@ -326,7 +326,6 @@ class _SourceScreenState extends State<SourceScreen> {
         return Scaffold(
           resizeToAvoidBottomInset: false,
           body: SafeArea(
-            bottom: false,
             child: Column(
               children: [
                 _SourceHeader(
