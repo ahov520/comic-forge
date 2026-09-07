@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:engine/engine.dart';
@@ -217,6 +218,7 @@ class ReaderBottomChrome extends StatelessWidget {
                   _NavItem(
                     icon: Icons.menu,
                     label: progressLabel,
+                    tooltip: '目录',
                     enabled: onCatalog != null,
                     onTap: onCatalog,
                   ),
@@ -242,7 +244,7 @@ class ReaderBottomChrome extends StatelessWidget {
 }
 
 /// 阅读器目录：深色列表，当前话高亮。
-class ReaderCatalogSheet extends StatelessWidget {
+class ReaderCatalogSheet extends StatefulWidget {
   const ReaderCatalogSheet({
     super.key,
     required this.chapters,
@@ -255,56 +257,101 @@ class ReaderCatalogSheet extends StatelessWidget {
   final ValueChanged<int> onPick;
 
   @override
+  State<ReaderCatalogSheet> createState() => _ReaderCatalogSheetState();
+}
+
+class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
+  ScrollController? _controller;
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final rowExtent = math.max(
+      48.0,
+      MediaQuery.textScalerOf(context).scale(14) / 14 * 48,
+    );
     return Material(
       color: const Color(0xFF161619),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '目录 · ${chapters.length} 话',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    '目录 · ${widget.chapters.length} 话',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: chapters.length,
-              itemBuilder: (context, i) {
-                final current = i == currentIndex;
-                return ListTile(
-                  dense: true,
-                  selected: current,
-                  selectedTileColor: const Color(0x3322C55E),
-                  leading: Text(
-                    '${i + 1}',
-                    style: TextStyle(
-                      color: current ? Colors.white : Colors.white54,
-                      fontWeight: current ? FontWeight.w700 : null,
-                    ),
-                  ),
-                  title: Text(
-                    chapters[i].title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: current ? Colors.white : Colors.white70,
-                      fontWeight: current ? FontWeight.w600 : null,
-                    ),
-                  ),
-                  onTap: () => onPick(i),
-                );
-              },
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // 首次展开直接定位当前话，长目录和大字号都无需从头滚动。
+                  final maxOffset = math.max(
+                    0.0,
+                    widget.chapters.length * rowExtent - constraints.maxHeight,
+                  );
+                  final initialOffset =
+                      (widget.currentIndex * rowExtent -
+                              (constraints.maxHeight - rowExtent) / 2)
+                          .clamp(0.0, maxOffset)
+                          .toDouble();
+                  _controller ??= ScrollController(
+                    initialScrollOffset: initialOffset,
+                  );
+                  return ListView.builder(
+                    controller: _controller,
+                    padding: EdgeInsets.zero,
+                    itemExtent: rowExtent,
+                    itemCount: widget.chapters.length,
+                    itemBuilder: (context, i) {
+                      final current = i == widget.currentIndex;
+                      return ListTile(
+                        dense: true,
+                        selected: current,
+                        selectedTileColor: const Color(0x33169876),
+                        leading: Text(
+                          '${i + 1}',
+                          style: TextStyle(
+                            color: current ? Colors.white : Colors.white54,
+                            fontWeight: current ? FontWeight.w700 : null,
+                          ),
+                        ),
+                        title: Text(
+                          widget.chapters[i].title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: current ? Colors.white : Colors.white70,
+                            fontWeight: current ? FontWeight.w600 : null,
+                          ),
+                        ),
+                        onTap: () => widget.onPick(i),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -314,12 +361,14 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,
     required this.label,
+    this.tooltip,
     this.onTap,
     this.enabled = true,
   });
 
   final IconData icon;
   final String label;
+  final String? tooltip;
   final VoidCallback? onTap;
   final bool enabled;
 
@@ -328,29 +377,32 @@ class _NavItem extends StatelessWidget {
     final canTap = enabled && onTap != null;
     final color = canTap ? const Color(0xFF888888) : Colors.white24;
     return Expanded(
-      child: InkWell(
-        onTap: canTap ? onTap : null,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(height: 3),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w400,
+      child: Tooltip(
+        message: tooltip ?? label,
+        child: InkWell(
+          onTap: canTap ? onTap : null,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

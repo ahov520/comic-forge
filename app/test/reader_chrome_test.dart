@@ -165,6 +165,48 @@ void main() {
     expect(pageTaps, 1);
   });
 
+  testWidgets('千话目录打开即可看到当前话，大字号与末话仍可选相邻章节', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final chapters = List.generate(
+      1300,
+      (i) => Chapter(title: '第${i + 1}话', url: '/chapter/$i'),
+    );
+    for (final scale in [1.0, 2.0]) {
+      for (final current in [1043, 1299]) {
+        var picked = -1;
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey((scale, current)),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                padding: const EdgeInsets.only(bottom: 24),
+              ),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: ReaderCatalogSheet(
+                chapters: chapters,
+                currentIndex: current,
+                onPick: (value) => picked = value,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第${current + 1}话').hitTestable(), findsOneWidget);
+        expect(find.text('第1话'), findsNothing);
+        final target = current == 1299 ? current - 1 : current + 1;
+        await tester.tap(find.text('第${target + 1}话'));
+        expect(picked, target);
+        expect(tester.takeException(), isNull);
+      }
+    }
+  });
+
   testWidgets('可见时渲染顶/底渐变遮罩（IgnorePointer 不拦点击）', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

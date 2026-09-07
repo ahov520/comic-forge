@@ -473,6 +473,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: const Color(0xFF161619),
       showDragHandle: true,
       builder: (sheetCtx) => SizedBox(
