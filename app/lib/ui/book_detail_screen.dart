@@ -191,6 +191,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (sheetCtx) => SizedBox(
         height: MediaQuery.of(sheetCtx).size.height * 0.7,
@@ -262,197 +263,207 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         ? _openSources
         : (sourceDisabled ? _enableSourceAndReload : () => setState(_load));
     return Scaffold(
-      body: FutureBuilder<(Book, List<Chapter>)>(
-        future: _future,
-        initialData: _initialData,
-        builder: (context, snap) {
-          if (snap.hasError) {
+      body: SafeArea(
+        top: false,
+        child: FutureBuilder<(Book, List<Chapter>)>(
+          future: _future,
+          initialData: _initialData,
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return Scaffold(
+                appBar: AppBar(title: Text(widget.book.name)),
+                body: ErrorView(
+                  title: sourceDisabled
+                      ? '漫画源已停用'
+                      : (currentSource == null ? '找不到这本书的来源' : '暂时无法加载漫画'),
+                  message: sourceDisabled
+                      ? '启用来源后，即可重新加载这本漫画。'
+                      : (currentSource == null
+                            ? '到「源」页添加或恢复来源后重试。'
+                            : '检查网络后重试，或到「源」页查看来源状态。'),
+                  onRetry: () => setState(_load),
+                  icon: sourceDisabled
+                      ? Icons.block_outlined
+                      : Icons.cloud_off_outlined,
+                  actionLabel: sourceDisabled
+                      ? '启用「${currentSource!.name}」并重试'
+                      : (currentSource == null ? '管理源' : null),
+                  onAction: sourceDisabled || currentSource == null
+                      ? recoverSource
+                      : null,
+                ),
+              );
+            }
+            if (!snap.hasData) {
+              // 骨架屏：结构对齐真实布局（封面块+文字条+章节行），秒开观感
+              return Scaffold(
+                appBar: AppBar(title: Text(widget.book.name)),
+                body: const DetailSkeleton(),
+              );
+            }
+            final (book, chapters) = snap.data!;
+            _book ??= book;
+            // 换源进度迁移：按章序号写入新书进度（一次性）
+            if (widget.carryChapterIndex != null &&
+                !_carryDone &&
+                chapters.isNotEmpty) {
+              _carryDone = true;
+              final idx = widget.carryChapterIndex!.clamp(
+                0,
+                chapters.length - 1,
+              );
+              final c = chapters[idx];
+              // ignore: unawaited_futures
+              widget.appState.saveProgress(
+                book,
+                chapterUrl: c.url,
+                chapterTitle: c.title,
+                chapterIndex: idx,
+                chapterCount: chapters.length,
+              );
+            }
+            final scheme = Theme.of(context).colorScheme;
+            final prog = widget.appState.progressFor(widget.book.bookUrl);
+            final savedIdx = (prog != null)
+                ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
+                : -1;
+            final labelSource = _source ?? currentSource;
+            final sourceName = labelSource == null
+                ? null
+                : (labelSource.name.trim().isEmpty
+                      ? labelSource.id
+                      : labelSource.name);
+            final readLabel = chapters.isEmpty
+                ? null
+                : (canRead
+                      ? (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读')
+                      : recoveryLabel);
+            void openAt(int index) {
+              if (!canRead) return;
+              openReader(
+                context,
+                SourceService.instance.runtimeFor(_source!),
+                book,
+                chapters,
+                index,
+                widget.appState,
+              );
+            }
+
             return Scaffold(
-              appBar: AppBar(title: Text(widget.book.name)),
-              body: ErrorView(
-                title: sourceDisabled
-                    ? '漫画源已停用'
-                    : (currentSource == null ? '找不到这本书的来源' : '暂时无法加载漫画'),
-                message: sourceDisabled
-                    ? '启用来源后，即可重新加载这本漫画。'
-                    : (currentSource == null
-                          ? '到「源」页添加或恢复来源后重试。'
-                          : '检查网络后重试，或到「源」页查看来源状态。'),
-                onRetry: () => setState(_load),
-                icon: sourceDisabled
-                    ? Icons.block_outlined
-                    : Icons.cloud_off_outlined,
-                actionLabel: sourceDisabled
-                    ? '启用「${currentSource!.name}」并重试'
-                    : (currentSource == null ? '管理源' : null),
-                onAction: sourceDisabled || currentSource == null
-                    ? recoverSource
-                    : null,
+              appBar: AppBar(
+                title: Text(book.name),
+                actions: [
+                  if (canRead)
+                    Badge.count(
+                      count: _switchCount ?? 0,
+                      isLabelVisible: (_switchCount ?? 0) > 0,
+                      child: IconButton(
+                        tooltip:
+                            '换源${_switchCount != null && _switchCount! > 0 ? '（$_switchCount 源命中）' : ''}',
+                        icon: const Icon(Icons.swap_horiz),
+                        onPressed: _showSwitchSourceSheet,
+                      ),
+                    ),
+                  if (canRead)
+                    IconButton(
+                      tooltip: '复制本书源 JSON（可分享）',
+                      icon: const Icon(Icons.ios_share),
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: sourceShareJson(_source!)),
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('已复制源 JSON，对方可在「源 → 剪贴板导入」粘贴使用'),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ShelfButton(book: book, state: widget.appState, iconSize: 24),
+                ],
+              ),
+              body: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: DetailHero(
+                      book: book,
+                      sourceName: sourceName,
+                      switchCount: _switchCount,
+                      onSwitchSource: canRead ? _showSwitchSourceSheet : null,
+                      readLabel: readLabel,
+                      readHint: canRead ? null : recoveryHint,
+                      readIcon: canRead
+                          ? Icons.play_arrow_rounded
+                          : recoveryIcon,
+                      onRead: readLabel == null
+                          ? null
+                          : (canRead
+                                ? () => openAt(savedIdx >= 0 ? savedIdx : 0)
+                                : recoverSource),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Text(
+                            '章节 (${chapters.length})',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          if (_fromCache || !canRead)
+                            Chip(
+                              label: const Text(
+                                '离线目录',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: scheme.surfaceContainerHighest,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (chapters.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: EmptyStateView(
+                        icon: Icons.auto_stories_outlined,
+                        title: '暂无章节',
+                        message: canRead
+                            ? '当前源还没有提供章节，可以重新加载或稍后再试。'
+                            : recoveryHint,
+                        actionLabel: canRead ? '重新加载' : recoveryLabel,
+                        onAction: canRead
+                            ? () => setState(_load)
+                            : recoverSource,
+                      ),
+                    )
+                  else
+                    SliverList.builder(
+                      itemCount: chapters.length,
+                      itemBuilder: (context, i) {
+                        return ChapterTile(
+                          index: i,
+                          title: chapters[i].title,
+                          isCurrent: i == savedIdx,
+                          onTap: canRead ? () => openAt(i) : null,
+                        );
+                      },
+                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                ],
               ),
             );
-          }
-          if (!snap.hasData) {
-            // 骨架屏：结构对齐真实布局（封面块+文字条+章节行），秒开观感
-            return Scaffold(
-              appBar: AppBar(title: Text(widget.book.name)),
-              body: const DetailSkeleton(),
-            );
-          }
-          final (book, chapters) = snap.data!;
-          _book ??= book;
-          // 换源进度迁移：按章序号写入新书进度（一次性）
-          if (widget.carryChapterIndex != null &&
-              !_carryDone &&
-              chapters.isNotEmpty) {
-            _carryDone = true;
-            final idx = widget.carryChapterIndex!.clamp(0, chapters.length - 1);
-            final c = chapters[idx];
-            // ignore: unawaited_futures
-            widget.appState.saveProgress(
-              book,
-              chapterUrl: c.url,
-              chapterTitle: c.title,
-              chapterIndex: idx,
-              chapterCount: chapters.length,
-            );
-          }
-          final scheme = Theme.of(context).colorScheme;
-          final prog = widget.appState.progressFor(widget.book.bookUrl);
-          final savedIdx = (prog != null)
-              ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
-              : -1;
-          final labelSource = _source ?? currentSource;
-          final sourceName = labelSource == null
-              ? null
-              : (labelSource.name.trim().isEmpty
-                    ? labelSource.id
-                    : labelSource.name);
-          final readLabel = chapters.isEmpty
-              ? null
-              : (canRead
-                    ? (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读')
-                    : recoveryLabel);
-          void openAt(int index) {
-            if (!canRead) return;
-            openReader(
-              context,
-              SourceService.instance.runtimeFor(_source!),
-              book,
-              chapters,
-              index,
-              widget.appState,
-            );
-          }
-
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(book.name),
-              actions: [
-                if (canRead)
-                  Badge.count(
-                    count: _switchCount ?? 0,
-                    isLabelVisible: (_switchCount ?? 0) > 0,
-                    child: IconButton(
-                      tooltip:
-                          '换源${_switchCount != null && _switchCount! > 0 ? '（$_switchCount 源命中）' : ''}',
-                      icon: const Icon(Icons.swap_horiz),
-                      onPressed: _showSwitchSourceSheet,
-                    ),
-                  ),
-                if (canRead)
-                  IconButton(
-                    tooltip: '复制本书源 JSON（可分享）',
-                    icon: const Icon(Icons.ios_share),
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: sourceShareJson(_source!)),
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('已复制源 JSON，对方可在「源 → 剪贴板导入」粘贴使用'),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ShelfButton(book: book, state: widget.appState, iconSize: 24),
-              ],
-            ),
-            body: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: DetailHero(
-                    book: book,
-                    sourceName: sourceName,
-                    switchCount: _switchCount,
-                    onSwitchSource: canRead ? _showSwitchSourceSheet : null,
-                    readLabel: readLabel,
-                    readHint: canRead ? null : recoveryHint,
-                    readIcon: canRead ? Icons.play_arrow_rounded : recoveryIcon,
-                    onRead: readLabel == null
-                        ? null
-                        : (canRead
-                              ? () => openAt(savedIdx >= 0 ? savedIdx : 0)
-                              : recoverSource),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-                    child: Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Text(
-                          '章节 (${chapters.length})',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        if (_fromCache || !canRead)
-                          Chip(
-                            label: const Text(
-                              '离线目录',
-                              style: TextStyle(fontSize: 11),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            backgroundColor: scheme.surfaceContainerHighest,
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (chapters.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: EmptyStateView(
-                      icon: Icons.auto_stories_outlined,
-                      title: '暂无章节',
-                      message: canRead
-                          ? '当前源还没有提供章节，可以重新加载或稍后再试。'
-                          : recoveryHint,
-                      actionLabel: canRead ? '重新加载' : recoveryLabel,
-                      onAction: canRead ? () => setState(_load) : recoverSource,
-                    ),
-                  )
-                else
-                  SliverList.builder(
-                    itemCount: chapters.length,
-                    itemBuilder: (context, i) {
-                      return ChapterTile(
-                        index: i,
-                        title: chapters[i].title,
-                        isCurrent: i == savedIdx,
-                        onTap: canRead ? () => openAt(i) : null,
-                      );
-                    },
-                  ),
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }

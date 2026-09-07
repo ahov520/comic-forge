@@ -346,25 +346,28 @@ class SwitchSourcePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Semantics(
-              header: true,
-              child: Text(
-                '换源 · $bookName',
-                style: textTheme.titleMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+    return SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  '换源 · $bookName',
+                  style: textTheme.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),
-        ),
-        Expanded(child: _body()),
-      ],
+          Expanded(child: _body()),
+        ],
+      ),
     );
   }
 
