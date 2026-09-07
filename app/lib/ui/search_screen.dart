@@ -7,6 +7,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/search_aggregator.dart';
+import 'search_failure_panel.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
 import 'widgets.dart';
@@ -32,7 +33,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final _focusNode = FocusNode();
   final Map<String, List<Book>> _raw = {}; // 源id → 结果（到达序）
   AggregatedSearch? _agg;
-  final Map<String, SearchSourceFailure> _failed = {};
+  final _failed = ValueNotifier<Map<String, SearchSourceFailure>>({});
   bool _searching = false;
   String _query = '';
   int _searchGeneration = 0;
@@ -60,6 +61,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     widget.state.removeListener(_onStateChanged);
+    _failed.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -92,7 +94,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _sourceCount = sources.length;
     _raw.clear();
     _agg = null;
-    _failed.clear();
+    _failed.value = {};
   }
 
   void _onQueryChanged() {
@@ -107,7 +109,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _sourcesChanged = false;
         _raw.clear();
         _agg = null;
-        _failed.clear();
+        _failed.value = {};
       }
     });
   }
@@ -147,7 +149,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _sourcesChanged = false;
       _raw.clear();
       _agg = null;
-      _failed.clear();
+      _failed.value = {};
     });
     await state.recordSearch(q);
     if (!_isCurrentSearch(generation)) return;
@@ -170,10 +172,13 @@ class _SearchScreenState extends State<SearchScreen> {
           future.ignore();
           if (_isCurrentSearch(generation)) {
             setState(() {
-              _failed[s.id] = SearchSourceFailure(
-                name: _sourceName(s.id),
-                kind: classifySearchFailure(e),
-              );
+              _failed.value = {
+                ..._failed.value,
+                s.id: SearchSourceFailure(
+                  name: _sourceName(s.id),
+                  kind: classifySearchFailure(e),
+                ),
+              };
             });
           }
           errors[s.id] = e.toString();
@@ -195,15 +200,43 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   String _statusLine() {
-    final timeouts = _failed.values
+    final timeouts = _failed.value.values
         .where((f) => f.kind == SearchSourceFailKind.timeout)
         .length;
     return searchAggregateStatus(
       sourceCount: _sourceCount,
       successCount: _raw.length,
       timeoutCount: timeouts,
-      errorCount: _failed.length - timeouts,
+      errorCount: _failed.value.length - timeouts,
       searching: _searching,
+    );
+  }
+
+  void _showFailures() {
+    if (_failed.value.isEmpty) return;
+    _focusNode.unfocus();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+        child: ValueListenableBuilder<Map<String, SearchSourceFailure>>(
+          valueListenable: _failed,
+          builder: (context, failures, _) => SearchFailurePanel(
+            failures: failures.values.toList(),
+            onManageSources: () {
+              Navigator.of(sheetContext).pop();
+              Navigator.of(this.context).push(
+                MaterialPageRoute(
+                  builder: (_) => SourceScreen(state: widget.state),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -339,7 +372,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _statusAndTips(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tip = searchFailureTip(_failed.values);
+    final tip = searchFailureTip(_failed.value.values);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Column(
@@ -356,33 +389,46 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           if (tip != null) ...[
             const SizedBox(height: 8),
-            DecoratedBox(
-              decoration: BoxDecoration(
+            Tooltip(
+              message: '查看失败源',
+              child: Material(
                 color: scheme.errorContainer.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.cloud_off_outlined,
-                      size: 18,
-                      color: scheme.onErrorContainer,
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _showFailures,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        tip,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.cloud_off_outlined,
+                          size: 18,
                           color: scheme.onErrorContainer,
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tip,
+                            semanticsLabel: '${_failed.value.length} 个源未响应',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: scheme.onErrorContainer),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: scheme.onErrorContainer,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -458,7 +504,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_searching) {
       return const BookListSkeleton(key: ValueKey('loading'));
     }
-    if (_raw.isEmpty && _failed.isNotEmpty) {
+    if (_raw.isEmpty && _failed.value.isNotEmpty) {
       return EmptyStateView(
         key: const ValueKey('failed'),
         icon: Icons.cloud_off_outlined,
