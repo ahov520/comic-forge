@@ -192,6 +192,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.appState,
+      builder: (context, _) => _buildDetail(context),
+    );
+  }
+
+  Widget _buildDetail(BuildContext context) {
     return Scaffold(
       body: FutureBuilder<(Book, List<Chapter>)>(
         future: _future,
@@ -323,7 +330,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                     child: Wrap(
                       alignment: WrapAlignment.spaceBetween,
                       crossAxisAlignment: WrapCrossAlignment.center,

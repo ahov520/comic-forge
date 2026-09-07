@@ -42,8 +42,10 @@ class DetailHero extends StatelessWidget {
     final tags = splitKindTags(book.kind);
     final source = sourceName?.trim() ?? '';
     return Card(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      color: scheme.surfaceContainerLow,
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      color: scheme.brightness == Brightness.light
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -51,7 +53,7 @@ class DetailHero extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -63,7 +65,7 @@ class DetailHero extends StatelessWidget {
                   width: coverWidth,
                   height: coverHeight,
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,8 +147,18 @@ class DetailHero extends StatelessWidget {
               ),
             ],
             if (onRead != null && readLabel != null) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  textStyle: textTheme.labelLarge?.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 onPressed: onRead,
                 icon: const Icon(Icons.play_arrow_rounded, size: 20),
                 label: Text(readLabel!),
@@ -181,7 +193,7 @@ class ChapterTile extends StatelessWidget {
     final fg = isCurrent ? scheme.onPrimaryContainer : scheme.onSurface;
     final numColor = isCurrent ? scheme.primary : scheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       child: Material(
         color: isCurrent
             ? scheme.primaryContainer.withValues(alpha: 0.72)
@@ -191,7 +203,7 @@ class ChapterTile extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
                 ConstrainedBox(

@@ -148,11 +148,13 @@ class DetailSkeleton extends StatelessWidget {
       liveRegion: true,
       child: ExcludeSemantics(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           children: [
             Card(
               margin: EdgeInsets.zero,
-              color: scheme.surfaceContainerLow,
+              color: scheme.brightness == Brightness.light
+                  ? scheme.surfaceContainerLowest
+                  : scheme.surfaceContainerLow,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -161,7 +163,7 @@ class DetailSkeleton extends StatelessWidget {
                 ),
               ),
               child: const Padding(
-                padding: EdgeInsets.all(14),
+                padding: EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -169,7 +171,7 @@ class DetailSkeleton extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SkeletonBox(width: 120, height: 164, radius: 10),
-                        SizedBox(width: 14),
+                        SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,8 +208,11 @@ class DetailSkeleton extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 14),
-                    SkeletonBox(height: 40, radius: 12),
+                    SizedBox(height: 12),
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: SkeletonBox(height: 44, radius: 14),
+                    ),
                   ],
                 ),
               ),
@@ -222,7 +227,7 @@ class DetailSkeleton extends StatelessWidget {
               chapterRows,
               (i) => Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
+                  horizontal: 12,
                   vertical: 10,
                 ),
                 child: Row(
