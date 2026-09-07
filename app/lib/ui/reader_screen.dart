@@ -43,12 +43,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late int _index;
   late Future<List<String>> _images;
   bool _chromeVisible = true;
-  final _pageController = PageController();
+  final _pageController = PageController(keepPage: false);
   final _scrollController = ScrollController();
   bool _nextChapterWarmed = false;
   bool _offsetRestored = false;
   Timer? _offsetSaveTimer;
   bool _volumeKeysEnabled = false;
+  late bool _wasPaged;
+  String? _scrollChapterUrl;
+  int _pageCount = 0;
 
   Chapter get _chapter => widget.chapters[_index];
 
@@ -57,6 +60,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    _wasPaged = _isPaged;
     _index = widget.initialIndex.clamp(0, widget.chapters.length - 1);
     _loadChapter(_index, save: true);
     // 音量键翻页（Android）：仅阅读器打开期间激活
@@ -89,6 +93,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _onReaderSettingsChanged() {
+    if (_wasPaged != _isPaged) {
+      _saveCurrentScrollOffset();
+      _offsetSaveTimer?.cancel();
+      _offsetRestored = false;
+      _wasPaged = _isPaged;
+    }
     _syncVolumeKeys();
     setState(() {});
   }
@@ -103,23 +113,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  /// 翻一“屏”：翻页模式走 PageView，滚动模式直接跨话。
+  /// 逐页或逐屏翻动，到本话边界后再切换章节。
   void _pageTurn(int delta) {
     if (_isPaged) {
-      final page =
-          (_pageController.hasClients ? _pageController.page ?? 0 : 0) + delta;
-      if (page < 0) return;
+      if (!_pageController.hasClients || _pageCount == 0) return;
+      final page = (_pageController.page ?? 0).round() + delta;
+      if (page < 0 || page >= _pageCount) {
+        _go(delta);
+        return;
+      }
       _pageController.animateToPage(
-        page.round(),
+        page,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
       return;
     }
-    _go(delta);
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if ((delta < 0 && position.extentBefore < 1) ||
+        (delta > 0 && position.extentAfter < 1)) {
+      _go(delta);
+      return;
+    }
+    _scrollController.animateTo(
+      (position.pixels + position.viewportDimension * 0.85 * delta)
+          .clamp(0.0, position.maxScrollExtent)
+          .toDouble(),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   void _loadChapter(int index, {bool save = false, bool refresh = false}) {
+    _saveCurrentScrollOffset();
+    _offsetSaveTimer?.cancel();
+    _pageCount = 0;
     setState(() {
       _index = index;
       _chromeVisible = true;
@@ -131,7 +160,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
     _nextChapterWarmed = false;
     _offsetRestored = false;
-    _offsetSaveTimer?.cancel();
     // 预加载下一话 URL 列表（失败静默）
     if (index + 1 < widget.chapters.length) {
       SourceService.instance.prefetchImages(
@@ -195,11 +223,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_isPaged) return;
     final c = _scrollController;
     if (!c.hasClients) return;
+    final chapterUrl = _scrollChapterUrl;
+    final position = c.position;
+    if (chapterUrl == null) return;
     _offsetSaveTimer?.cancel();
     _offsetSaveTimer = Timer(const Duration(milliseconds: 600), () {
-      if (!c.hasClients || widget.appState == null) return;
-      widget.appState!.saveScrollOffset(_chapter.url, c.offset);
+      if (!mounted ||
+          !c.hasClients ||
+          !identical(c.position, position) ||
+          _scrollChapterUrl != chapterUrl) {
+        return;
+      }
+      widget.appState?.saveScrollOffset(chapterUrl, position.pixels);
     });
+  }
+
+  void _saveCurrentScrollOffset() {
+    final url = _scrollChapterUrl;
+    if (url == null || !_scrollController.hasClients) return;
+    widget.appState?.saveScrollOffset(url, _scrollController.offset);
   }
 
   void _go(int delta) {
@@ -212,9 +254,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void dispose() {
     widget.appState?.removeListener(_onReaderSettingsChanged);
     // 退出阅读器时立即落盘当前滚动位置
-    if (!_isPaged && _scrollController.hasClients && widget.appState != null) {
-      widget.appState!.saveScrollOffset(_chapter.url, _scrollController.offset);
-    }
+    _saveCurrentScrollOffset();
     _offsetSaveTimer?.cancel();
     if (_volumeKeysEnabled) _enableVolumeKeys(false);
     _readerChannel.setMethodCallHandler(null);
@@ -225,6 +265,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// 正文渲染：滚动模式 = ListView；翻页模式 = PageView + 三分点区。
   Widget _buildReaderBody(BuildContext context, List<String> urls) {
+    _pageCount = urls.length;
     Widget img(String url, {BoxFit fit = BoxFit.fitWidth}) =>
         CachedNetworkImage(
           imageUrl: url,
@@ -248,6 +289,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
 
     if (!_isPaged) {
+      final chapterUrl = _chapter.url;
+      _scrollChapterUrl = chapterUrl;
       return GestureDetector(
         onTap: () => setState(() => _chromeVisible = !_chromeVisible),
         child: ListView.builder(
@@ -262,10 +305,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
             // 首帧后恢复持久化的滚动位置（跨重启记忆，每章一次）
             if (!_offsetRestored) {
               _offsetRestored = true;
-              final saved = widget.appState?.scrollOffsetFor(_chapter.url);
+              final saved = widget.appState?.scrollOffsetFor(chapterUrl);
               if (saved != null && saved > 0) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
+                  if (mounted &&
+                      !_isPaged &&
+                      _chapter.url == chapterUrl &&
+                      _scrollController.hasClients) {
                     _scrollController.jumpTo(
                       resolveRestoredScroll(
                         saved: saved,
@@ -289,10 +335,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       child: Center(child: img(urls[i], fit: BoxFit.contain)),
     );
     return PageView.builder(
+      key: PageStorageKey<String>('reader:paged:${_chapter.url}'),
       controller: _pageController,
       itemCount: urls.length,
       onPageChanged: (i) {
-        setState(() {});
         _warmNextChapterIfNeeded(i, urls.length);
       },
       itemBuilder: (context, i) {
