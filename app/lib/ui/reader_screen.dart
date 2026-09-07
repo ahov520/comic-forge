@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -48,6 +48,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _nextChapterWarmed = false;
   bool _offsetRestored = false;
   Timer? _offsetSaveTimer;
+  bool _volumeKeysEnabled = false;
 
   Chapter get _chapter => widget.chapters[_index];
 
@@ -59,14 +60,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _index = widget.initialIndex.clamp(0, widget.chapters.length - 1);
     _loadChapter(_index, save: true);
     // 音量键翻页（Android）：仅阅读器打开期间激活
-    _enableVolumeKeys(true);
+    widget.appState?.addListener(_onReaderSettingsChanged);
+    _syncVolumeKeys();
     _readerChannel.setMethodCallHandler(_onVolumeKey);
     // 滚动模式：接近底部预热下一话（翻页模式由 onPageChanged 触发）
     _scrollController.addListener(_warmNextChapterOnScroll);
   }
 
   Future<void> _onVolumeKey(MethodCall call) async {
-    if (!mounted) return;
+    if (!mounted || !_volumeKeysEnabled) return;
     if (call.method == 'volumeUp') {
       _pageTurn(-1);
     } else if (call.method == 'volumeDown') {
@@ -75,9 +77,30 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _enableVolumeKeys(bool enabled) {
-    if (widget.appState?.readerVolumeKeys != true) return;
-    if (!Platform.isAndroid) return;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     _readerChannel.invokeMethod('setVolumeKeysEnabled', {'enabled': enabled});
+  }
+
+  void _syncVolumeKeys() {
+    final enabled = widget.appState?.readerVolumeKeys == true;
+    if (enabled == _volumeKeysEnabled) return;
+    _volumeKeysEnabled = enabled;
+    _enableVolumeKeys(enabled);
+  }
+
+  void _onReaderSettingsChanged() {
+    _syncVolumeKeys();
+    setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant ReaderScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.appState != widget.appState) {
+      oldWidget.appState?.removeListener(_onReaderSettingsChanged);
+      widget.appState?.addListener(_onReaderSettingsChanged);
+      _syncVolumeKeys();
+    }
   }
 
   /// 翻一“屏”：翻页模式走 PageView，滚动模式直接跨话。
@@ -187,12 +210,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    widget.appState?.removeListener(_onReaderSettingsChanged);
     // 退出阅读器时立即落盘当前滚动位置
     if (!_isPaged && _scrollController.hasClients && widget.appState != null) {
       widget.appState!.saveScrollOffset(_chapter.url, _scrollController.offset);
     }
     _offsetSaveTimer?.cancel();
-    _enableVolumeKeys(false);
+    if (_volumeKeysEnabled) _enableVolumeKeys(false);
     _readerChannel.setMethodCallHandler(null);
     _pageController.dispose();
     _scrollController.dispose();
@@ -471,75 +495,83 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (appState == null) return;
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
       backgroundColor: const Color(0xFF161619),
       builder: (sheetCtx) => AnimatedBuilder(
         animation: appState,
-        builder: (context, _) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.brightness_low,
-                    color: Colors.white54,
-                    size: 18,
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: appState.readerBrightness,
-                      min: 0.15,
-                      max: 1.0,
-                      onChanged: appState.setReaderBrightness,
+        builder: (context, _) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.brightness_low,
+                      color: Colors.white54,
+                      size: 18,
                     ),
-                  ),
-                  const Icon(
-                    Icons.brightness_high,
-                    color: Colors.white70,
-                    size: 20,
-                  ),
-                ],
-              ),
-              Text(
-                '亮度 ${(appState.readerBrightness * 100).round()}%',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              const Divider(color: Colors.white24),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'scroll',
-                    icon: Icon(Icons.swap_vert, size: 18),
-                    label: Text('滚动'),
-                  ),
-                  ButtonSegment(
-                    value: 'paged',
-                    icon: Icon(Icons.swap_horiz, size: 18),
-                    label: Text('翻页'),
-                  ),
-                ],
-                selected: {appState.readerMode},
-                onSelectionChanged: (s) => appState.setReaderMode(s.first),
-              ),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                activeThumbColor: Colors.white70,
-                title: const Text(
-                  '音量键翻页',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                    Expanded(
+                      child: Slider(
+                        value: appState.readerBrightness,
+                        min: 0.15,
+                        max: 1.0,
+                        semanticFormatterCallback: (value) =>
+                            '亮度 ${(value * 100).round()}%',
+                        onChanged: appState.setReaderBrightness,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.brightness_high,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                  ],
                 ),
-                subtitle: const Text(
-                  '音量+ 上一页 · 音量- 下一页（Android）',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                Text(
+                  '亮度 ${(appState.readerBrightness * 100).round()}%',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
-                value: appState.readerVolumeKeys,
-                onChanged: appState.setReaderVolumeKeys,
-              ),
-            ],
+                const Divider(color: Colors.white24),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'scroll',
+                      icon: Icon(Icons.swap_vert, size: 18),
+                      label: Text('滚动'),
+                    ),
+                    ButtonSegment(
+                      value: 'paged',
+                      icon: Icon(Icons.swap_horiz, size: 18),
+                      label: Text('翻页'),
+                    ),
+                  ],
+                  selected: {appState.readerMode},
+                  onSelectionChanged: (s) => appState.setReaderMode(s.first),
+                ),
+                const SizedBox(height: 4),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  activeThumbColor: Colors.white70,
+                  title: const Text(
+                    '音量键翻页',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  subtitle: const Text(
+                    '音量+ 上一页 · 音量- 下一页（Android）',
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                  value: appState.readerVolumeKeys,
+                  onChanged: appState.setReaderVolumeKeys,
+                ),
+              ],
+            ),
           ),
         ),
       ),
