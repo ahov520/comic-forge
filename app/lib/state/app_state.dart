@@ -87,6 +87,7 @@ class AppState extends ChangeNotifier {
   static const _kReaderMode = 'cf.readerMode';
   static const _kReaderVolumeKeys = 'cf.readerVolumeKeys';
   static const _kScrollOffsets = 'cf.scrollOffsets';
+  static const _kReaderPages = 'cf.readerPages';
   static const _kLastAutoProbe = 'cf.lastAutoProbe';
   static const _kRepoRefresh = 'cf.repoRefresh';
   static const _kRepoUpdates = 'cf.repoUpdates';
@@ -120,6 +121,8 @@ class AppState extends ChangeNotifier {
   double readerBrightness = 1.0;
   /// 章内滚动位置（key=章节 url；LRU 上限 200 条，跨重启记忆）。
   final Map<String, ({double offset, int at})> scrollOffsets = {};
+  // 按最近保存顺序记住至多 200 话的翻页位置，与滚动偏移分别保留。
+  final Map<String, int> _readerPages = {};
   int _lastAutoProbeAt = 0;
   /// 阅读模式：scroll = 连续滚动；paged = 左右翻页。
   String readerMode = 'scroll';
@@ -189,6 +192,7 @@ class AppState extends ChangeNotifier {
     _lastAutoProbeAt = sp.getInt(_kLastAutoProbe) ?? 0;
     readerMode = sp.getString(_kReaderMode) == 'paged' ? 'paged' : 'scroll';
     readerVolumeKeys = sp.getBool(_kReaderVolumeKeys) ?? false;
+    _restoreReaderPages(sp.get(_kReaderPages));
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
@@ -289,6 +293,45 @@ class AppState extends ChangeNotifier {
 
   double? scrollOffsetFor(String chapterUrl) =>
       scrollOffsets[chapterUrl]?.offset;
+
+  void _restoreReaderPages(Object? saved) {
+    _readerPages.clear();
+    if (saved is! String) return;
+    try {
+      final decoded = jsonDecode(saved);
+      if (decoded is! Map) return;
+      for (final entry in decoded.entries) {
+        final page = entry.value;
+        if (entry.key is String &&
+            (entry.key as String).isNotEmpty &&
+            page is int &&
+            page >= 0) {
+          _readerPages[entry.key as String] = page;
+        }
+      }
+      _trimReaderPages();
+    } on FormatException {
+      // 页码损坏时从首图开始，不影响其它阅读进度。
+    }
+  }
+
+  void _trimReaderPages() {
+    while (_readerPages.length > 200) {
+      _readerPages.remove(_readerPages.keys.first);
+    }
+  }
+
+  /// 保存从 0 开始的章内页码；页数上限由阅读器取得图片列表后校正。
+  Future<void> saveReaderPage(String chapterUrl, int page) async {
+    if (chapterUrl.isEmpty || page < 0) return;
+    _readerPages.remove(chapterUrl);
+    _readerPages[chapterUrl] = page;
+    _trimReaderPages();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kReaderPages, jsonEncode(_readerPages));
+  }
+
+  int? readerPageFor(String chapterUrl) => _readerPages[chapterUrl];
 
   /// 章节目录缓存（离线可见 + 秒开），成功拉取详情后调用；超上限按时间淘汰。
   Future<void> saveDetailCache(Book book, List<Chapter> chapters) async {

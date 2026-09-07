@@ -71,6 +71,74 @@ void main() {
     });
   });
 
+  group('AppState 翻页位置持久化', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test('与滚动位置分别保存，更新页码后跨重启还原', () async {
+      const chapter = 'https://m.example.com/c/7';
+      final state = AppState();
+      addTearDown(state.dispose);
+      await state.saveScrollOffset(chapter, 1234.5);
+      await state.saveReaderPage(chapter, 2);
+      await state.saveReaderPage(chapter, 4);
+      final restored = AppState();
+      addTearDown(restored.dispose);
+      await restored.load();
+      expect(restored.readerPageFor(chapter), 4);
+      expect(restored.scrollOffsetFor(chapter), 1234.5);
+      await restored.saveReaderPage(chapter, -1);
+      await restored.saveReaderPage('', 3);
+      expect(restored.readerPageFor(chapter), 4);
+      expect(restored.readerPageFor(''), isNull);
+    });
+
+    test('最近保存的 200 话保留，重访旧话会延后淘汰，重载保持相同顺序', () async {
+      final state = AppState();
+      addTearDown(state.dispose);
+      for (var i = 0; i < 200; i++) {
+        await state.saveReaderPage('chapter-$i', i);
+      }
+      await state.saveReaderPage('chapter-0', 3);
+      await state.saveReaderPage('chapter-200', 2);
+      expect(state.readerPageFor('chapter-1'), isNull);
+      expect(state.readerPageFor('chapter-0'), 3);
+      final restored = AppState();
+      addTearDown(restored.dispose);
+      await restored.load();
+      await restored.saveReaderPage('chapter-201', 4);
+      expect(restored.readerPageFor('chapter-2'), isNull);
+      expect(restored.readerPageFor('chapter-0'), 3);
+      expect(restored.readerPageFor('chapter-201'), 4);
+    });
+
+    test('损坏或错型页码不阻断启动，有效条目仍可恢复', () async {
+      for (final saved in <Object>[
+        'not json',
+        '[]',
+        'null',
+        3,
+        '{"valid":2,"negative":-1,"text":"3","fraction":1.5,"":1}',
+      ]) {
+        SharedPreferences.setMockInitialValues({
+          'cf.sources': '[{"id":"test-source"}]',
+          'cf.readerPages': saved,
+        });
+        final state = AppState();
+        addTearDown(state.dispose);
+        await state.load();
+        expect(state.readerPageFor('negative'), isNull);
+        expect(state.readerPageFor('text'), isNull);
+        expect(state.readerPageFor('fraction'), isNull);
+        expect(state.readerPageFor(''), isNull);
+        if (saved is String && saved.startsWith('{')) {
+          expect(state.readerPageFor('valid'), 2);
+        }
+      }
+    });
+  });
+
   group('AppState 轻量自动体检', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});

@@ -44,7 +44,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late int _index;
   late Future<List<String>> _images;
   bool _chromeVisible = true;
-  final _pageController = PageController(keepPage: false);
+  var _pageController = PageController(keepPage: false);
   final _scrollController = ScrollController();
   bool _nextChapterWarmed = false;
   bool _offsetRestored = false;
@@ -52,6 +52,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _volumeKeysEnabled = false;
   late bool _wasPaged;
   String? _scrollChapterUrl;
+  String? _pagedChapterUrl;
   int _pageCount = 0;
   int _pageIndex = 0;
   bool _pageZoomed = false;
@@ -101,6 +102,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _offsetSaveTimer?.cancel();
       _offsetRestored = false;
       _wasPaged = _isPaged;
+      _pagedChapterUrl = null;
       _pageIndex = 0;
       _pageZoomed = false;
     }
@@ -154,6 +156,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _saveCurrentScrollOffset();
     _offsetSaveTimer?.cancel();
     _pageCount = 0;
+    _pagedChapterUrl = null;
     _pageIndex = 0;
     _pageZoomed = false;
     setState(() {
@@ -327,18 +330,38 @@ class _ReaderScreenState extends State<ReaderScreen> {
       );
     }
 
+    final chapterUrl = _chapter.url;
+    if (_pagedChapterUrl != chapterUrl) {
+      final previous = _pageController;
+      _pageIndex = (widget.appState?.readerPageFor(chapterUrl) ?? 0)
+          .clamp(0, urls.length - 1);
+      _pageController = PageController(initialPage: _pageIndex, keepPage: false);
+      _pagedChapterUrl = chapterUrl;
+      widget.appState?.saveReaderPage(chapterUrl, _pageIndex);
+      // 旧 PageView 在本帧结束前仍可能持有控制器。
+      WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+    }
+    final pages = _pageController;
+
     // 翻页模式：点击左 1/3 = 上一页，中 = 工具栏，右 1/3 = 下一页；
     // 末页右翻进入下一话（已到末话则提示）。
     return PageView.builder(
-      key: PageStorageKey<String>('reader:paged:${_chapter.url}'),
-      controller: _pageController,
+      key: ObjectKey(pages),
+      controller: pages,
       physics: _pageZoomed ? const NeverScrollableScrollPhysics() : null,
       itemCount: urls.length,
       onPageChanged: (i) {
+        if (!mounted ||
+            !_isPaged ||
+            _pagedChapterUrl != chapterUrl ||
+            !identical(pages, _pageController)) {
+          return;
+        }
         setState(() {
           _pageIndex = i;
           _pageZoomed = false;
         });
+        widget.appState?.saveReaderPage(chapterUrl, i);
         _warmNextChapterIfNeeded(i, urls.length);
       },
       itemBuilder: (context, i) {
