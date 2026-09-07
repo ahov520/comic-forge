@@ -103,7 +103,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 120,
-                          childAspectRatio: 0.62,
+                          childAspectRatio: 0.66,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                         ),
@@ -115,7 +115,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
                           ? ''
                           : prog.chapterTitle;
                       return InkWell(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => BookDetailScreen(
@@ -129,7 +129,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
                           children: [
                             Expanded(
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(12),
                                 child: Stack(
                                   children: [
                                     Positioned.fill(
@@ -169,7 +169,10 @@ class _ShelfScreenState extends State<ShelfScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                    ?.copyWith(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                             ),
                           ],
