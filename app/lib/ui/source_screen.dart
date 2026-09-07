@@ -600,60 +600,68 @@ class _SourceScreenState extends State<SourceScreen> {
             children: [
               Expanded(
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onLongPress: () => _showSourceActions(s),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.grid_view_outlined,
-                        size: 18,
-                        color: iconColor,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: unhealthy ? scheme.error : null,
-                                  ),
-                            ),
-                            if (subtitle.isNotEmpty)
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.grid_view_outlined,
+                          size: 18,
+                          color: iconColor,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                subtitle,
+                                name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
+                                style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(
-                                      fontSize: 11,
-                                      color: unhealthy
-                                          ? scheme.error
-                                          : scheme.onSurfaceVariant,
+                                      color: unhealthy ? scheme.error : null,
                                     ),
                               ),
-                          ],
-                        ),
-                      ),
-                      if (unhealthy)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            Icons.error_outline,
-                            size: 18,
-                            color: scheme.error,
+                              if (subtitle.isNotEmpty)
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontSize: 11,
+                                        color: unhealthy
+                                            ? scheme.error
+                                            : scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                            ],
                           ),
                         ),
-                    ],
+                        if (unhealthy)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(
+                              Icons.error_outline,
+                              size: 18,
+                              color: scheme.error,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              Switch(
-                value: s.enabled,
-                onChanged: (_) => widget.state.toggleSource(s.id),
+              Semantics(
+                container: true,
+                label: '启用$name',
+                child: Switch(
+                  value: s.enabled,
+                  onChanged: (_) => widget.state.toggleSource(s.id),
+                ),
               ),
             ],
           ),

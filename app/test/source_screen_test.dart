@@ -175,6 +175,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('源行留白可长按，长源名开关可辨认且只切换对应源：字号 $scale', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final first = _src();
+      final second = _src(
+        name: '提供连载和完结漫画的备用社区源',
+        url: 'https://second.example',
+      );
+      await state.addSourceManual(first);
+      await state.addSourceManual(second);
+      await _show(tester, state);
+
+      final previousDivider = tester.getRect(find.byType(Divider).first);
+      final divider = tester.getRect(find.byType(Divider).last);
+      final title = tester.getRect(find.text(second.name));
+      final subtitle = tester.getRect(find.text(second.url));
+      expect(title.top - previousDivider.bottom, greaterThanOrEqualTo(12));
+      expect(divider.top - subtitle.bottom, greaterThanOrEqualTo(12));
+
+      final toggle = find.byType(Switch).last;
+      final target = tester.getRect(toggle);
+      expect(target.height, greaterThanOrEqualTo(48));
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        expect(tester.getSemantics(toggle).label, '启用${second.name}');
+      } finally {
+        semantics.dispose();
+      }
+      await tester.tapAt(Offset(target.center.dx, target.top + 2));
+      await tester.pumpAndSettle();
+      expect(state.sources.first.enabled, isTrue);
+      expect(state.sources.last.enabled, isFalse);
+
+      await tester.longPressAt(Offset(title.left + 4, divider.top - 3));
+      await tester.pumpAndSettle();
+      expect(find.text('编辑源'), findsOneWidget);
+      expect(find.text('删除源'), findsOneWidget);
+      await tester.tap(find.text('删除源'));
+      await tester.pumpAndSettle();
+      expect(state.sources.single.id, first.id);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('相同错误连续回报会即时更新次数与失效标记，重启后仍保留', (tester) async {
     final source = _src();
     await state.addSourceManual(source);
