@@ -259,6 +259,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _searchField(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final fieldStyle = Theme.of(context).textTheme.bodyMedium;
+    final actionStyle = IconButton.styleFrom(
+      minimumSize: const Size(40, 40),
+      iconSize: 20,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     final surface = scheme.brightness == Brightness.light
         ? scheme.surfaceContainerLowest
         : scheme.surfaceContainerLow;
@@ -268,16 +274,19 @@ class _SearchScreenState extends State<SearchScreen> {
       child: TextField(
         controller: _controller,
         focusNode: _focusNode,
+        style: fieldStyle,
+        textAlignVertical: TextAlignVertical.center,
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => _doSearch(),
         decoration: InputDecoration(
           hintText: '搜索书名、作者…',
+          hintStyle: fieldStyle?.copyWith(color: scheme.onSurfaceVariant),
           isDense: true,
           filled: true,
           fillColor: surface,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
-            vertical: 12,
+            vertical: 10,
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
           enabledBorder: OutlineInputBorder(
@@ -290,7 +299,7 @@ class _SearchScreenState extends State<SearchScreen> {
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: scheme.primary),
           ),
-          suffixIconConstraints: const BoxConstraints(minHeight: 48),
+          suffixIconConstraints: const BoxConstraints(minHeight: 42),
           suffixIcon: Padding(
             padding: const EdgeInsets.only(right: 4),
             child: Row(
@@ -299,6 +308,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 if (_controller.text.isNotEmpty)
                   IconButton(
                     tooltip: '清空输入',
+                    style: actionStyle,
                     icon: const Icon(Icons.close),
                     onPressed: () {
                       _controller.clear();
@@ -307,6 +317,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 IconButton(
                   tooltip: '搜索',
+                  style: actionStyle,
                   icon: const Icon(Icons.search),
                   onPressed: canSearch ? _doSearch : null,
                 ),
