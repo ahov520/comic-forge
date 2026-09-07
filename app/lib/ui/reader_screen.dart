@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +11,7 @@ import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
 import 'reader_chrome.dart';
 import 'reader_image_page.dart';
+import 'reader_network_image.dart';
 import 'skeleton.dart';
 import 'widgets.dart' show EmptyStateView;
 
@@ -275,27 +275,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// 正文渲染：滚动模式 = ListView；翻页模式 = PageView + 三分点区。
   Widget _buildReaderBody(BuildContext context, List<String> urls) {
     _pageCount = urls.length;
-    Widget img(String url, {BoxFit fit = BoxFit.fitWidth}) =>
-        CachedNetworkImage(
-          imageUrl: url,
-          fit: fit,
-          // 防盗链：源 headers + 内容规则尾部 @Header（Referer 等）
-          httpHeaders: {
-            ...widget.runtime.source.headers,
-            ...widget.runtime.imageRequestHeaders,
-          },
-          fadeInDuration: const Duration(milliseconds: 120),
-          placeholder: (_, _) => SizedBox(
-            height: fit == BoxFit.contain ? double.infinity : 240,
-            child: const Center(child: SkeletonBox(height: 220)),
-          ),
-          errorWidget: (_, _, _) => const SizedBox(
-            height: 200,
-            child: Center(
-              child: Text('图片加载失败', style: TextStyle(color: Colors.white38)),
-            ),
-          ),
-        );
+    Widget img(int i, {BoxFit fit = BoxFit.fitWidth}) => ReaderNetworkImage(
+      key: ValueKey('${_chapter.url}:$i:${urls[i]}'),
+      imageUrl: urls[i],
+      pageNumber: i + 1,
+      fit: fit,
+      // 防盗链：源 headers + 内容规则尾部 @Header（Referer 等）
+      headers: {
+        ...widget.runtime.source.headers,
+        ...widget.runtime.imageRequestHeaders,
+      },
+    );
 
     if (!_isPaged) {
       final chapterUrl = _chapter.url;
@@ -331,7 +321,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 });
               }
             }
-            return img(urls[i]);
+            return img(i);
           },
         ),
       );
@@ -373,7 +363,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
               setState(() => _pageZoomed = zoomed);
             }
           },
-          child: Center(child: img(urls[i], fit: BoxFit.contain)),
+          child: Center(child: img(i, fit: BoxFit.contain)),
         );
       },
     );
