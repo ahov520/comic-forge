@@ -67,50 +67,45 @@ class SourceBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final switchable = onTap != null;
-    Widget chip = Material(
-      color: scheme.secondaryContainer,
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text.rich(
-            TextSpan(
+    Widget chip = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Material(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Icon(
-                      Icons.public,
-                      size: 14,
+                Icon(
+                  Icons.public,
+                  size: 14,
+                  color: scheme.onSecondaryContainer,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.labelSmall?.copyWith(
                       color: scheme.onSecondaryContainer,
                     ),
                   ),
                 ),
-                TextSpan(
-                  text: label,
-                  style: textTheme.labelSmall?.copyWith(
+                if (switchable) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.swap_horiz,
+                    size: 14,
                     color: scheme.onSecondaryContainer,
                   ),
-                ),
-                if (switchable)
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Icon(
-                        Icons.swap_horiz,
-                        size: 14,
-                        color: scheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ),
+                ],
               ],
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),

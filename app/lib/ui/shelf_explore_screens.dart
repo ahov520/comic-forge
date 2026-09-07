@@ -289,10 +289,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
     try {
       final page = await future;
       if (!mounted || !identical(_entry, entry)) return;
-      setState(() => _future = Future<Paged<Book>>.value(page));
+      setState(() {
+        _future = Future<Paged<Book>>.value(page);
+      });
     } catch (e) {
       if (!mounted || !identical(_entry, entry)) return;
-      setState(() => _future = Future<Paged<Book>>.error(e));
+      setState(() {
+        _future = Future<Paged<Book>>.error(e);
+      });
     }
   }
 
@@ -304,9 +308,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final entries = source == null
         ? const <(String, String)>[]
         : SourceService.instance.runtimeFor(source).exploreEntries();
-    return SafeArea(
-      bottom: false,
-      child: Column(
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
@@ -411,19 +416,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             Expanded(child: _content(entries)),
           ],
         ],
-      ),
-    );
-  }
-
-  Widget _refreshable({required Key key, required Widget child}) {
-    return RefreshIndicator(
-      key: key,
-      onRefresh: _refreshCurrent,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverFillRemaining(hasScrollBody: false, child: child),
-        ],
+        ),
       ),
     );
   }
@@ -455,28 +448,24 @@ class _ExploreScreenState extends State<ExploreScreen> {
         if (snapshot.connectionState != ConnectionState.done) {
           content = const BookListSkeleton(key: ValueKey('loading'));
         } else if (snapshot.hasError) {
-          content = _refreshable(
+          content = EmptyStateView(
             key: const ValueKey('error'),
-            child: EmptyStateView(
-              icon: Icons.cloud_off_outlined,
-              title: '暂时无法加载漫画',
-              message: '检查网络后重试，或切换上方漫画源。',
-              actionLabel: '重试',
-              onAction: () => _loadEntry(entry),
-            ),
+            icon: Icons.cloud_off_outlined,
+            title: '暂时无法加载漫画',
+            message: '检查网络后重试，或切换上方漫画源。',
+            actionLabel: '重试',
+            onAction: () => _loadEntry(entry),
           );
         } else {
           final books = snapshot.data!.items;
           content = books.isEmpty
-              ? _refreshable(
+              ? EmptyStateView(
                   key: const ValueKey('empty'),
-                  child: EmptyStateView(
-                    icon: Icons.auto_stories_outlined,
-                    title: '这个分类还没有漫画',
-                    message: '试试其他分类，或稍后重新加载。',
-                    actionLabel: '重新加载',
-                    onAction: () => _loadEntry(entry),
-                  ),
+                  icon: Icons.auto_stories_outlined,
+                  title: '这个分类还没有漫画',
+                  message: '试试其他分类，或稍后重新加载。',
+                  actionLabel: '重新加载',
+                  onAction: () => _loadEntry(entry),
                 )
               : RefreshIndicator(
                   key: const ValueKey('results'),
