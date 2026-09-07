@@ -38,6 +38,7 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
   final _keyword = TextEditingController();
 
   // 试跑状态（三级钻取）
+  int _trialRequest = 0;
   bool _trialSearching = false;
   String? _trialError;
   List<Book> _trialResults = const [];
@@ -121,18 +122,27 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
     if (mounted) Navigator.of(context).pop(s);
   }
 
-  ComicSource? _trialSource() {
+  (int, ComicSource)? _beginTrial() {
     final r = _build();
-    if (r is SourceBuildError) {
-      setState(() => _trialError = '表单未通过校验：${r.message}');
-      return null;
-    }
-    return (r as SourceBuilt).source;
+    final request = ++_trialRequest;
+    // 新操作使之前的搜索、目录或取图失效，也清理下游的加载状态。
+    setState(() {
+      _trialSearching = false;
+      _trialDetailLoading = false;
+      _trialImagesLoading = false;
+      _trialError = r is SourceBuildError ? '表单未通过校验：${r.message}' : null;
+    });
+    return r is SourceBuilt ? (request, r.source) : null;
   }
 
+  bool _isCurrentTrial(int request) => mounted && request == _trialRequest;
+
   Future<void> _trialSearch() async {
-    final src = _trialSource();
-    if (src == null || _keyword.text.trim().isEmpty) return;
+    final keyword = _keyword.text.trim();
+    if (keyword.isEmpty) return;
+    final trial = _beginTrial();
+    if (trial == null) return;
+    final (request, src) = trial;
     setState(() {
       _trialSearching = true;
       _trialError = null;
@@ -142,18 +152,21 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
       _trialImages = const [];
     });
     try {
-      final page = await SourceService.instance.runtimeFor(src).search(_keyword.text.trim());
+      final page = await SourceService.instance.runtimeFor(src).search(keyword);
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialResults = page.items.take(20).toList());
     } catch (e) {
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialError = '搜索失败：$e');
     } finally {
-      if (mounted) setState(() => _trialSearching = false);
+      if (_isCurrentTrial(request)) setState(() => _trialSearching = false);
     }
   }
 
   Future<void> _trialDetail(Book b) async {
-    final src = _trialSource();
-    if (src == null) return;
+    final trial = _beginTrial();
+    if (trial == null) return;
+    final (request, src) = trial;
     setState(() {
       _trialBook = b;
       _trialDetailLoading = true;
@@ -164,17 +177,20 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
     try {
       final (_, chapters) =
           await SourceService.instance.runtimeFor(src).detail(b.bookUrl);
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialChapters = chapters.take(30).toList());
     } catch (e) {
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialError = '目录失败：$e');
     } finally {
-      if (mounted) setState(() => _trialDetailLoading = false);
+      if (_isCurrentTrial(request)) setState(() => _trialDetailLoading = false);
     }
   }
 
   Future<void> _loadTrialImages(Chapter c) async {
-    final src = _trialSource();
-    if (src == null) return;
+    final trial = _beginTrial();
+    if (trial == null) return;
+    final (request, src) = trial;
     setState(() {
       _trialImagesLoading = true;
       _trialError = null;
@@ -182,11 +198,13 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
     });
     try {
       final urls = await SourceService.instance.runtimeFor(src).images(c.url);
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialImages = urls);
     } catch (e) {
+      if (!_isCurrentTrial(request)) return;
       setState(() => _trialError = '取图失败：$e');
     } finally {
-      if (mounted) setState(() => _trialImagesLoading = false);
+      if (_isCurrentTrial(request)) setState(() => _trialImagesLoading = false);
     }
   }
 
