@@ -10,6 +10,28 @@ import '../state/clipboard_import.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'source_editor_screen.dart';
+import 'widgets.dart';
+
+/// 仓库 URL → 设计稿短名（`user/repo`）。
+String repoDisplayName(String url) {
+  var s = url.trim();
+  s = s.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+  s = s.replaceFirst(RegExp(r'^www\.'), '');
+  s = s.replaceFirst(RegExp(r'\.git$'), '');
+  final parts = s.split('/').where((e) => e.isNotEmpty).toList();
+  if (parts.length >= 3) return '${parts[1]}/${parts[2]}';
+  if (parts.length == 2) return '${parts[0]}/${parts[1]}';
+  return url;
+}
+
+/// 上次同步文案（对齐 six-screens「上次同步 09-06」）。
+String repoSyncLabel(int? epochMs) {
+  if (epochMs == null || epochMs <= 0) return '尚未检查更新';
+  final d = DateTime.fromMillisecondsSinceEpoch(epochMs);
+  final mm = d.month.toString().padLeft(2, '0');
+  final dd = d.day.toString().padLeft(2, '0');
+  return '上次同步 $mm-$dd';
+}
 
 /// 源管理：订阅仓库 / 手动导入 / 启停。
 class SourceScreen extends StatefulWidget {
@@ -198,6 +220,37 @@ class _SourceScreenState extends State<SourceScreen> {
     );
   }
 
+  Future<void> _onMoreSelected(String v) async {
+    if (v == 'new') {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SourceEditorScreen(state: widget.state),
+      ));
+    } else if (v == 'backup') {
+      _importPipimiaoBackup();
+    } else if (v == 'builtin') {
+      final n = await widget.state.importBuiltinSources();
+      if (mounted) {
+        setState(() => _lastResult =
+            n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
+      }
+    } else if (v == 'probeHealth') {
+      _probeHealth();
+    } else if (v == 'refreshAll') {
+      await _refreshAllRepos();
+    } else if (v == 'disableUnhealthy') {
+      final n = await widget.state.disableUnhealthySources();
+      if (mounted) {
+        setState(() => _lastResult =
+            n > 0 ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）' : '没有连续失败≥3 的源');
+      }
+    } else if (v == 'resetHealth') {
+      final n = await widget.state.resetSourceHealth();
+      if (mounted) {
+        setState(() => _lastResult = '已清除 $n 个源的失败记录');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -205,284 +258,468 @@ class _SourceScreenState extends State<SourceScreen> {
       animation: widget.state,
       builder: (context, _) {
         final pending = widget.state.pendingUpdateCount;
+        final canPop = Navigator.of(context).canPop();
         return Scaffold(
-        appBar: AppBar(
-          title: Text(pending > 0 ? '源（$pending 个仓库待更新）' : '源'),
-          actions: [
-            IconButton(
-              tooltip: '剪贴板导入 JSON',
-              icon: const Icon(Icons.content_paste_go),
-              onPressed: _importFromClipboard,
-            ),
-            IconButton(
-              tooltip: '新建源',
-              icon: const Icon(Icons.add_circle_outline),
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => SourceEditorScreen(state: widget.state),
-              )),
-            ),
-            IconButton(
-              tooltip: '订阅仓库',
-              icon: _subscribing
-                  ? const SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_sync_outlined),
-              onPressed: _subscribing ? null : _subscribeDialog,
-            ),
-            PopupMenuButton<String>(
-              tooltip: '更多',
-              onSelected: (v) async {
-                if (v == 'backup') {
-                  _importPipimiaoBackup();
-                } else if (v == 'builtin') {
-                  final n = await widget.state.importBuiltinSources();
-                  if (mounted) {
-                    setState(() => _lastResult =
-                        n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
-                  }
-                } else if (v == 'probeHealth') {
-                  _probeHealth();
-                } else if (v == 'refreshAll') {
-                  await _refreshAllRepos();
-                } else if (v == 'disableUnhealthy') {
-                  final n = await widget.state.disableUnhealthySources();
-                  if (mounted) {
-                    setState(() => _lastResult =
-                        n > 0 ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）' : '没有连续失败≥3 的源');
-                  }
-                } else if (v == 'resetHealth') {
-                  final n = await widget.state.resetSourceHealth();
-                  if (mounted) {
-                    setState(() => _lastResult = '已清除 $n 个源的失败记录');
-                  }
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'backup',
+          body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _SourceHeader(
+                pending: pending,
+                canPop: canPop,
+                subscribing: _subscribing,
+                probing: _probing,
+                hasRepos: widget.state.repos.isNotEmpty,
+                hasSources: widget.state.sources.isNotEmpty,
+                unhealthyEnabled: widget.state.sources
+                    .where((s) => s.isUnhealthy && s.enabled)
+                    .length,
+                hasUnhealthy: widget.state.sources.any((s) => s.isUnhealthy),
+                onBack: () => Navigator.of(context).pop(),
+                onSubscribe: _subscribing ? null : _subscribeDialog,
+                onMore: _onMoreSelected,
+              ),
+              if (_lastResult != null)
+                Material(
+                  color: scheme.surfaceContainerHighest,
                   child: ListTile(
-                    leading: Icon(Icons.restore_outlined),
-                    title: Text('导入皮皮喵备份'),
-                    subtitle: Text('.pbak · 提取分享源与订阅'),
                     dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'builtin',
-                  child: ListTile(
-                    leading: Icon(Icons.inventory_2_outlined),
-                    title: Text('恢复内置源'),
-                    subtitle: Text('重新导入 APK 内置的 493 条社区源快照'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                if (widget.state.repos.isNotEmpty)
-                  const PopupMenuItem(
-                    value: 'refreshAll',
-                    child: ListTile(
-                      leading: Icon(Icons.cloud_download_outlined),
-                      title: Text('全部检查更新'),
-                      subtitle: Text('逐个拉取订阅仓库，规则有变才更新'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.info_outline),
+                    title: Text(_lastResult!, style: const TextStyle(fontSize: 12)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() => _lastResult = null),
                     ),
                   ),
-                if (widget.state.sources.isNotEmpty)
-                  PopupMenuItem(
-                    value: 'probeHealth',
-                    child: ListTile(
-                      leading: _probing
-                          ? const SizedBox(width: 18, height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.monitor_heart_outlined),
-                      title: const Text('源健康体检'),
-                      subtitle: const Text('真实搜索探测全部启用源（受限并发），失效标红'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'disableUnhealthy',
-                  child: ListTile(
-                    leading: Icon(Icons.block_outlined,
-                        color: widget.state.sources.any((s) => s.isUnhealthy)
-                            ? scheme.error
-                            : null),
-                    title: const Text('禁用失效源'),
-                    subtitle: Text(
-                        '连续失败≥3 的启用源（当前 ${widget.state.sources.where((s) => s.isUnhealthy && s.enabled).length} 个）'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
                 ),
-                const PopupMenuItem(
-                  value: 'resetHealth',
-                  child: ListTile(
-                    leading: Icon(Icons.health_and_safety_outlined),
-                    title: Text('清除失败记录'),
-                    subtitle: Text('重新探活前先重置标红状态'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            if (_lastResult != null)
-              Material(
-                color: scheme.surfaceContainerHighest,
-                child: ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.info_outline),
-                  title: Text(_lastResult!, style: const TextStyle(fontSize: 12)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: () => setState(() => _lastResult = null),
-                  ),
-                ),
-              ),
-            if (widget.state.repos.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('已订阅仓库 (${widget.state.repos.length})',
-                      style: Theme.of(context).textTheme.titleSmall),
-                ),
-              ),
-            if (widget.state.repos.isNotEmpty)
-              ...widget.state.repos.map((r) {
-                final lastAt = widget.state.repoLastRefresh[r];
-                final last = lastAt == null
-                    ? '尚未检查更新'
-                    : '上次更新: ${DateTime.fromMillisecondsSinceEpoch(lastAt).toString().substring(0, 16)}';
-                final u = widget.state.repoUpdates[r];
-                final hasPending = u?.hasPending ?? false;
-                final pendingText = hasPending
-                    ? (u!.lastRuleVersion >= 0
-                        ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
-                        : ' · 有新版本 v${u.pendingVersion}')
-                    : '';
-                return ListTile(
-                  dense: true,
-                  leading: Icon(
-                    Icons.link,
-                    color: hasPending ? scheme.primary : null,
-                  ),
-                  title: Text(r, style: const TextStyle(fontSize: 13)),
-                  subtitle: Text('$last$pendingText',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: hasPending
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant)),
-                  trailing: _refreshingRepo == r || _refreshingRepo == '*'
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : hasPending
-                          ? IconButton(
-                              tooltip: '应用更新（v${u!.pendingVersion}）',
-                              icon: Icon(Icons.new_releases,
-                                  size: 20, color: scheme.primary),
-                              onPressed: () => _refreshRepo(r),
-                            )
-                          : IconButton(
-                              tooltip: '检查更新',
-                              icon: const Icon(Icons.sync, size: 20),
-                              onPressed: () => _refreshRepo(r),
-                            ),
-                );
-              }),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('源 (${widget.state.sources.length})',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ),
-            ),
-            Expanded(
-              child: widget.state.sources.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.source_outlined,
-                              size: 64, color: scheme.onSurfaceVariant),
-                          const SizedBox(height: 12),
-                          const Text('还没有源'),
-                          const SizedBox(height: 4),
-                          const Text('点右上角订阅一个仓库',
-                              style: TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: widget.state.sources.length,
-                      itemBuilder: (context, i) {
-                        final s = widget.state.sources[i];
-                        final unhealthy = s.isUnhealthy;
-                        final recentlyFailed =
-                            s.failCount > 0 && s.lastError.isNotEmpty;
-                        final subtitle = [
-                          if (s.group.isNotEmpty) s.group,
-                          s.url,
-                          if (recentlyFailed)
-                            '最近失败(${s.failCount}): ${s.lastError}',
-                        ]
-                            .where((e) => e.isNotEmpty)
-                            .join(' · ');
-                        return ListTile(
-                          leading: Icon(
-                            Icons.book_outlined,
-                            color: unhealthy
-                                ? scheme.error
-                                : (recentlyFailed ? scheme.secondary : null),
-                          ),
-                          title: Text(s.name.isEmpty ? s.id : s.name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: unhealthy
-                                  ? TextStyle(color: scheme.error)
-                                  : null),
-                          subtitle: Text(
-                            subtitle,
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: unhealthy
-                                ? TextStyle(color: scheme.error)
-                                : null,
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (unhealthy)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: Icon(Icons.error_outline,
-                                      size: 18, color: scheme.error),
-                                ),
-                              Switch(
-                                value: s.enabled,
-                                onChanged: (_) =>
-                                    widget.state.toggleSource(s.id),
-                              ),
-                            ],
-                          ),
-                          onLongPress: () => _showSourceActions(s),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+              Expanded(child: _body(scheme)),
+            ],
+          ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _body(ColorScheme scheme) {
+    final repos = widget.state.repos;
+    final sources = widget.state.sources;
+    final empty = repos.isEmpty && sources.isEmpty;
+    return Column(
+      children: [
+        Expanded(
+          child: empty
+              ? EmptyStateView(
+                  icon: Icons.source_outlined,
+                  title: '还没有源',
+                  message: '订阅一个仓库，或粘贴导入单个源 JSON，开始聚合漫画。',
+                  actionLabel: '订阅仓库',
+                  onAction: _subscribing ? null : _subscribeDialog,
+                )
+              : CustomScrollView(
+                  slivers: [
+                    if (repos.isNotEmpty) ...[
+                      const SliverToBoxAdapter(
+                        child: _SectionLabel('已订阅仓库'),
+                      ),
+                      SliverList.builder(
+                        itemCount: repos.length,
+                        itemBuilder: (context, i) => _repoCard(repos[i], scheme),
+                      ),
+                    ],
+                    SliverToBoxAdapter(
+                      child: _SectionLabel(sources.isEmpty ? '源' : '源（${sources.length}）'),
+                    ),
+                    if (sources.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateView(
+                          icon: Icons.source_outlined,
+                          title: '仓库里还没有源',
+                          message: '检查仓库更新，或粘贴导入单个源 JSON。',
+                          actionLabel: '检查更新',
+                          onAction: _refreshingRepo != null
+                              ? null
+                              : _refreshAllRepos,
+                        ),
+                      )
+                    else
+                      SliverList.builder(
+                        itemCount: sources.length,
+                        itemBuilder: (context, i) =>
+                            _sourceRow(sources[i], scheme),
+                      ),
+                    if (sources.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                          child: Text(
+                            '长按删除 · 开关控制聚合范围',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonal(
+              onPressed: _importFromClipboard,
+              child: const Text('粘贴导入单个源 JSON'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _repoCard(String repo, ColorScheme scheme) {
+    final lastAt = widget.state.repoLastRefresh[repo];
+    final u = widget.state.repoUpdates[repo];
+    final hasPending = u?.hasPending ?? false;
+    final pendingText = hasPending
+        ? (u!.lastRuleVersion >= 0
+            ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
+            : ' · 有新版本 v${u.pendingVersion}')
+        : '';
+    final refreshing = _refreshingRepo == repo || _refreshingRepo == '*';
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      color: scheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    repoDisplayName(repo),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${repoSyncLabel(lastAt)}$pendingText',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: hasPending
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            refreshing
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: hasPending
+                        ? '应用更新（v${u!.pendingVersion}）'
+                        : '检查更新',
+                    icon: Icon(
+                      hasPending ? Icons.new_releases : Icons.sync,
+                      color: hasPending ? scheme.primary : scheme.primary,
+                    ),
+                    onPressed: () => _refreshRepo(repo),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sourceRow(ComicSource s, ColorScheme scheme) {
+    final unhealthy = s.isUnhealthy;
+    final recentlyFailed = s.failCount > 0 && s.lastError.isNotEmpty;
+    final subtitle = [
+      if (s.group.isNotEmpty) s.group,
+      s.url,
+      if (recentlyFailed) '最近失败(${s.failCount}): ${s.lastError}',
+    ].where((e) => e.isNotEmpty).join(' · ');
+    final name = s.name.isEmpty ? s.id : s.name;
+    final iconColor = unhealthy
+        ? scheme.error
+        : (recentlyFailed ? scheme.secondary : scheme.onSurfaceVariant);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onLongPress: () => _showSourceActions(s),
+                  child: Row(
+                    children: [
+                      Icon(Icons.grid_view_outlined, color: iconColor),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
+                                    color: unhealthy ? scheme.error : null,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            if (subtitle.isNotEmpty)
+                              Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: unhealthy
+                                          ? scheme.error
+                                          : scheme.onSurfaceVariant,
+                                    ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (unhealthy)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Icon(Icons.error_outline,
+                              size: 18, color: scheme.error),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Switch(
+                value: s.enabled,
+                onChanged: (_) => widget.state.toggleSource(s.id),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 1, indent: 48, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      ],
+    );
+  }
+}
+
+/// 大标题「源」+「＋ 订阅仓库」，对齐 six-screens ⑤。
+class _SourceHeader extends StatelessWidget {
+  const _SourceHeader({
+    required this.pending,
+    required this.canPop,
+    required this.subscribing,
+    required this.probing,
+    required this.hasRepos,
+    required this.hasSources,
+    required this.unhealthyEnabled,
+    required this.hasUnhealthy,
+    required this.onBack,
+    required this.onSubscribe,
+    required this.onMore,
+  });
+
+  final int pending;
+  final bool canPop;
+  final bool subscribing;
+  final bool probing;
+  final bool hasRepos;
+  final bool hasSources;
+  final int unhealthyEnabled;
+  final bool hasUnhealthy;
+  final VoidCallback onBack;
+  final VoidCallback? onSubscribe;
+  final Future<void> Function(String value) onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 4, 0),
+      child: Row(
+        children: [
+          if (canPop)
+            IconButton(
+              tooltip: '返回',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: onBack,
+            )
+          else
+            const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(left: canPop ? 0 : 8),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '源',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    if (pending > 0)
+                      TextSpan(
+                        text: '  $pending 个仓库待更新',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onSubscribe,
+            child: subscribing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    '＋ 订阅仓库',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary,
+                    ),
+                  ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: '更多',
+            onSelected: onMore,
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'new',
+                child: ListTile(
+                  leading: Icon(Icons.add_circle_outline),
+                  title: Text('新建源'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'backup',
+                child: ListTile(
+                  leading: Icon(Icons.restore_outlined),
+                  title: Text('导入皮皮喵备份'),
+                  subtitle: Text('.pbak · 提取分享源与订阅'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'builtin',
+                child: ListTile(
+                  leading: Icon(Icons.inventory_2_outlined),
+                  title: Text('恢复内置源'),
+                  subtitle: Text('重新导入 APK 内置的 493 条社区源快照'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              if (hasRepos)
+                const PopupMenuItem(
+                  value: 'refreshAll',
+                  child: ListTile(
+                    leading: Icon(Icons.cloud_download_outlined),
+                    title: Text('全部检查更新'),
+                    subtitle: Text('逐个拉取订阅仓库，规则有变才更新'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              if (hasSources)
+                PopupMenuItem(
+                  value: 'probeHealth',
+                  child: ListTile(
+                    leading: probing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.monitor_heart_outlined),
+                    title: const Text('源健康体检'),
+                    subtitle: const Text('真实搜索探测全部启用源（受限并发），失效标红'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'disableUnhealthy',
+                child: ListTile(
+                  leading: Icon(
+                    Icons.block_outlined,
+                    color: hasUnhealthy ? scheme.error : null,
+                  ),
+                  title: const Text('禁用失效源'),
+                  subtitle: Text(
+                    '连续失败≥3 的启用源（当前 $unhealthyEnabled 个）',
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'resetHealth',
+                child: ListTile(
+                  leading: Icon(Icons.health_and_safety_outlined),
+                  title: Text('清除失败记录'),
+                  subtitle: Text('重新探活前先重置标红状态'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
     );
   }
 }
