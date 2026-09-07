@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 
 /// 阅读器工具栏渐变遮罩：顶/底黑→透明渐变，保证白字工具栏在浅色漫画上可读。
@@ -212,6 +213,75 @@ class ReaderBottomChrome extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 阅读器目录：深色列表，当前话高亮。
+class ReaderCatalogSheet extends StatelessWidget {
+  const ReaderCatalogSheet({
+    super.key,
+    required this.chapters,
+    required this.currentIndex,
+    required this.onPick,
+  });
+
+  final List<Chapter> chapters;
+  final int currentIndex;
+  final ValueChanged<int> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF161619),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '目录 · ${chapters.length} 话',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: chapters.length,
+              itemBuilder: (context, i) {
+                final current = i == currentIndex;
+                return ListTile(
+                  dense: true,
+                  selected: current,
+                  selectedTileColor: const Color(0x3322C55E),
+                  leading: Text(
+                    '${i + 1}',
+                    style: TextStyle(
+                      color: current ? Colors.white : Colors.white54,
+                      fontWeight: current ? FontWeight.w700 : null,
+                    ),
+                  ),
+                  title: Text(
+                    chapters[i].title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: current ? Colors.white : Colors.white70,
+                      fontWeight: current ? FontWeight.w600 : null,
+                    ),
+                  ),
+                  onTap: () => onPick(i),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,6 +81,29 @@ void main() {
     await tester.tap(find.text('下一话'));
     await tester.pump();
     expect(next, 1);
+  });
+
+  testWidgets('目录表点选当前之外的话', (tester) async {
+    var picked = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReaderCatalogSheet(
+            chapters: [
+              Chapter(title: '第1话', url: '/c1'),
+              Chapter(title: '第2话', url: '/c2'),
+              Chapter(title: '第3话', url: '/c3'),
+            ],
+            currentIndex: 0,
+            onPick: (i) => picked = i,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('目录 · 3 话'), findsOneWidget);
+    expect(find.text('第1话'), findsOneWidget);
+    await tester.tap(find.text('第3话'));
+    expect(picked, 2);
   });
 
   testWidgets('可见时渲染顶/底渐变遮罩（IgnorePointer 不拦点击）', (tester) async {
