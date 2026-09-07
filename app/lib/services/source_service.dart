@@ -1,11 +1,19 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import 'package:engine/engine.dart';
 
 import 'js_hook.dart';
+
+class _SwitchScan {
+  const _SwitchScan(this.sources, this.result);
+
+  final List<ComicSource> sources;
+  final Future<List<(ComicSource, Book)>> result;
+}
 
 /// 源运行时缓存与全局抓取器。
 class SourceService {
@@ -29,9 +37,8 @@ class SourceService {
   /// 广告拦截规则（AppState 载入/设置时同步；null = 不过滤）。
   AdBlockRules? adBlock;
 
-  /// 换源预扫缓存（key = `源id|书名`，存 Future 使并发调用共享同一飞行）：
-  /// 详情页后台扫描一次，角标与换源面板复用，避免重复网络请求。会话级。
-  final Map<String, Future<List<(ComicSource, Book)>>> _switchCache = {};
+  /// 按当前源与书名缓存换源扫描；同一组候选源的角标与面板共享请求。
+  final Map<(String?, String), _SwitchScan> _switchCache = {};
 
   /// 扫描其它启用源中的同名书（限 [maxSources]、并发 6、单源 8s 超时）。
   /// 命中优先精确同名；缓存/在途直接复用（不重复发请求）。
@@ -41,27 +48,27 @@ class SourceService {
     int maxSources = 12,
     bool useCache = true,
   }) {
-    final key = '${book.sourceId}|${book.name.trim()}';
-    if (useCache && _switchCache.containsKey(key)) {
-      return _switchCache[key]!;
-    }
-    final fut = _scanSwitch(book, allSources, maxSources);
-    _switchCache[key] = fut;
-    return fut;
-  }
-
-  Future<List<(ComicSource, Book)>> _scanSwitch(
-    Book book,
-    List<ComicSource> allSources,
-    int maxSources,
-  ) async {
     final others = allSources
         .where((s) =>
             s.enabled &&
             s.id != book.sourceId &&
             s.rules.searchUrl.isNotEmpty)
         .take(maxSources)
-        .toList();
+        .toList(growable: false);
+    final key = (book.sourceId, book.name.trim());
+    final cached = _switchCache[key];
+    if (useCache && cached != null && listEquals(cached.sources, others)) {
+      return cached.result;
+    }
+    final fut = _scanSwitch(book, others);
+    _switchCache[key] = _SwitchScan(others, fut);
+    return fut;
+  }
+
+  Future<List<(ComicSource, Book)>> _scanSwitch(
+    Book book,
+    List<ComicSource> others,
+  ) async {
     final results = <(ComicSource, Book)>[];
     Future<void> probe(ComicSource s) async {
       try {

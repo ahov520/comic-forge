@@ -1,89 +1,153 @@
-import 'dart:convert';
+import 'dart:async';
 
+import 'package:comic_forge/services/source_service.dart';
+import 'package:engine/engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:engine/engine.dart';
-import 'package:comic_forge/services/source_service.dart';
+import 'support/fake_fetcher.dart';
 
-class FakeFetcher implements Fetcher {
-  FakeFetcher(this.routes);
-  final Map<String, String> routes;
-  int hits = 0;
+const _page =
+    '<div class="item"><a class="t" href="/c/1">同名书</a></div>'
+    '<div class="item"><a class="t" href="/c/2">别的书</a></div>';
 
-  @override
-  Future<String> getString(String url,
-      {Map<String, String>? headers, String? charset}) async {
-    final hit = routes[url] ?? routes[url.split('?').first];
-    if (hit == null) throw FetchException('no route for $url');
-    return hit;
-  }
-
-  @override
-  Future<List<int>> getBytes(String url, {Map<String, String>? headers}) async =>
-      utf8.encode(await getString(url, headers: headers));
-
-  @override
-  Future<List<int>> send(SourceRequest request,
-      {Map<String, String>? headers}) async {
-    return utf8.encode(await getString(request.url, headers: request.headers));
-  }
-}
-
-const _page = '''
-<html><body>
-<div class="item"><a class="t" href="/c/1">同名书</a><span class="a">作者甲</span></div>
-<div class="item"><a class="t" href="/c/2">别的书</a></div>
-</body></html>
-''';
-
-ComicSource _src(String id, String host) => ComicSource.fromPpcatFlat({
-      'bookSourceName': '源$id',
-      'bookSourceUrl': 'https://$host',
-      'ruleSearchUrl': '/search?q=searchKey',
-      'ruleSearchList': 'class.item',
-      'ruleSearchName': 'class.t@text',
-    });
+ComicSource _source(String id) => ComicSource.fromJson({
+  'id': id,
+  'name': '源$id',
+  'url': 'https://$id.example',
+  'rules': {
+    'searchUrl': '/search',
+    'searchList': '.item',
+    'searchName': '.t@text',
+    'searchBookUrl': '.t@href',
+  },
+});
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late SourceService service;
+  late List<ComicSource> sources;
+  late Book book;
+  late FakeFetcher fetcher;
+  late FutureOr<String> Function(Uri uri) respond;
 
-  test('scanSwitchTargets：同名优先命中 + 缓存共享飞行（二次不发请求）', () async {
-    final svc = SourceService.instance;
-    svc.debugClearSwitchCache();
-    svc.debugRuntimeOverride = null;
+  setUp(() {
+    service = SourceService.instance;
+    sources = [_source('current'), _source('first'), _source('second')];
+    book = Book(name: '同名书', sourceId: 'current', bookUrl: '/book');
+    respond = (_) => _page;
+    fetcher = FakeFetcher((uri) => respond(uri));
+    service.debugClearSwitchCache();
+    service.debugRuntimeOverride = (source) =>
+        SourceRuntime(source: source, fetcher: fetcher);
+  });
+  tearDown(() {
+    service.debugRuntimeOverride = null;
+    service.debugClearSwitchCache();
+  });
 
-    final current = _src('cur', 'cur.example.com');
-    final others = [
-      _src('b1', 'b1.example.com'),
-      _src('b2', 'b2.example.com'),
-    ];
-    final fetcher = FakeFetcher({
-      'https://b1.example.com/search?q=%E5%90%8C%E5%90%8D%E4%B9%A6': _page,
-      'https://b2.example.com/search?q=%E5%90%8C%E5%90%8D%E4%B9%A6': _page,
-    });
-    // 注入 fetcher（b1/b2 运行时走它）
-    final rts = <String, SourceRuntime>{};
-    for (final s in [current, ...others]) {
-      rts[s.id] = SourceRuntime(source: s, fetcher: fetcher);
+  test('换源优先同名书，同一候选范围并发与后续调用共享请求', () async {
+    final pending = service.scanSwitchTargets(book: book, allSources: sources);
+    final concurrent = service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+    );
+    final results = await Future.wait([pending, concurrent]);
+    for (final result in results) {
+      expect(
+        result.map((entry) => entry.$1.id),
+        unorderedEquals(['first', 'second']),
+      );
+      expect(result.every((entry) => entry.$2.name == '同名书'), isTrue);
     }
-    // runtimeFor 的运行时来自 SourceService 单例——用 debugRuntimeFor 覆盖
-    svc.debugRuntimeOverride = (s) => rts[s.id]!;
+    expect(fetcher.requests, hasLength(2));
+    sources[1].failCount = 2;
+    sources[2].weight = 10;
+    await service.scanSwitchTargets(book: book, allSources: sources);
+    expect(fetcher.requests, hasLength(2), reason: '健康、权重变化不重复扫描');
+  });
 
-    final book =
-        Book(name: '同名书', bookUrl: 'https://cur.example.com/b/1', sourceId: current.id);
-    final all = [current, ...others];
+  test('禁用、删除与新增源后重新扫描只返回当前可用候选', () async {
+    await service.scanSwitchTargets(book: book, allSources: sources);
+    sources[1].enabled = false;
+    final enabled = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+    );
+    expect(enabled.map((entry) => entry.$1.id), ['second']);
 
-    final r1 = await svc.scanSwitchTargets(book: book, allSources: all);
-    expect(r1, hasLength(2), reason: '两个源都命中');
-    expect(r1.first.$2.name, '同名书', reason: '同名优先');
+    sources.removeLast();
+    final requests = fetcher.requests.length;
+    expect(
+      await service.scanSwitchTargets(book: book, allSources: sources),
+      isEmpty,
+    );
+    expect(fetcher.requests, hasLength(requests));
+    sources.add(_source('third'));
+    final added = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+    );
+    expect(added.map((entry) => entry.$1.id), ['third']);
+  });
 
-    final hitsAfterFirst = fetcher.hits;
-    final r2 = await svc.scanSwitchTargets(book: book, allSources: all);
-    expect(r2, hasLength(2));
-    expect(fetcher.hits, hitsAfterFirst, reason: '缓存命中不应再发请求');
+  test('修改候选源后丢弃旧候选缓存并使用新地址', () async {
+    await service.scanSwitchTargets(book: book, allSources: sources);
+    sources[2] = ComicSource.fromJson({
+      ...sources[2].toJson(),
+      'url': 'https://edited.example',
+    });
+    final result = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+    );
+    final edited = result.singleWhere((entry) => entry.$1.id == 'second');
+    expect(edited.$2.bookUrl, 'https://edited.example/c/1');
+  });
 
-    svc.debugRuntimeOverride = null;
-    svc.debugClearSwitchCache();
-    svc.debugRuntimeOverride = null;
+  test('不同扫描上限分别返回对应范围，再次扫描相同范围复用请求', () async {
+    final limited = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+      maxSources: 1,
+    );
+    expect(limited.map((entry) => entry.$1.id), ['first']);
+    final expanded = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+      maxSources: 2,
+    );
+    expect(
+      expanded.map((entry) => entry.$1.id),
+      unorderedEquals(['first', 'second']),
+    );
+    final count = fetcher.requests.length;
+    await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+      maxSources: 2,
+    );
+    expect(fetcher.requests, hasLength(count));
+  });
+
+  test('旧范围的在途扫描晚到不会覆盖当前候选缓存', () async {
+    final response = Completer<String>();
+    respond = (uri) => uri.host == 'first.example' ? response.future : _page;
+    final old = service.scanSwitchTargets(
+      book: book,
+      allSources: sources.take(2).toList(),
+    );
+    final current = service.scanSwitchTargets(
+      book: book,
+      allSources: [sources[0], sources[2]],
+    );
+    response.complete(_page);
+    expect((await current).single.$1.id, 'second');
+    expect((await old).single.$1.id, 'first');
+    final result = await service.scanSwitchTargets(
+      book: book,
+      allSources: [sources[0], sources[2]],
+    );
+    expect(result.single.$1.id, 'second');
+    expect(fetcher.requests, hasLength(2));
   });
 }
