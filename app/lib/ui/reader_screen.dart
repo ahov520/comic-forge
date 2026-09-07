@@ -226,6 +226,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         child: ListView.builder(
           controller: _scrollController,
           key: PageStorageKey<String>(_chapter.url),
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top,
+            bottom: 64 + MediaQuery.paddingOf(context).bottom,
+          ),
           itemCount: urls.length,
           itemBuilder: (context, i) {
             // 首帧后恢复持久化的滚动位置（跨重启记忆，每章一次）
@@ -318,11 +322,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  String get _chromeTitle =>
-      '${widget.runtime.source.name} · ${widget.book.name} · ${_chapter.title}';
+  String get _chromeTitle => '${widget.book.name} · ${_chapter.title}';
 
   @override
   Widget build(BuildContext context) {
+    return Theme(
+      data: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF169876),
+          brightness: Brightness.dark,
+        ),
+      ),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: const Color(0xFF161619),
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarContrastEnforced: false,
+        ),
+        child: Builder(builder: _buildReader),
+      ),
+    );
+  }
+
+  Widget _buildReader(BuildContext context) {
     final brightness = widget.appState?.readerBrightness ?? 1.0;
     return Scaffold(
       backgroundColor: const Color(0xFF0C0C0E),
@@ -388,7 +413,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ),
               Positioned(
-                top: pad.top + 8,
+                top: pad.top,
                 left: 12,
                 right: 12,
                 child: ReaderTopChrome(
@@ -401,9 +426,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
               if (showBottom)
                 Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: pad.bottom + 12,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   child: ReaderBottomChrome(
                     visible: _chromeVisible,
                     progressLabel: '${_index + 1}/${widget.chapters.length}',
@@ -450,7 +475,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (appState == null) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: const Color(0xFF161619),
       builder: (sheetCtx) => AnimatedBuilder(
         animation: appState,
         builder: (context, _) => Padding(

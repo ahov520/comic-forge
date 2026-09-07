@@ -73,7 +73,6 @@ void main() {
     expect(find.text('下一话'), findsOneWidget);
     expect(find.text('亮度'), findsOneWidget);
     expect(find.text('1/12'), findsOneWidget);
-    expect(find.byType(BackdropFilter), findsOneWidget);
 
     await tester.tap(find.text('上一话'));
     await tester.pump();
@@ -104,6 +103,66 @@ void main() {
     expect(find.text('第1话'), findsOneWidget);
     await tester.tap(find.text('第3话'));
     expect(picked, 2);
+  });
+
+  testWidgets('窄屏大字号底栏避开安全区，隐藏后点击穿透', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var catalog = 0;
+    var brightness = 0;
+    var pageTaps = 0;
+
+    Widget reader({required bool visible}) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          padding: const EdgeInsets.only(bottom: 24),
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => pageTaps++,
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ReaderBottomChrome(
+                visible: visible,
+                progressLabel: '1044/1300',
+                canPrev: false,
+                canNext: false,
+                onCatalog: () => catalog++,
+                onBrightness: () => brightness++,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(reader(visible: true));
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.tap(find.text('亮度'));
+    expect(catalog, 1);
+    expect(brightness, 1);
+    expect(tester.getRect(find.text('亮度')).bottom, lessThanOrEqualTo(616));
+    expect(tester.takeException(), isNull);
+
+    final catalogPosition = tester.getCenter(find.byIcon(Icons.menu));
+    await tester.pumpWidget(reader(visible: false));
+    await tester.pumpAndSettle();
+    await tester.tapAt(catalogPosition);
+    expect(catalog, 1);
+    expect(pageTaps, 1);
   });
 
   testWidgets('可见时渲染顶/底渐变遮罩（IgnorePointer 不拦点击）', (tester) async {

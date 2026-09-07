@@ -64,7 +64,7 @@ class ReaderFrostedBar extends StatelessWidget {
     super.key,
     required this.child,
     this.borderRadius = 12,
-    this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   });
 
   final Widget child;
@@ -79,7 +79,7 @@ class ReaderFrostedBar extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0x8C2A2B33),
+            color: const Color(0x8C0E171E),
             borderRadius: BorderRadius.circular(borderRadius),
           ),
           child: Padding(padding: padding, child: child),
@@ -94,7 +94,7 @@ Duration _chromeAnim(BuildContext context) =>
     ? Duration.zero
     : const Duration(milliseconds: 200);
 
-/// 顶栏：关闭 · 源/书名/章节 · 更多。隐藏时不拦截点击。
+/// 顶栏：关闭 · 书名/章节 · 更多。隐藏时不拦截点击。
 class ReaderTopChrome extends StatelessWidget {
   const ReaderTopChrome({
     super.key,
@@ -121,29 +121,44 @@ class ReaderTopChrome extends StatelessWidget {
             children: [
               IconButton(
                 tooltip: '关闭',
-                color: Colors.white,
-                visualDensity: VisualDensity.compact,
+                color: const Color(0xFFEEEEEE),
+                iconSize: 18,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                style: IconButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: onClose ?? () => Navigator.of(context).maybePop(),
                 icon: const Icon(Icons.close),
               ),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                child: Tooltip(
+                  message: title,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFEEEEEE),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 10),
               IconButton(
                 tooltip: '阅读设置',
-                color: Colors.white,
-                visualDensity: VisualDensity.compact,
+                color: const Color(0xFFEEEEEE),
+                iconSize: 18,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                style: IconButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: onMore,
-                icon: const Icon(Icons.more_horiz),
+                icon: const Icon(Icons.more_vert),
               ),
             ],
           ),
@@ -183,34 +198,42 @@ class ReaderBottomChrome extends StatelessWidget {
       duration: _chromeAnim(context),
       child: IgnorePointer(
         ignoring: !visible,
-        child: ReaderFrostedBar(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.chevron_left,
-                label: '上一话',
-                enabled: canPrev,
-                onTap: onPrev,
+        child: Material(
+          color: const Color(0xFF161619),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFF2A2A30))),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.chevron_left,
+                    label: '上一话',
+                    enabled: canPrev,
+                    onTap: onPrev,
+                  ),
+                  _NavItem(
+                    icon: Icons.menu,
+                    label: progressLabel,
+                    enabled: onCatalog != null,
+                    onTap: onCatalog,
+                  ),
+                  _NavItem(
+                    icon: Icons.wb_sunny_outlined,
+                    label: '亮度',
+                    onTap: onBrightness,
+                  ),
+                  _NavItem(
+                    icon: Icons.chevron_right,
+                    label: '下一话',
+                    enabled: canNext,
+                    onTap: onNext,
+                  ),
+                ],
               ),
-              _NavItem(
-                icon: Icons.menu,
-                label: progressLabel,
-                enabled: onCatalog != null,
-                onTap: onCatalog,
-              ),
-              _NavItem(
-                icon: Icons.wb_sunny_outlined,
-                label: '亮度',
-                onTap: onBrightness,
-              ),
-              _NavItem(
-                icon: Icons.chevron_right,
-                label: '下一话',
-                enabled: canNext,
-                onTap: onNext,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -302,29 +325,33 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? Colors.white : Colors.white38;
+    final canTap = enabled && onTap != null;
+    final color = canTap ? const Color(0xFF888888) : Colors.white24;
     return Expanded(
       child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
+        onTap: canTap ? onTap : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
