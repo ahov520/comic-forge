@@ -281,10 +281,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
       final result = await SourceService.instance
           .runtimeFor(source)
           .explore(url, page: page, nextUrl: nextUrl);
-      await state.reportSourceHealth([source.id], const {});
+      await state.reportSourceHealth(
+        [source.id],
+        const {},
+        observedSources: [source],
+      );
       return result;
     } catch (e) {
-      await state.reportSourceHealth(const [], {source.id: e.toString()});
+      await state.reportSourceHealth(
+        const [],
+        {source.id: e.toString()},
+        observedSources: [source],
+      );
       rethrow;
     }
   }

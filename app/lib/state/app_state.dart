@@ -583,7 +583,7 @@ class AppState extends ChangeNotifier {
         }
       }));
     }
-    await reportSourceHealth(okIds, errors);
+    await reportSourceHealth(okIds, errors, observedSources: targets);
   }
 
   /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
@@ -619,7 +619,7 @@ class AppState extends ChangeNotifier {
     for (var i = 0; i < targets.length; i += concurrency) {
       await Future.wait(targets.skip(i).take(concurrency).map(probeOne));
     }
-    await reportSourceHealth(okIds, errors);
+    await reportSourceHealth(okIds, errors, observedSources: targets);
     return (okIds.length, targets.length);
   }
 
@@ -667,12 +667,23 @@ class AppState extends ChangeNotifier {
 
   /// 批量回报源健康：[okIds] 本轮成功的源；[errors] 失败 {源id: 错误摘要}。
   /// 成功清零连续失败计数；失败累加并记原因/时间。一次持久化 + 一次通知。
+  /// [observedSources] 是发起请求时的源对象，规则更新后忽略旧定义的回报。
   Future<void> reportSourceHealth(
-      Iterable<String> okIds, Map<String, String> errors) async {
+    Iterable<String> okIds,
+    Map<String, String> errors, {
+    Iterable<ComicSource>? observedSources,
+  }) async {
+    final observed = observedSources == null
+        ? null
+        : {for (final source in observedSources) source.id: source};
+    ComicSource? current(String id) {
+      final source = _find(id);
+      return observed == null || identical(source, observed[id]) ? source : null;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     var changed = false;
     for (final id in okIds) {
-      final s = _find(id);
+      final s = current(id);
       if (s == null) continue;
       if (s.failCount != 0 || s.lastError.isNotEmpty || s.lastOkAt != now) {
         changed = true;
@@ -682,7 +693,7 @@ class AppState extends ChangeNotifier {
       s.lastOkAt = now;
     }
     errors.forEach((id, err) {
-      final s = _find(id);
+      final s = current(id);
       if (s == null) return;
       final msg = err.length > 120 ? err.substring(0, 120) : err;
       // 即使错误文案相同，连续失败次数和探测时间也需要落盘并刷新界面。

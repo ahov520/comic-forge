@@ -134,7 +134,7 @@ class _SearchScreenState extends State<SearchScreen> {
       }),
     );
     // 健康回报：成功清零失败计数，失败累加（源页据此标红/一键禁用失效源）。
-    await state.reportSourceHealth(okIds, errors);
+    await state.reportSourceHealth(okIds, errors, observedSources: enabled);
     if (_isCurrentSearch(generation)) setState(() => _searching = false);
   }
 
