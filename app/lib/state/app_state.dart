@@ -9,6 +9,7 @@ import 'package:engine/engine.dart';
 import 'source_update.dart';
 import '../services/source_service.dart';
 import 'safe_prefs.dart';
+import 'scroll_restore.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -120,7 +121,7 @@ class AppState extends ChangeNotifier {
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
   /// 章内滚动位置（key=章节 url；LRU 上限 200 条，跨重启记忆）。
-  final Map<String, ({double offset, int at})> scrollOffsets = {};
+  final Map<String, SavedScrollPosition> scrollOffsets = {};
   // 按最近保存顺序记住至多 200 话的翻页位置，与滚动偏移分别保留。
   final Map<String, int> _readerPages = {};
   int _lastAutoProbeAt = 0;
@@ -174,17 +175,34 @@ class AppState extends ChangeNotifier {
             .map((k, v) => MapEntry(k, v.toString()));
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
+    scrollOffsets.clear();
     final offs = sp.getString(_kScrollOffsets);
     if (offs != null) {
       try {
-        (jsonDecode(offs) as Map<String, dynamic>).forEach((k, v) {
-          if (v is Map<String, dynamic> && v['v'] is num && v['at'] is int) {
+        final saved = jsonDecode(offs);
+        if (saved is Map<String, dynamic>) {
+          saved.forEach((k, v) {
+            if (v is! Map<String, dynamic> ||
+                v['v'] is! num ||
+                v['at'] is! int) {
+              return;
+            }
+            final offset = (v['v'] as num).toDouble();
+            if (!offset.isFinite || offset < 0) return;
+            final width = v['w'];
+            final top = v['top'];
             scrollOffsets[k] = (
-              offset: (v['v'] as num).toDouble(),
+              offset: offset,
               at: v['at'] as int,
+              width: width is num && width.isFinite && width > 0
+                  ? width.toDouble()
+                  : null,
+              topInset: top is num && top.isFinite && top >= 0
+                  ? top.toDouble()
+                  : 0,
             );
-          }
-        });
+          });
+        }
       } on FormatException {
         scrollOffsets.clear();
       }
@@ -266,11 +284,20 @@ class AppState extends ChangeNotifier {
   ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
 
   /// 记录章内滚动位置（LRU 上限 200；节流由调用方负责）。
-  Future<void> saveScrollOffset(String chapterUrl, double offset) async {
-    if (chapterUrl.isEmpty) return;
+  Future<void> saveScrollOffset(
+    String chapterUrl,
+    double offset, {
+    double? viewportWidth,
+    double topInset = 0,
+  }) async {
+    if (chapterUrl.isEmpty || !offset.isFinite) return;
     scrollOffsets[chapterUrl] = (
-      offset: offset,
+      offset: offset < 0 ? 0 : offset,
       at: DateTime.now().millisecondsSinceEpoch,
+      width: viewportWidth != null && viewportWidth.isFinite && viewportWidth > 0
+          ? viewportWidth
+          : null,
+      topInset: topInset.isFinite && topInset >= 0 ? topInset : 0,
     );
     while (scrollOffsets.length > 200) {
       String? oldest;
@@ -286,13 +313,32 @@ class AppState extends ChangeNotifier {
     }
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(
-        _kScrollOffsets,
-        jsonEncode(scrollOffsets
-            .map((k, v) => MapEntry(k, {'v': v.offset, 'at': v.at}))));
+      _kScrollOffsets,
+      jsonEncode(scrollOffsets.map((k, v) => MapEntry(k, {
+        'v': v.offset,
+        'at': v.at,
+        if (v.width != null) 'w': v.width,
+        if (v.width != null && v.topInset != 0) 'top': v.topInset,
+      }))),
+    );
   }
 
-  double? scrollOffsetFor(String chapterUrl) =>
-      scrollOffsets[chapterUrl]?.offset;
+  double? scrollOffsetFor(
+    String chapterUrl, {
+    double? viewportWidth,
+    double topInset = 0,
+  }) {
+    final saved = scrollOffsets[chapterUrl];
+    if (saved == null) return null;
+    if (viewportWidth == null || saved.width == null) return saved.offset;
+    return resizeScrollOffset(
+      offset: saved.offset,
+      fromWidth: saved.width!,
+      toWidth: viewportWidth,
+      fromTopInset: saved.topInset,
+      toTopInset: topInset,
+    );
+  }
 
   void _restoreReaderPages(Object? saved) {
     _readerPages.clear();

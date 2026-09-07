@@ -157,4 +157,28 @@ void main() {
     expect(state.scrollOffsetFor(_chapterUrl), 900);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('图片加载途中旋转屏幕，原目标随宽度换算且不写入临时截短值', (tester) async {
+    final ready = await showReader(tester);
+    tester.view.physicalSize = const Size(640, 320);
+    await tester.pumpAndSettle();
+    expect(_scroll(tester).offset, lessThan(1800));
+    expect(state.scrollOffsetFor(_chapterUrl), 1800);
+    ready[0]();
+    await tester.pumpAndSettle();
+    expect(_scroll(tester).offset, lessThan(1800));
+    ready[1]();
+    await tester.pumpAndSettle();
+    expect(_scroll(tester).offset, closeTo(1800, 0.1));
+    ready[2]();
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpAndSettle();
+    expect(_scroll(tester).offset, closeTo(900, 0.1));
+    expect(state.scrollOffsetFor(_chapterUrl), 900);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(state.scrollOffsetFor(_chapterUrl), 900);
+    expect(tester.takeException(), isNull);
+  });
 }
