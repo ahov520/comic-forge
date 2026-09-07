@@ -270,6 +270,9 @@ class ChapterTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final enabled = onTap != null;
+    final numberFontSize = textTheme.labelMedium?.fontSize ?? 12;
+    final numberScale =
+        MediaQuery.textScalerOf(context).scale(numberFontSize) / numberFontSize;
     final fg = enabled
         ? (isCurrent ? scheme.onPrimaryContainer : scheme.onSurface)
         : scheme.onSurface.withValues(alpha: 0.38);
@@ -291,7 +294,10 @@ class ChapterTile extends StatelessWidget {
             child: Row(
               children: [
                 ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 28, maxWidth: 44),
+                  constraints: BoxConstraints(
+                    minWidth: 28 * numberScale,
+                    maxWidth: 44 * numberScale,
+                  ),
                   child: Text(
                     '${index + 1}',
                     textAlign: TextAlign.center,
