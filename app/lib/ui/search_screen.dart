@@ -29,6 +29,13 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
+  static const _searchPrompt = EmptyStateView(
+    key: ValueKey('prompt'),
+    icon: Icons.manage_search_outlined,
+    title: '输入关键词开始聚合搜索',
+    message: '输入书名或作者，跨源查找喜欢的漫画。',
+  );
+
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final Map<String, List<Book>> _raw = {}; // 源id → 结果（到达序）
@@ -331,6 +338,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _historyView(BuildContext context) {
     final history = widget.state.searchHistory;
+    if (history.isEmpty) return _searchPrompt;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       children: [
@@ -342,41 +350,33 @@ class _SearchScreenState extends State<SearchScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-            if (history.isNotEmpty)
-              TextButton.icon(
-                onPressed: widget.state.clearSearchHistory,
-                icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-                label: const Text('清空'),
-              ),
+            TextButton.icon(
+              onPressed: widget.state.clearSearchHistory,
+              icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+              label: const Text('清空'),
+            ),
           ],
         ),
         const SizedBox(height: 12),
-        if (history.isEmpty)
-          const EmptyStateView(
-            icon: Icons.manage_search_outlined,
-            title: '输入关键词开始聚合搜索',
-            message: '输入书名或作者，跨源查找喜欢的漫画。',
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final query in history)
-                Tooltip(
-                  message: query,
-                  child: ActionChip(
-                    avatar: const Icon(Icons.history, size: 18),
-                    label: Text(
-                      query,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onPressed: () => _refill(query),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final query in history)
+              Tooltip(
+                message: query,
+                child: ActionChip(
+                  avatar: const Icon(Icons.history, size: 18),
+                  label: Text(
+                    query,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  onPressed: () => _refill(query),
                 ),
-            ],
-          ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -469,12 +469,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _resultContent() {
     if (_query.isEmpty) {
-      return const EmptyStateView(
-        key: ValueKey('prompt'),
-        icon: Icons.manage_search_outlined,
-        title: '输入关键词开始聚合搜索',
-        message: '输入书名或作者，跨源查找喜欢的漫画。',
-      );
+      return _searchPrompt;
     }
     if (_sourceCount == 0) {
       return EmptyStateView(

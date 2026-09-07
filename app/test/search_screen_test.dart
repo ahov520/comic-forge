@@ -109,12 +109,48 @@ void main() {
     await tester.enterText(find.byType(TextField), '   ');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    expect(find.text('最近10词'), findsOneWidget);
+    expect(find.text('最近10词'), findsNothing);
     expect(find.text('输入关键词开始聚合搜索'), findsOneWidget);
     expect(find.text('清空'), findsNothing);
     expect(state.searchHistory, isEmpty);
     expect(fetcher.requests, isEmpty);
   });
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('空历史与输入草稿的搜索引导保持同一位置和宽度：字号 $scale', (tester) async {
+      tester.view.physicalSize = const Size(340, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: SearchScreen(state: state),
+        ),
+      );
+      final prompt = find.byType(EmptyStateView);
+      final title = find.text('输入关键词开始聚合搜索');
+      final emptyBounds = tester.getRect(prompt);
+      final titleBounds = tester.getRect(title);
+
+      await tester.enterText(find.byType(TextField), '海');
+      await tester.pumpAndSettle();
+      expect(tester.getRect(prompt), emptyBounds);
+      expect(tester.getRect(title), titleBounds);
+
+      await tester.tap(find.byTooltip('清空输入'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(prompt), emptyBounds);
+      expect(tester.getRect(title), titleBounds);
+      expect(fetcher.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('搜索按钮和键盘提交都会保存去空白后的关键词', (tester) async {
     await _showSearch(tester, state);
@@ -349,7 +385,7 @@ void main() {
   testWidgets('搜索页展示大标题，空历史与设计稿间距一致', (tester) async {
     await _showSearch(tester, state);
     expect(find.text('搜索'), findsOneWidget);
-    expect(find.text('最近10词'), findsOneWidget);
+    expect(find.text('最近10词'), findsNothing);
     expect(find.text('输入关键词开始聚合搜索'), findsOneWidget);
     final title = tester.getRect(find.text('搜索').first);
     final field = tester.getRect(find.byType(TextField));

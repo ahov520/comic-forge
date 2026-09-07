@@ -372,7 +372,7 @@ class EmptyStateView extends StatelessWidget {
     return Center(
       child: SingleChildScrollView(
         primary: false,
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
           child: Column(
@@ -409,6 +409,18 @@ class EmptyStateView extends StatelessWidget {
               if (actionLabel != null) ...[
                 const SizedBox(height: 20),
                 FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(64, 44),
+                    backgroundColor: scheme.primaryContainer,
+                    foregroundColor: scheme.primary,
+                    textStyle: textTheme.labelLarge?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                   onPressed: onAction,
                   child: Text(actionLabel!, textAlign: TextAlign.center),
                 ),
