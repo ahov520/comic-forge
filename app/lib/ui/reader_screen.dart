@@ -11,6 +11,7 @@ import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
 import 'reader_chrome.dart';
+import 'reader_image_page.dart';
 import 'skeleton.dart';
 import 'widgets.dart' show EmptyStateView;
 
@@ -52,6 +53,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late bool _wasPaged;
   String? _scrollChapterUrl;
   int _pageCount = 0;
+  int _pageIndex = 0;
+  bool _pageZoomed = false;
 
   Chapter get _chapter => widget.chapters[_index];
 
@@ -98,6 +101,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _offsetSaveTimer?.cancel();
       _offsetRestored = false;
       _wasPaged = _isPaged;
+      _pageIndex = 0;
+      _pageZoomed = false;
     }
     _syncVolumeKeys();
     setState(() {});
@@ -149,6 +154,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _saveCurrentScrollOffset();
     _offsetSaveTimer?.cancel();
     _pageCount = 0;
+    _pageIndex = 0;
+    _pageZoomed = false;
     setState(() {
       _index = index;
       _chromeVisible = true;
@@ -330,66 +337,41 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     // 翻页模式：点击左 1/3 = 上一页，中 = 工具栏，右 1/3 = 下一页；
     // 末页右翻进入下一话（已到末话则提示）。
-    Widget pageContent(int i) => InteractiveViewer(
-      maxScale: 4,
-      child: Center(child: img(urls[i], fit: BoxFit.contain)),
-    );
     return PageView.builder(
       key: PageStorageKey<String>('reader:paged:${_chapter.url}'),
       controller: _pageController,
+      physics: _pageZoomed ? const NeverScrollableScrollPhysics() : null,
       itemCount: urls.length,
       onPageChanged: (i) {
+        setState(() {
+          _pageIndex = i;
+          _pageZoomed = false;
+        });
         _warmNextChapterIfNeeded(i, urls.length);
       },
       itemBuilder: (context, i) {
         final isLast = i == urls.length - 1;
-        return Stack(
-          children: [
-            pageContent(i),
-            Positioned.fill(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => i > 0
-                          ? _pageController.previousPage(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOut,
-                            )
-                          : _go(-1),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () =>
-                          setState(() => _chromeVisible = !_chromeVisible),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        if (!isLast) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                          );
-                        } else if (_index + 1 < widget.chapters.length) {
-                          _go(1); // 跨章：翻到末页继续右翻 = 下一话
-                        } else if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已是最后一话')),
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        return ReaderImagePage(
+          key: ValueKey('${_chapter.url}:$i'),
+          active: i == _pageIndex,
+          onPrevious: () => _pageTurn(-1),
+          onNext: () {
+            if (!isLast || _index + 1 < widget.chapters.length) {
+              _pageTurn(1);
+            } else {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('已是最后一话')));
+            }
+          },
+          onToggleChrome: () =>
+              setState(() => _chromeVisible = !_chromeVisible),
+          onZoomChanged: (zoomed) {
+            if (i == _pageIndex && zoomed != _pageZoomed) {
+              setState(() => _pageZoomed = zoomed);
+            }
+          },
+          child: Center(child: img(urls[i], fit: BoxFit.contain)),
         );
       },
     );
