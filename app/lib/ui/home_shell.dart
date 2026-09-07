@@ -16,6 +16,24 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+  final _visited = <int>{0};
+
+  void _selectTab(int index) {
+    if (_tab == index) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _tab = index;
+      _visited.add(index);
+    });
+  }
+
+  Widget _screen(int index) => switch (index) {
+    0 => ShelfScreen(state: widget.state, onExplore: () => _selectTab(1)),
+    1 => ExploreScreen(state: widget.state),
+    2 => SearchScreen(state: widget.state),
+    3 => SourceScreen(state: widget.state),
+    _ => SettingsScreen(state: widget.state),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -23,13 +41,22 @@ class _HomeShellState extends State<HomeShell> {
     return AnimatedBuilder(
       animation: s,
       builder: (context, _) => Scaffold(
-        body: switch (_tab) {
-          0 => ShelfScreen(state: s, onExplore: () => setState(() => _tab = 1)),
-          1 => ExploreScreen(state: s),
-          2 => SearchScreen(state: s),
-          3 => SourceScreen(state: s),
-          _ => SettingsScreen(state: s),
-        },
+        body: IndexedStack(
+          index: _tab,
+          children: [
+            for (var i = 0; i < 5; i++)
+              TickerMode(
+                enabled: _tab == i,
+                child: ExcludeFocus(
+                  excluding: _tab != i,
+                  // 首次点开再创建，返回时保留输入、筛选与滚动位置。
+                  child: _visited.contains(i)
+                      ? _screen(i)
+                      : const SizedBox.shrink(),
+                ),
+              ),
+          ],
+        ),
         bottomNavigationBar: DecoratedBox(
           position: DecorationPosition.foreground,
           decoration: BoxDecoration(
@@ -41,7 +68,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
           child: NavigationBar(
             selectedIndex: _tab,
-            onDestinationSelected: (i) => setState(() => _tab = i),
+            onDestinationSelected: _selectTab,
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.collections_bookmark_outlined),
