@@ -150,4 +150,50 @@ void main() {
     expect(result.single.$1.id, 'second');
     expect(fetcher.requests, hasLength(2));
   });
+
+  test('部分源失败仍返回可用命中，全部失败则允许下一次重试', () async {
+    respond = (_) => throw FetchException('offline');
+    await expectLater(
+      service.scanSwitchTargets(book: book, allSources: sources),
+      throwsStateError,
+    );
+    respond = (uri) {
+      if (uri.host == 'first.example') throw FetchException('offline');
+      return _page;
+    };
+    final result = await service.scanSwitchTargets(
+      book: book,
+      allSources: sources,
+    );
+    expect(result.single.$1.id, 'second');
+    expect(fetcher.requests, hasLength(4));
+    await service.scanSwitchTargets(book: book, allSources: sources);
+    expect(fetcher.requests, hasLength(4));
+  });
+
+  test('旧扫描失败不删除新范围已经成功的缓存', () async {
+    final response = Completer<String>();
+    respond = (uri) => uri.host == 'first.example' ? response.future : _page;
+    final oldError = expectLater(
+      service.scanSwitchTargets(
+        book: book,
+        allSources: sources.take(2).toList(),
+      ),
+      throwsStateError,
+    );
+    final currentSources = [sources[0], sources[2]];
+    final current = await service.scanSwitchTargets(
+      book: book,
+      allSources: currentSources,
+    );
+    expect(current.single.$1.id, 'second');
+    response.completeError(FetchException('late failure'));
+    await oldError;
+    final cached = await service.scanSwitchTargets(
+      book: book,
+      allSources: currentSources,
+    );
+    expect(cached.single.$1.id, 'second');
+    expect(fetcher.requests, hasLength(2));
+  });
 }

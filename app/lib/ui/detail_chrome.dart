@@ -251,12 +251,14 @@ class SwitchSourcePanel extends StatelessWidget {
     required this.snapshot,
     required this.state,
     required this.onPick,
+    this.onRetry,
   });
 
   final String bookName;
   final AsyncSnapshot<List<(ComicSource, Book)>> snapshot;
   final AppState state;
   final void Function(ComicSource source, Book book) onPick;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -285,10 +287,12 @@ class SwitchSourcePanel extends StatelessWidget {
 
   Widget _body() {
     if (snapshot.hasError) {
-      return const EmptyStateView(
+      return EmptyStateView(
         icon: Icons.cloud_off_outlined,
         title: '暂时无法查找其它来源',
-        message: '检查网络后，重新打开换源面板试试。',
+        message: '检查网络后重试，或到「源」页检查漫画源。',
+        actionLabel: onRetry == null ? null : '重试',
+        onAction: onRetry,
       );
     }
     if (!snapshot.hasData) {
@@ -296,10 +300,12 @@ class SwitchSourcePanel extends StatelessWidget {
     }
     final hits = snapshot.data!;
     if (hits.isEmpty) {
-      return const EmptyStateView(
+      return EmptyStateView(
         icon: Icons.swap_horiz,
         title: '其它源没有搜到同名书',
         message: '可以稍后重试，或到「源」页启用更多漫画源。',
+        actionLabel: onRetry == null ? null : '重新查找',
+        onAction: onRetry,
       );
     }
     return ListView.builder(

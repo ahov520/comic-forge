@@ -61,7 +61,11 @@ class SourceService {
       return cached.result;
     }
     final fut = _scanSwitch(book, others);
-    _switchCache[key] = _SwitchScan(others, fut);
+    final scan = _SwitchScan(others, fut);
+    _switchCache[key] = scan;
+    unawaited(fut.then<void>((_) {}, onError: (Object _, StackTrace _) {
+      if (identical(_switchCache[key], scan)) _switchCache.remove(key);
+    }));
     return fut;
   }
 
@@ -70,10 +74,12 @@ class SourceService {
     List<ComicSource> others,
   ) async {
     final results = <(ComicSource, Book)>[];
+    var succeeded = 0;
     Future<void> probe(ComicSource s) async {
       try {
         final page =
             await runtimeFor(s).search(book.name).timeout(const Duration(seconds: 8));
+        succeeded++;
         Book hit = page.items.isNotEmpty ? page.items.first : Book();
         for (final b in page.items) {
           if (b.name.trim() == book.name.trim()) {
@@ -89,6 +95,9 @@ class SourceService {
 
     for (var i = 0; i < others.length; i += 6) {
       await Future.wait(others.skip(i).take(6).map(probe));
+    }
+    if (others.isNotEmpty && succeeded == 0) {
+      throw StateError('所有候选源查找失败');
     }
     return results;
   }

@@ -10,7 +10,7 @@
 
 ## 功能
 
-- **规则引擎**（`engine/` 纯 Dart 包，90+ 单测）：
+- **规则引擎**（`engine/` 纯 Dart 包，110 项单测）：
   - legado / ppcat 风格 `rule*` 全套键名（搜索 / 发现 / 详情 / 章节 / 取图 / 评论）
   - 选择器：CSS · legado 简写（`class.x.0` / `tag.a`，支持下标与 `-` 倒序）· XPath 子集 · JSONPath 子集（单 `|` 键备选）
   - `||` 备选 · `&&` 合并 · `##正则##替换` · `{{key}}/{{page}}` 与裸 `searchKey`/`searchPage` 占位（含算术 `searchPage-1`、`{{48*(page-1)}}`）
@@ -24,10 +24,11 @@
   导入自动补回旧坏数据缺失的规则
 - **导入皮皮喵备份**：支持官方 `.pbak`（gzip JSON，含分享源 ruleLink 与订阅仓库信息）
 - **源健康**：搜索/发现失败自动回报，连续失败≥3 源页标红、一键禁用失效源
-- **聚合搜索**：并发查所有启用源；本地保留「最近10词」，支持点按回填与一键清空
-- **沉浸阅读器**：图片流连续滚动 + 上一话/下一话导航 + 亮度调节（遮罩式、持久化）
+- **聚合搜索**：并发查所有启用源；本地保留「最近10词」，支持点按回填与一键清空，切换标签保留结果和草稿
+- **沉浸阅读器**：黑底与毛玻璃工具栏、滚动/翻页双模式（翻页支持双指缩放）、话间导航和亮度调节；失败图片可独立重试
 - **阅读闭环**：阅读进度记忆（续读定位）、章节图片磁盘缓存（防盗链头跟随源）、
   预加载下一话、章节目录 SWR 离线缓存
+- **详情换源**：候选与命中数随源启停和规则编辑同步，查找失败与无匹配分别提示并可原地重试
 - **H-Viewer 兼容**：`HViewerAdapter` 可转换 H-Viewer-Sites 站点规则
 
 ## 下载
@@ -40,7 +41,9 @@ run，在 Artifacts 里下载 `comic-forge-release-apk`（release 签名，直�
 ```bash
 git clone https://github.com/ahov520/comic-forge.git
 cd comic-forge/engine && dart test     # 引擎测试
-cd ../app && flutter run               # 开发运行
+cd ../app && flutter test              # 界面与状态回归
+flutter analyze                       # 静态分析
+flutter run                           # 开发运行
 flutter build apk --release            # 出包
 ```
 

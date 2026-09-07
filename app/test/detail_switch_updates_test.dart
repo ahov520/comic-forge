@@ -125,4 +125,42 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('换源全部失败显示错误并可原地重试，恢复后刷新命中数', (tester) async {
+    respond = (_) => throw FetchException('offline');
+    await showDetail(tester);
+    await tester.tap(find.byTooltip('换源'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂时无法查找其它来源'), findsOneWidget);
+    expect(find.text('其它源没有搜到同名书'), findsNothing);
+    final requests = fetcher.requests.length;
+    respond = (_) => _page;
+    await tester.tap(find.text('重试'));
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(_candidate('first'), findsOneWidget);
+    expect(_candidate('second'), findsOneWidget);
+    expect(find.byTooltip('换源（2 源命中）'), findsOneWidget);
+    expect(fetcher.requests, hasLength(requests + 2));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('换源无匹配时可重新查找，不会反复复用旧空结果', (tester) async {
+    respond = (_) => '<html></html>';
+    await showDetail(tester);
+    await tester.tap(find.byTooltip('换源'));
+    await tester.pumpAndSettle();
+    expect(find.text('其它源没有搜到同名书'), findsOneWidget);
+    expect(find.text('暂时无法查找其它来源'), findsNothing);
+    final requests = fetcher.requests.length;
+    respond = (_) => _page;
+    await tester.tap(find.text('重新查找'));
+    await tester.pumpAndSettle();
+    expect(_candidate('first'), findsOneWidget);
+    expect(_candidate('second'), findsOneWidget);
+    expect(fetcher.requests, hasLength(requests + 2));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

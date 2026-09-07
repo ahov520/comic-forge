@@ -42,7 +42,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   bool _fromCache = false;
   bool _carryDone = false;
   int? _switchCount; // 换源可命中数（后台预扫完成后显示角标）
-  Future<List<(ComicSource, Book)>>? _switchTargets;
+  final _switchTargets = ValueNotifier<Future<List<(ComicSource, Book)>>?>(
+    null,
+  );
 
   /// 缓存命中时首帧直出的数据（避免 FutureBuilder 首帧闪骨架）。
   (Book, List<Chapter>)? _initialData;
@@ -68,21 +70,23 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   @override
   void dispose() {
     widget.appState.removeListener(_scanSwitchTargets);
+    _switchTargets.dispose();
     super.dispose();
   }
 
   /// 后台预扫换源目标（结果入 SourceService 缓存，面板复用；失败静默）。
-  Future<void> _scanSwitchTargets() async {
+  Future<void> _scanSwitchTargets({bool refresh = false}) async {
     try {
       final pending = SourceService.instance.scanSwitchTargets(
         book: widget.book,
         allSources: widget.appState.sources,
+        useCache: !refresh,
       );
-      if (identical(_switchTargets, pending)) return;
-      _switchTargets = pending;
+      if (identical(_switchTargets.value, pending)) return;
+      _switchTargets.value = pending;
       if (_switchCount != null) setState(() => _switchCount = null);
       final result = await pending;
-      if (mounted && identical(_switchTargets, pending)) {
+      if (mounted && identical(_switchTargets.value, pending)) {
         setState(() => _switchCount = result.length);
       }
     } catch (_) {
@@ -179,19 +183,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       ).showSnackBar(const SnackBar(content: Text('没有其它启用的源可换')));
       return;
     }
+    _scanSwitchTargets();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetCtx) => SizedBox(
         height: MediaQuery.of(sheetCtx).size.height * 0.7,
-        child: AnimatedBuilder(
-          animation: widget.appState,
-          builder: (context, _) {
-            final pending = SourceService.instance.scanSwitchTargets(
-              book: widget.book,
-              allSources: widget.appState.sources,
-            );
+        child: ValueListenableBuilder<Future<List<(ComicSource, Book)>>?>(
+          valueListenable: _switchTargets,
+          builder: (context, pending, _) {
             return FutureBuilder<List<(ComicSource, Book)>>(
               key: ObjectKey(pending),
               future: pending,
@@ -199,6 +200,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 bookName: widget.book.name,
                 snapshot: snap,
                 state: widget.appState,
+                onRetry: () {
+                  if (identical(_switchTargets.value, pending)) {
+                    _scanSwitchTargets(refresh: true);
+                  }
+                },
                 onPick: (source, b) {
                   if (!widget.appState.sources.any(
                     (s) => identical(s, source) && s.enabled,
