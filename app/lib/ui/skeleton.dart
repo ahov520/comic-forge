@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'detail_cover_layout.dart';
+
 /// 骨架占位块：圆角灰底 + 呼吸脉冲（对齐皮皮喵秒开观感）。
 /// 用法：固定尺寸的 [SkeletonBox]，或外面包 Expanded/SizedBox 撑开。
 class SkeletonBox extends StatefulWidget {
@@ -167,46 +169,32 @@ class DetailSkeleton extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SkeletonBox(width: 120, height: 164, radius: 10),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    DetailCoverLayout(
+                      cover: SkeletonBox(
+                        width: DetailCoverLayout.coverWidth,
+                        height: DetailCoverLayout.coverHeight,
+                        radius: 10,
+                      ),
+                      metadata: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SkeletonBox(height: 22, radius: 6),
+                          SizedBox(height: 10),
+                          SkeletonBox(width: 90, height: 12, radius: 6),
+                          SizedBox(height: 12),
+                          SkeletonBox(width: 96, height: 22, radius: 8),
+                          SizedBox(height: 12),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
                             children: [
-                              SkeletonBox(height: 22, radius: 6),
-                              SizedBox(height: 10),
-                              SkeletonBox(width: 90, height: 12, radius: 6),
-                              SizedBox(height: 12),
-                              SkeletonBox(width: 96, height: 22, radius: 8),
-                              SizedBox(height: 12),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  SkeletonBox(
-                                    width: 48,
-                                    height: 22,
-                                    radius: 999,
-                                  ),
-                                  SkeletonBox(
-                                    width: 60,
-                                    height: 22,
-                                    radius: 999,
-                                  ),
-                                  SkeletonBox(
-                                    width: 40,
-                                    height: 22,
-                                    radius: 999,
-                                  ),
-                                ],
-                              ),
+                              SkeletonBox(width: 48, height: 22, radius: 999),
+                              SkeletonBox(width: 60, height: 22, radius: 999),
+                              SkeletonBox(width: 40, height: 22, radius: 999),
                             ],
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     SizedBox(height: 12),
                     Padding(

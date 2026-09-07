@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:engine/engine.dart';
 
 import '../state/app_state.dart';
+import 'detail_cover_layout.dart';
 import 'skeleton.dart';
 import 'widgets.dart';
 
@@ -27,8 +28,8 @@ class DetailHero extends StatelessWidget {
     this.onRead,
   });
 
-  static const coverWidth = 120.0;
-  static const coverHeight = 164.0;
+  static const coverWidth = DetailCoverLayout.coverWidth;
+  static const coverHeight = DetailCoverLayout.coverHeight;
 
   final Book book;
   final String? sourceName;
@@ -61,82 +62,76 @@ class DetailHero extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                BookCover(
-                  url: book.coverUrl,
-                  width: coverWidth,
-                  height: coverHeight,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        book.name,
-                        style: textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (book.author.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            book.author,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      if (source.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: SourceBadge(
-                              label: source,
-                              onTap: onSwitchSource,
-                              count: switchCount,
-                            ),
-                          ),
-                        ),
-                      if (tags.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: tags
-                                .map(
-                                  (k) => Tooltip(
-                                    message: k,
-                                    child: Chip(
-                                      label: Text(
-                                        k,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      labelStyle: textTheme.labelSmall,
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                    ],
+            DetailCoverLayout(
+              cover: BookCover(
+                url: book.coverUrl,
+                width: coverWidth,
+                height: coverHeight,
+              ),
+              metadata: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.name,
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  if (book.author.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        book.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  if (source.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SourceBadge(
+                          label: source,
+                          onTap: onSwitchSource,
+                          count: switchCount,
+                        ),
+                      ),
+                    ),
+                  if (tags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: tags
+                            .map(
+                              (k) => Tooltip(
+                                message: k,
+                                child: Chip(
+                                  label: Text(
+                                    k,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  labelStyle: textTheme.labelSmall,
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                ],
+              ),
             ),
             if (book.introduce.isNotEmpty) ...[
               const SizedBox(height: 12),
