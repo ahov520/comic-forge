@@ -123,7 +123,9 @@ class DetailHero extends StatelessWidget {
                                   visualDensity: VisualDensity.compact,
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                 ),
                               ),
                             )
