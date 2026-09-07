@@ -32,6 +32,54 @@ class _ShelfScreenState extends State<ShelfScreen> {
   /// 筛选：0=全部 1=连载中 2=已完结（按 book.kind 关键词，缺失归入全部）
   int _filter = 0;
 
+  Future<void> _refreshUpdates() async {
+    final result = await widget.state.refreshShelfUpdates();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '已检查 ${result.checked} 本'
+          '${result.failed > 0 ? ' · ${result.failed} 本失败，可重试' : ''}'
+          '${result.skipped > 0 ? ' · ${result.skipped} 本无可用源或已移除' : ''}',
+        ),
+      ),
+    );
+  }
+
+  void _showBookActions(Book book) {
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Text(
+                book.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.done_all),
+              title: const Text('清除更新角标'),
+              subtitle: const Text('保留阅读进度，新章节更新后再次提醒'),
+              enabled: widget.state.shelfUpdateFor(book) != null,
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                widget.state.clearShelfUpdate(book);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final titleStyle = BookTileTypography.shelfTitle(context);
@@ -57,148 +105,235 @@ class _ShelfScreenState extends State<ShelfScreen> {
             });
         return SafeArea(
           bottom: false,
-          child: CustomScrollView(
-            slivers: [
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
-                  child: ScreenTitle('书架'),
+          child: RefreshIndicator(
+            onRefresh: _refreshUpdates,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: Row(
+                      children: [
+                        const Expanded(child: ScreenTitle('书架')),
+                        IconButton(
+                          tooltip: '检查书架更新',
+                          onPressed:
+                              widget.state.checkingShelfUpdates ||
+                                  widget.state.shelf.isEmpty
+                              ? null
+                              : _refreshUpdates,
+                          icon: widget.state.checkingShelfUpdates
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh),
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: '书架操作',
+                          onSelected: (_) => widget.state.clearShelfUpdates(),
+                          itemBuilder: (_) => [
+                            PopupMenuItem(
+                              value: 'clear',
+                              enabled: widget.state.shelf.any(
+                                (b) => widget.state.shelfUpdateFor(b) != null,
+                              ),
+                              child: const Text('清除全部更新角标'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: FilterChipRow(
-                  children: ['全部', '连载中', '已完结']
-                      .asMap()
-                      .entries
-                      .map(
-                        (e) => FilterChoiceChip(
-                          label: Text(
-                            e.value,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                SliverToBoxAdapter(
+                  child: FilterChipRow(
+                    children: ['全部', '连载中', '已完结']
+                        .asMap()
+                        .entries
+                        .map(
+                          (e) => FilterChoiceChip(
+                            label: Text(
+                              e.value,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            selected: _filter == e.key,
+                            onSelected: (_) => setState(() => _filter = e.key),
                           ),
-                          selected: _filter == e.key,
-                          onSelected: (_) => setState(() => _filter = e.key),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              if (books.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: widget.state.shelf.isEmpty
-                      ? EmptyStateView(
-                          icon: Icons.collections_bookmark_outlined,
-                          title: '书架还没有漫画',
-                          message: '收藏喜欢的漫画，在这里继续上次的阅读。',
-                          actionLabel: '去探索',
-                          onAction: widget.onExplore,
                         )
-                      : EmptyStateView(
-                          icon: Icons.filter_list_outlined,
-                          title: '这个分类还没有漫画',
-                          message: '试试其他分类，或查看书架中的全部漫画。',
-                          actionLabel: '查看全部',
-                          onAction: () => setState(() => _filter = 0),
-                        ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  sliver: SliverLayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = math.max(
-                        1,
-                        (constraints.crossAxisExtent / (120 + 12)).ceil(),
-                      );
-                      final coverWidth =
-                          (constraints.crossAxisExtent - 12 * (columns - 1)) /
-                          columns;
-                      return SliverGrid(
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          mainAxisExtent:
-                              coverWidth / _coverAspectRatio + 6 + titleHeight,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        delegate: SliverChildBuilderDelegate((context, i) {
-                          final b = books[i];
-                          final prog = widget.state.progress[b.bookUrl];
-                          final progLabel =
-                              prog == null || prog.chapterTitle.isEmpty
-                              ? ''
-                              : prog.chapterTitle;
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => BookDetailScreen(
-                                  book: b,
-                                  appState: widget.state,
+                        .toList(),
+                  ),
+                ),
+                if (books.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: widget.state.shelf.isEmpty
+                        ? EmptyStateView(
+                            icon: Icons.collections_bookmark_outlined,
+                            title: '书架还没有漫画',
+                            message: '收藏喜欢的漫画，在这里继续上次的阅读。',
+                            actionLabel: '去探索',
+                            onAction: widget.onExplore,
+                          )
+                        : EmptyStateView(
+                            icon: Icons.filter_list_outlined,
+                            title: '这个分类还没有漫画',
+                            message: '试试其他分类，或查看书架中的全部漫画。',
+                            actionLabel: '查看全部',
+                            onAction: () => setState(() => _filter = 0),
+                          ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    sliver: SliverLayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = math.max(
+                          1,
+                          (constraints.crossAxisExtent / (120 + 12)).ceil(),
+                        );
+                        final coverWidth =
+                            (constraints.crossAxisExtent - 12 * (columns - 1)) /
+                            columns;
+                        return SliverGrid(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                mainAxisExtent:
+                                    coverWidth / _coverAspectRatio +
+                                    6 +
+                                    titleHeight,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                          delegate: SliverChildBuilderDelegate((context, i) {
+                            final b = books[i];
+                            final update = widget.state.shelfUpdateFor(b);
+                            final prog = widget.state.progress[b.bookUrl];
+                            final progLabel =
+                                prog == null || prog.chapterTitle.isEmpty
+                                ? ''
+                                : prog.chapterTitle;
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onLongPress: () => _showBookActions(b),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => BookDetailScreen(
+                                    book: b,
+                                    appState: widget.state,
+                                  ),
                                 ),
                               ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                AspectRatio(
-                                  aspectRatio: _coverAspectRatio,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: BookCover(url: b.coverUrl),
-                                        ),
-                                        if (progLabel.isNotEmpty)
-                                          Positioned(
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 4,
-                                                    vertical: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  AspectRatio(
+                                    aspectRatio: _coverAspectRatio,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Stack(
+                                        children: [
+                                          Positioned.fill(
+                                            child: BookCover(url: b.coverUrl),
+                                          ),
+                                          if (update != null)
+                                            Positioned(
+                                              top: 6,
+                                              left: 6,
+                                              right: 6,
+                                              child: Align(
+                                                alignment: Alignment.topLeft,
+                                                child: Tooltip(
+                                                  message:
+                                                      '${update.latestTitle}\n长按封面可清除角标',
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 3,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                    ),
+                                                    child: FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        update.label,
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .onPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
                                                   ),
-                                              color: Colors.black54,
-                                              child: Text(
-                                                progLabel,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.white,
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                      ],
+                                          if (progLabel.isNotEmpty)
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              bottom: 0,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 2,
+                                                    ),
+                                                color: Colors.black54,
+                                                child: Text(
+                                                  progLabel,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                Tooltip(
-                                  message: b.name,
-                                  child: Text(
-                                    b.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: titleStyle,
+                                  const SizedBox(height: 6),
+                                  Tooltip(
+                                    message: b.name,
+                                    child: Text(
+                                      b.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: titleStyle,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }, childCount: books.length),
-                      );
-                    },
+                                ],
+                              ),
+                            );
+                          }, childCount: books.length),
+                        );
+                      },
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },

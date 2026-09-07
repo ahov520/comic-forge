@@ -10,6 +10,7 @@ import 'source_update.dart';
 import '../services/source_service.dart';
 import 'safe_prefs.dart';
 import 'scroll_restore.dart';
+import 'shelf_updates.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -81,6 +82,8 @@ class AppState extends ChangeNotifier {
   static const _kSources = 'cf.sources';
   static const _kRepos = 'cf.repos';
   static const _kShelf = 'cf.shelf';
+  static const _kShelfChapters = 'cf.shelfChapters';
+  static const _kShelfDismissals = 'cf.shelfDismissals';
   static const _kDark = 'cf.dark';
   static const _kProgress = 'cf.progress';
   static const _kDetailCache = 'cf.detailCache';
@@ -104,6 +107,11 @@ class AppState extends ChangeNotifier {
   final List<ComicSource> sources = [];
   final List<String> repos = [];
   final List<Book> shelf = [];
+  final Map<String, ShelfChapters> _shelfChapters = {};
+  final Map<String, String> _shelfDismissals = {};
+  Future<ShelfRefreshResult>? _shelfRefresh;
+
+  bool get checkingShelfUpdates => _shelfRefresh != null;
   final List<String> _searchHistory = [];
 
   /// 最近提交的搜索词（新到旧、去重、最多 10 条）。
@@ -156,6 +164,7 @@ class AppState extends ChangeNotifier {
       ..addAll((jsonDecode(sp.getString(_kDetailCache) ?? '{}') as Map<String, dynamic>)
           .map((k, v) =>
               MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>))));
+    _restoreShelfUpdates(sp);
     repoLastRefresh
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kRepoRefresh) ?? '{}') as Map<String, dynamic>)
@@ -289,6 +298,170 @@ class AppState extends ChangeNotifier {
 
   ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
 
+  void _restoreShelfUpdates(SharedPreferences sp) {
+    _shelfChapters.clear();
+    _shelfDismissals.clear();
+    try {
+      final raw = sp.get(_kShelfChapters);
+      final saved = raw is String ? jsonDecode(raw) : null;
+      if (saved is Map<String, dynamic>) {
+        for (final book in shelf) {
+          try {
+            final value = saved[book.bookUrl];
+            if (value is Map<String, dynamic>) {
+              _shelfChapters[book.bookUrl] = ShelfChapters.fromJson(value);
+            }
+          } catch (_) {
+            // 单本记录损坏时仍可从详情缓存恢复。
+          }
+        }
+      }
+    } on FormatException {
+      // 不影响书架和阅读进度恢复。
+    }
+    for (final book in shelf) {
+      final cached = detailCache[book.bookUrl];
+      if (!_shelfChapters.containsKey(book.bookUrl) &&
+          cached != null &&
+          cached.chapters.isNotEmpty &&
+          cached.book.sourceId == book.sourceId) {
+        _shelfChapters[book.bookUrl] = ShelfChapters.fromDetail(
+          cached.book,
+          cached.chapters,
+        );
+      }
+    }
+    try {
+      final raw = sp.get(_kShelfDismissals);
+      final saved = raw is String ? jsonDecode(raw) : null;
+      if (saved is Map<String, dynamic>) {
+        for (final book in shelf) {
+          final value = saved[book.bookUrl];
+          if (value is String) _shelfDismissals[book.bookUrl] = value;
+        }
+      }
+    } on FormatException {
+      // 损坏的清除记录只会重新显示角标。
+    }
+  }
+
+  ShelfUpdateBadge? shelfUpdateFor(Book book, {bool includeDismissed = false}) {
+    final saved = progressFor(book.bookUrl);
+    final reading = saved?.sourceId == (book.sourceId ?? '') ? saved : null;
+    final snapshot = _shelfChapters[book.bookUrl];
+    final catalog = snapshot?.sourceId == (book.sourceId ?? '')
+        ? snapshot
+        : null;
+    final latest = catalog?.latestTitle ?? book.lastChapter;
+    final urls = catalog?.urls ?? const <String>[];
+    final latestUrl = urls.isEmpty ? '' : urls.last;
+    int? unread;
+    if (urls.isNotEmpty) {
+      final index = reading == null || reading.chapterUrl.isEmpty
+          ? -1
+          : urls.indexOf(reading.chapterUrl);
+      if (reading == null || index >= 0) unread = urls.length - index - 1;
+    }
+    if (unread == 0) return null;
+    if (unread == null) {
+      if (normalizeChapterTitle(latest).isEmpty ||
+          (reading != null &&
+              normalizeChapterTitle(latest) ==
+                  normalizeChapterTitle(reading.chapterTitle))) {
+        return null;
+      }
+    }
+    final token = shelfUpdateToken(book.sourceId ?? '', latestUrl, latest);
+    if (!includeDismissed && _shelfDismissals[book.bookUrl] == token) {
+      return null;
+    }
+    return ShelfUpdateBadge(
+      token: token,
+      unreadCount: unread,
+      latestTitle: latest,
+      label: unread != null ? '未读 $unread' : (reading == null ? '未读' : '更新'),
+    );
+  }
+
+  /// 清除提醒不修改真实阅读进度；最新话变化后自动重新显示。
+  Future<void> clearShelfUpdate(Book book) async {
+    final badge = shelfUpdateFor(book, includeDismissed: true);
+    if (badge == null) return;
+    _shelfDismissals[book.bookUrl] = badge.token;
+    await _persistShelfUpdates();
+    notifyListeners();
+  }
+
+  Future<void> clearShelfUpdates() async {
+    for (final book in shelf) {
+      final badge = shelfUpdateFor(book, includeDismissed: true);
+      if (badge != null) _shelfDismissals[book.bookUrl] = badge.token;
+    }
+    await _persistShelfUpdates();
+    notifyListeners();
+  }
+
+  Future<void> _persistShelfUpdates() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(
+      _kShelfChapters,
+      jsonEncode(
+        _shelfChapters.map((key, value) => MapEntry(key, value.toJson())),
+      ),
+    );
+    await sp.setStringSafe(_kShelfDismissals, jsonEncode(_shelfDismissals));
+  }
+
+  /// 手动检查更新：并发最多 3 本，单本失败不覆盖上次成功的目录。
+  Future<ShelfRefreshResult> refreshShelfUpdates() {
+    final pending = _shelfRefresh;
+    if (pending != null) return pending;
+    final request = _refreshShelfUpdates().whenComplete(() {
+      _shelfRefresh = null;
+      notifyListeners();
+    });
+    _shelfRefresh = request;
+    notifyListeners();
+    return request;
+  }
+
+  Future<ShelfRefreshResult> _refreshShelfUpdates() async {
+    var checked = 0;
+    var failed = 0;
+    var skipped = 0;
+    final targets = List<Book>.of(shelf);
+    Future<void> refresh(Book book) async {
+      final source = sources
+          .where((s) => s.id == book.sourceId && s.enabled)
+          .firstOrNull;
+      if (source == null) {
+        skipped++;
+        return;
+      }
+      try {
+        final (fresh, chapters) = await SourceService.instance
+            .runtimeFor(source)
+            .detail(book.bookUrl)
+            .timeout(const Duration(seconds: 20));
+        if (!inShelf(book) ||
+            !sources.any((s) => identical(s, source) && s.enabled)) {
+          skipped++;
+          return;
+        }
+        if (chapters.isEmpty) throw StateError('未取得章节目录');
+        await saveDetailCache(fresh, chapters);
+        checked++;
+      } catch (_) {
+        failed++;
+      }
+    }
+
+    for (var i = 0; i < targets.length; i += 3) {
+      await Future.wait(targets.skip(i).take(3).map(refresh));
+    }
+    return (checked: checked, failed: failed, skipped: skipped);
+  }
+
   /// 记录章内滚动位置（LRU 上限 200；节流由调用方负责）。
   Future<void> saveScrollOffset(
     String chapterUrl,
@@ -389,9 +562,10 @@ class AppState extends ChangeNotifier {
   Future<void> saveDetailCache(Book book, List<Chapter> chapters) async {
     if (book.bookUrl.isEmpty || chapters.isEmpty) return;
     detailCache[book.bookUrl] = CachedDetail(
-        book: book,
-        chapters: chapters,
-        at: DateTime.now().millisecondsSinceEpoch);
+      book: book,
+      chapters: chapters,
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
     while (detailCache.length > _detailCacheCap) {
       String? oldest;
       int? oldestAt;
@@ -405,8 +579,27 @@ class AppState extends ChangeNotifier {
       detailCache.remove(oldest);
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kDetailCache,
-        jsonEncode(detailCache.map((k, v) => MapEntry(k, v.toJson()))));
+    await sp.setStringSafe(
+      _kDetailCache,
+      jsonEncode(detailCache.map((k, v) => MapEntry(k, v.toJson()))),
+    );
+    final index = shelf.indexWhere(
+      (b) => b.bookUrl == book.bookUrl && b.sourceId == book.sourceId,
+    );
+    if (index >= 0) {
+      shelf[index] = Book.fromJson({
+        ...shelf[index].toJson(),
+        ...book.toJson(),
+        if (book.name.trim().isEmpty) 'name': shelf[index].name,
+      });
+      _shelfChapters[book.bookUrl] = ShelfChapters.fromDetail(book, chapters);
+      await sp.setStringSafe(
+        _kShelf,
+        jsonEncode(shelf.map((b) => b.toJson()).toList()),
+      );
+      await _persistShelfUpdates();
+      notifyListeners();
+    }
   }
 
   CachedDetail? detailCacheFor(String bookUrl) => detailCache[bookUrl];
@@ -861,11 +1054,26 @@ class AppState extends ChangeNotifier {
     final exists = shelf.any((e) => e.bookUrl == b.bookUrl);
     if (exists) {
       shelf.removeWhere((e) => e.bookUrl == b.bookUrl);
+      _shelfChapters.remove(b.bookUrl);
+      _shelfDismissals.remove(b.bookUrl);
     } else {
       shelf.insert(0, b);
+      final cached = detailCacheFor(b.bookUrl);
+      if (cached != null &&
+          cached.chapters.isNotEmpty &&
+          cached.book.sourceId == b.sourceId) {
+        _shelfChapters[b.bookUrl] = ShelfChapters.fromDetail(
+          cached.book,
+          cached.chapters,
+        );
+      }
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kShelf, jsonEncode(shelf.map((e) => e.toJson()).toList()));
+    await sp.setStringSafe(
+      _kShelf,
+      jsonEncode(shelf.map((e) => e.toJson()).toList()),
+    );
+    await _persistShelfUpdates();
     notifyListeners();
   }
 
