@@ -80,6 +80,67 @@ void main() {
     expect(tester.binding.hasScheduledFrame, isFalse);
   });
 
+  for (final scale in [1.0, 2.0]) {
+    for (final showShelfAction in [true, false]) {
+      testWidgets('列表骨架与单行标题书卡的文字、封面位置一致：字号 $scale，收藏 $showShelfAction', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(340, 720);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({});
+        final state = AppState();
+        addTearDown(state.dispose);
+        final book = Book(name: '漫画', author: '作者', lastChapter: '1');
+        Future<void> show(Widget child) => tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(body: child),
+          ),
+        );
+
+        await show(BookListSkeleton(showShelfAction: showShelfAction));
+        final boxes = find.byType(SkeletonBox);
+        final cover = tester.getRect(boxes.at(0));
+        final title = tester.getRect(boxes.at(1));
+        final metadata = tester.getRect(boxes.at(2));
+        final chapter = tester.getRect(boxes.at(3));
+        final card = tester.getRect(find.byType(Card).first);
+
+        await show(
+          ListView(
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              BookTile(
+                book: book,
+                state: state,
+                showShelfAction: showShelfAction,
+              ),
+            ],
+          ),
+        );
+        expect(tester.getRect(find.byType(BookCover)), cover);
+        expect(tester.getRect(find.byType(Card)), card);
+        for (final pair in [
+          (title, find.text('漫画')),
+          (metadata, find.text('作者')),
+          (chapter, find.text('更新至 1')),
+        ]) {
+          final text = tester.getRect(pair.$2);
+          expect(text.topLeft, pair.$1.topLeft);
+          expect(text.height, pair.$1.height);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('窄屏大字号详情骨架不溢出，加载完成后封面位置保持一致', (tester) async {
     tester.view.physicalSize = const Size(320, 720);
     tester.view.devicePixelRatio = 1;

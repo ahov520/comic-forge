@@ -210,9 +210,7 @@ void main() {
     final metadataRight = tester
         .getRect(
           find
-              .byWidgetPredicate(
-                (w) => w is SkeletonBox && w.width == null && w.height == 20,
-              )
+              .byWidgetPredicate((w) => w is SkeletonBox && w.width == null)
               .first,
         )
         .right;

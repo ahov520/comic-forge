@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'book_tile_typography.dart';
 import 'detail_cover_layout.dart';
 
 /// 骨架占位块：圆角灰底 + 呼吸脉冲（对齐皮皮喵秒开观感）。
@@ -70,9 +71,28 @@ class BookListSkeleton extends StatelessWidget {
 
   final bool showShelfAction;
 
+  double _lineHeight(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: ' ', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final titleHeight = _lineHeight(context, BookTileTypography.title(context));
+    final metadataHeight = _lineHeight(
+      context,
+      BookTileTypography.metadata(context),
+    );
     return Semantics(
       label: '正在加载漫画',
       liveRegion: true,
@@ -99,21 +119,21 @@ class BookListSkeleton extends StatelessWidget {
                 children: [
                   const SkeletonBox(width: 60, height: 80, radius: 10),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SkeletonBox(height: 20, radius: 6),
-                        SizedBox(height: 4),
+                        SkeletonBox(height: titleHeight, radius: 6),
+                        const SizedBox(height: 4),
                         FractionallySizedBox(
                           widthFactor: 0.7,
-                          child: SkeletonBox(height: 12, radius: 4),
+                          child: SkeletonBox(height: metadataHeight, radius: 4),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         FractionallySizedBox(
                           widthFactor: 0.9,
-                          child: SkeletonBox(height: 12, radius: 4),
+                          child: SkeletonBox(height: metadataHeight, radius: 4),
                         ),
                       ],
                     ),

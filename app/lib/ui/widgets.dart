@@ -4,6 +4,7 @@ import 'package:engine/engine.dart';
 
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
+import 'book_tile_typography.dart';
 import 'reader_screen.dart';
 import 'skeleton.dart';
 
@@ -201,7 +202,6 @@ class BookTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
     final metadata = [
       if (book.author.trim().isNotEmpty) book.author.trim(),
       if (book.kind.trim().isNotEmpty) book.kind.trim(),
@@ -246,11 +246,7 @@ class BookTile extends StatelessWidget {
                       book.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleMedium?.copyWith(
-                        fontSize: 15,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: BookTileTypography.title(context),
                     ),
                     if (metadata.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -260,9 +256,7 @@ class BookTile extends StatelessWidget {
                           metadata,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          style: BookTileTypography.metadata(context),
                         ),
                       ),
                     ],
@@ -272,9 +266,7 @@ class BookTile extends StatelessWidget {
                         chapterLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        style: BookTileTypography.metadata(context),
                       ),
                     ],
                     if (source.isNotEmpty) ...[
@@ -285,9 +277,7 @@ class BookTile extends StatelessWidget {
                           '源: $source',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          style: BookTileTypography.metadata(context),
                         ),
                       ),
                     ],
