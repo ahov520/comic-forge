@@ -37,18 +37,62 @@ class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
   int _searchGeneration = 0;
   int _sourceCount = 0;
+  Map<String, ComicSource>? _searchedSources;
+  bool _sourcesChanged = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onQueryChanged);
+    widget.state.addListener(_onStateChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.removeListener(_onStateChanged);
+      widget.state.addListener(_onStateChanged);
+      if (_searchedSources != null) _invalidateSearch(_searchableSources());
+    }
   }
 
   @override
   void dispose() {
+    widget.state.removeListener(_onStateChanged);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  Map<String, ComicSource> _searchableSources() => {
+    for (final source in widget.state.sources)
+      if (source.enabled && source.rules.searchUrl.isNotEmpty)
+        source.id: source,
+  };
+
+  void _onStateChanged() {
+    setState(() {
+      final searched = _searchedSources;
+      if (searched == null) return;
+      final current = _searchableSources();
+      // 健康、收藏等通知不改变源定义，不打断搜索或清空结果。
+      if (current.length != searched.length ||
+          current.entries.any((e) => !identical(e.value, searched[e.key]))) {
+        _invalidateSearch(current);
+      }
+    });
+  }
+
+  void _invalidateSearch(Map<String, ComicSource> sources) {
+    _searchGeneration++;
+    _searching = false;
+    _sourcesChanged = true;
+    _searchedSources = sources;
+    _sourceCount = sources.length;
+    _raw.clear();
+    _agg = null;
+    _failed.clear();
   }
 
   void _onQueryChanged() {
@@ -59,6 +103,8 @@ class _SearchScreenState extends State<SearchScreen> {
         _searching = false;
         _query = '';
         _sourceCount = 0;
+        _searchedSources = null;
+        _sourcesChanged = false;
         _raw.clear();
         _agg = null;
         _failed.clear();
@@ -89,15 +135,16 @@ class _SearchScreenState extends State<SearchScreen> {
     final q = _controller.text.trim();
     if (q.isEmpty || _searching) return;
     final state = widget.state;
-    final enabled = state.sources
-        .where((s) => s.enabled && s.rules.searchUrl.isNotEmpty)
-        .toList();
+    final sources = _searchableSources();
+    final enabled = sources.values.toList();
     final generation = ++_searchGeneration;
     _focusNode.unfocus();
     setState(() {
       _searching = true;
       _query = q;
       _sourceCount = enabled.length;
+      _searchedSources = sources;
+      _sourcesChanged = false;
       _raw.clear();
       _agg = null;
       _failed.clear();
@@ -348,9 +395,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _resultsView(BuildContext context) {
     return Column(
       children: [
-        if (_query.isNotEmpty && _sourceCount > 0) _statusAndTips(context),
+        if (_query.isNotEmpty && _sourceCount > 0 && !_sourcesChanged)
+          _statusAndTips(context),
         Expanded(
           child: AnimatedSwitcher(
+            key: ObjectKey(_searchedSources),
             duration: MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
                 : const Duration(milliseconds: 180),
@@ -380,6 +429,16 @@ class _SearchScreenState extends State<SearchScreen> {
         onAction: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => SourceScreen(state: widget.state)),
         ),
+      );
+    }
+    if (_sourcesChanged) {
+      return EmptyStateView(
+        key: const ValueKey('sources-changed'),
+        icon: Icons.manage_search_outlined,
+        title: '漫画源已更新',
+        message: '关键词已保留，重新搜索获取最新结果。',
+        actionLabel: '重新搜索',
+        onAction: _doSearch,
       );
     }
     final agg = _agg;
@@ -427,28 +486,23 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.state,
-      builder: (context, _) {
-        final canPop = Navigator.of(context).canPop();
-        return Scaffold(
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _titleBar(context, canPop),
-                _searchField(context),
-                Expanded(
-                  child: _controller.text.trim().isEmpty
-                      ? _historyView(context)
-                      : _resultsView(context),
-                ),
-              ],
+    final canPop = Navigator.of(context).canPop();
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _titleBar(context, canPop),
+            _searchField(context),
+            Expanded(
+              child: _controller.text.trim().isEmpty
+                  ? _historyView(context)
+                  : _resultsView(context),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }
