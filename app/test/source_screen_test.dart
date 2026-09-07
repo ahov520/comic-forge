@@ -10,17 +10,18 @@ ComicSource _src({
   String name = '示例漫画源 A',
   String url = 'https://example.com',
   bool enabled = true,
-}) =>
-    ComicSource.fromPpcatFlat({
-      'bookSourceName': name,
-      'bookSourceUrl': url,
-      'enabled': enabled,
-      'ruleSearchUrl': '/search?q=searchKey',
-    });
+}) => ComicSource.fromPpcatFlat({
+  'bookSourceName': name,
+  'bookSourceUrl': url,
+  'enabled': enabled,
+  'ruleSearchUrl': '/search?q=searchKey',
+});
 
 Future<void> _show(WidgetTester tester, AppState state) => tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: SourceScreen(state: state))),
-    );
+  MaterialApp(
+    home: Scaffold(body: SourceScreen(state: state)),
+  ),
+);
 
 void main() {
   late AppState state;
@@ -32,6 +33,50 @@ void main() {
 
   tearDown(() => state.dispose());
 
+  for (final brightness in Brightness.values) {
+    testWidgets('窄屏大字号空仓库可滚动，返回与订阅入口可操作：${brightness.name}', (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await state.addRepoSubscribed(
+        'https://github.com/example/long-repository-name',
+        const [],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SourceScreen(state: state)),
+              ),
+              child: const Text('打开源管理'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开源管理'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('仓库里还没有源'));
+      await tester.tap(find.text('＋ 订阅仓库'));
+      await tester.pumpAndSettle();
+      expect(find.text('订阅源仓库'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('返回'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SourceScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('repoDisplayName / repoSyncLabel', () {
     test('仓库 URL 收成 user/repo 短名', () {
       expect(
@@ -42,10 +87,7 @@ void main() {
         repoDisplayName('github.com/AcgLibrary/ppcat_store'),
         'AcgLibrary/ppcat_store',
       );
-      expect(
-        repoDisplayName('https://gitee.com/user/repo.git'),
-        'user/repo',
-      );
+      expect(repoDisplayName('https://gitee.com/user/repo.git'), 'user/repo');
     });
 
     test('同步时间格式化为 MM-DD', () {
@@ -81,14 +123,11 @@ void main() {
   testWidgets('仓库卡片显示短名与同步信息，源行带开关可启停', (tester) async {
     const repo = 'https://github.com/AcgLibrary/ppcat_store';
     await state.addRepoSubscribed(repo, const []);
-    state.repoLastRefresh[repo] =
-        DateTime(2026, 9, 6).millisecondsSinceEpoch;
+    state.repoLastRefresh[repo] = DateTime(2026, 9, 6).millisecondsSinceEpoch;
     await state.addSourceManual(_src());
-    await state.addSourceManual(_src(
-      name: '拾荒漫画',
-      url: 'https://scavenge.example',
-      enabled: false,
-    ));
+    await state.addSourceManual(
+      _src(name: '拾荒漫画', url: 'https://scavenge.example', enabled: false),
+    );
     await _show(tester, state);
 
     expect(find.text('已订阅仓库'), findsOneWidget);
@@ -110,16 +149,18 @@ void main() {
   });
 
   testWidgets('从其它页推入时显示返回', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (ctx) => TextButton(
-          onPressed: () => Navigator.of(ctx).push(
-            MaterialPageRoute(builder: (_) => SourceScreen(state: state)),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => Navigator.of(ctx).push(
+              MaterialPageRoute(builder: (_) => SourceScreen(state: state)),
+            ),
+            child: const Text('go'),
           ),
-          child: const Text('go'),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('返回'), findsOneWidget);

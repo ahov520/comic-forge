@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../backup_service.dart';
 import '../state/app_state.dart';
+import 'widgets.dart';
 
 /// 设置。
 class SettingsScreen extends StatefulWidget {
@@ -239,17 +240,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         bottom: false,
         child: ListView(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                '设置',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: ScreenTitle('设置'),
             ),
             const _Header('外观'),
             SwitchListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
               secondary: const Icon(Icons.dark_mode_outlined),
               title: const Text('深色模式'),
               value: widget.state.darkMode,
@@ -257,6 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const _Header('数据'),
             ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
               leading: Icon(
                 Icons.cloud_upload_outlined,
                 color: widget.state.webDavConfig != null
@@ -273,6 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => _showWebDavSheet(context),
             ),
             ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
               leading: Icon(
                 Icons.block_outlined,
                 color: adBlock != null ? scheme.primary : null,
@@ -302,6 +301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const _Header('关于'),
             const ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 20),
               leading: Icon(Icons.info_outline),
               title: Text('Comic Forge v0.1.0'),
               subtitle: Text('规则引擎漫画聚合阅读器'),
@@ -309,7 +309,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
               child: Text(
-                '本地工具 · 不内置任何源 · 不提供任何内容',
+                '本地规则工具 · 不提供漫画内容',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -329,7 +329,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(

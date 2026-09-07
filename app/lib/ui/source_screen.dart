@@ -63,8 +63,7 @@ class _SourceScreenState extends State<SourceScreen> {
     if (mounted) {
       setState(() {
         _probing = false;
-        _lastResult =
-            '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
+        _lastResult = '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
       });
     }
   }
@@ -117,10 +116,12 @@ class _SourceScreenState extends State<SourceScreen> {
       for (final s in sources) {
         await widget.state.addSourceManual(s);
       }
-      setState(() => _lastResult = sources.isEmpty
-          ? '备份读取成功：${backup.sharedRules.length} 条分享源（加密部分待密钥），'
-              '已同步 ${backup.storeSubscriptions.length} 个订阅仓库'
-          : '导入成功：${sources.length} 个源（来自 ${backup.sharedRules.length} 条分享记录）');
+      setState(
+        () => _lastResult = sources.isEmpty
+            ? '备份读取成功：${backup.sharedRules.length} 条分享源（加密部分待密钥），'
+                  '已同步 ${backup.storeSubscriptions.length} 个订阅仓库'
+            : '导入成功：${sources.length} 个源（来自 ${backup.sharedRules.length} 条分享记录）',
+      );
     } catch (e) {
       setState(() => _lastResult = '备份导入失败：$e');
     }
@@ -141,8 +142,14 @@ class _SourceScreenState extends State<SourceScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('订阅')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('订阅'),
+          ),
         ],
       ),
     );
@@ -151,9 +158,14 @@ class _SourceScreenState extends State<SourceScreen> {
     if (url.isEmpty) return;
     setState(() => _subscribing = true);
     try {
-      final bundle = await RepoClient(fetcher: SourceService.instance.fetcher).subscribe(url);
+      final bundle = await RepoClient(
+        fetcher: SourceService.instance.fetcher,
+      ).subscribe(url);
       await widget.state.addRepoSubscribed(url, bundle.sources);
-      setState(() => _lastResult = '订阅成功：${bundle.ref.canonical} 导入 ${bundle.sources.length} 个源（Track ${bundle.track}）');
+      setState(
+        () => _lastResult =
+            '订阅成功：${bundle.ref.canonical} 导入 ${bundle.sources.length} 个源（Track ${bundle.track}）',
+      );
     } catch (e) {
       setState(() => _lastResult = '订阅失败：$e');
     } finally {
@@ -169,9 +181,12 @@ class _SourceScreenState extends State<SourceScreen> {
     switch (r) {
       case ClipboardImportSingle(:final source):
         if (!mounted) return;
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => SourceEditorScreen(state: widget.state, source: source),
-        ));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                SourceEditorScreen(state: widget.state, source: source),
+          ),
+        );
       case ClipboardImportMany(:final sources):
         for (final s in sources) {
           await widget.state.addSourceManual(s);
@@ -200,10 +215,12 @@ class _SourceScreenState extends State<SourceScreen> {
               title: const Text('编辑源'),
               onTap: () {
                 Navigator.pop(sheetCtx);
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) =>
-                      SourceEditorScreen(state: widget.state, source: s),
-                ));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        SourceEditorScreen(state: widget.state, source: s),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -222,16 +239,17 @@ class _SourceScreenState extends State<SourceScreen> {
 
   Future<void> _onMoreSelected(String v) async {
     if (v == 'new') {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SourceEditorScreen(state: widget.state),
-      ));
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SourceEditorScreen(state: widget.state),
+        ),
+      );
     } else if (v == 'backup') {
       _importPipimiaoBackup();
     } else if (v == 'builtin') {
       final n = await widget.state.importBuiltinSources();
       if (mounted) {
-        setState(() => _lastResult =
-            n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
+        setState(() => _lastResult = n > 0 ? '已从内置快照恢复 $n 个源' : '内置快照的源已全部在列');
       }
     } else if (v == 'probeHealth') {
       _probeHealth();
@@ -240,8 +258,11 @@ class _SourceScreenState extends State<SourceScreen> {
     } else if (v == 'disableUnhealthy') {
       final n = await widget.state.disableUnhealthySources();
       if (mounted) {
-        setState(() => _lastResult =
-            n > 0 ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）' : '没有连续失败≥3 的源');
+        setState(
+          () => _lastResult = n > 0
+              ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）'
+              : '没有连续失败≥3 的源',
+        );
       }
     } else if (v == 'resetHealth') {
       final n = await widget.state.resetSourceHealth();
@@ -261,40 +282,43 @@ class _SourceScreenState extends State<SourceScreen> {
         final canPop = Navigator.of(context).canPop();
         return Scaffold(
           body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _SourceHeader(
-                pending: pending,
-                canPop: canPop,
-                subscribing: _subscribing,
-                probing: _probing,
-                hasRepos: widget.state.repos.isNotEmpty,
-                hasSources: widget.state.sources.isNotEmpty,
-                unhealthyEnabled: widget.state.sources
-                    .where((s) => s.isUnhealthy && s.enabled)
-                    .length,
-                hasUnhealthy: widget.state.sources.any((s) => s.isUnhealthy),
-                onBack: () => Navigator.of(context).pop(),
-                onSubscribe: _subscribing ? null : _subscribeDialog,
-                onMore: _onMoreSelected,
-              ),
-              if (_lastResult != null)
-                Material(
-                  color: scheme.surfaceContainerHighest,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.info_outline),
-                    title: Text(_lastResult!, style: const TextStyle(fontSize: 12)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => setState(() => _lastResult = null),
+            bottom: false,
+            child: Column(
+              children: [
+                _SourceHeader(
+                  pending: pending,
+                  canPop: canPop,
+                  subscribing: _subscribing,
+                  probing: _probing,
+                  hasRepos: widget.state.repos.isNotEmpty,
+                  hasSources: widget.state.sources.isNotEmpty,
+                  unhealthyEnabled: widget.state.sources
+                      .where((s) => s.isUnhealthy && s.enabled)
+                      .length,
+                  hasUnhealthy: widget.state.sources.any((s) => s.isUnhealthy),
+                  onBack: () => Navigator.of(context).pop(),
+                  onSubscribe: _subscribing ? null : _subscribeDialog,
+                  onMore: _onMoreSelected,
+                ),
+                if (_lastResult != null)
+                  Material(
+                    color: scheme.surfaceContainerHighest,
+                    child: ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.info_outline),
+                      title: Text(
+                        _lastResult!,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        onPressed: () => setState(() => _lastResult = null),
+                      ),
                     ),
                   ),
-                ),
-              Expanded(child: _body(scheme)),
-            ],
-          ),
+                Expanded(child: _body(scheme)),
+              ],
+            ),
           ),
         );
       },
@@ -319,16 +343,17 @@ class _SourceScreenState extends State<SourceScreen> {
               : CustomScrollView(
                   slivers: [
                     if (repos.isNotEmpty) ...[
-                      const SliverToBoxAdapter(
-                        child: _SectionLabel('已订阅仓库'),
-                      ),
+                      const SliverToBoxAdapter(child: _SectionLabel('已订阅仓库')),
                       SliverList.builder(
                         itemCount: repos.length,
-                        itemBuilder: (context, i) => _repoCard(repos[i], scheme),
+                        itemBuilder: (context, i) =>
+                            _repoCard(repos[i], scheme),
                       ),
                     ],
                     SliverToBoxAdapter(
-                      child: _SectionLabel(sources.isEmpty ? '源' : '源（${sources.length}）'),
+                      child: _SectionLabel(
+                        sources.isEmpty ? '源' : '源（${sources.length}）',
+                      ),
                     ),
                     if (sources.isEmpty)
                       SliverFillRemaining(
@@ -355,9 +380,8 @@ class _SourceScreenState extends State<SourceScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
                           child: Text(
                             '长按删除 · 开关控制聚合范围',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
                         ),
                       ),
@@ -365,7 +389,7 @@ class _SourceScreenState extends State<SourceScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton.tonal(
@@ -384,13 +408,15 @@ class _SourceScreenState extends State<SourceScreen> {
     final hasPending = u?.hasPending ?? false;
     final pendingText = hasPending
         ? (u!.lastRuleVersion >= 0
-            ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
-            : ' · 有新版本 v${u.pendingVersion}')
+              ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
+              : ' · 有新版本 v${u.pendingVersion}')
         : '';
     final refreshing = _refreshingRepo == repo || _refreshingRepo == '*';
     return Card(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      color: scheme.surfaceContainerLow,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      color: scheme.brightness == Brightness.light
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
         child: Row(
@@ -404,8 +430,8 @@ class _SourceScreenState extends State<SourceScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -413,10 +439,10 @@ class _SourceScreenState extends State<SourceScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: hasPending
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                        ),
+                      color: hasPending
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -461,7 +487,7 @@ class _SourceScreenState extends State<SourceScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+          padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
           child: Row(
             children: [
               Expanded(
@@ -479,9 +505,7 @@ class _SourceScreenState extends State<SourceScreen> {
                               name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
+                              style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
                                     color: unhealthy ? scheme.error : null,
                                     fontWeight: FontWeight.w500,
@@ -492,9 +516,7 @@ class _SourceScreenState extends State<SourceScreen> {
                                 subtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
+                                style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: unhealthy
                                           ? scheme.error
@@ -507,8 +529,11 @@ class _SourceScreenState extends State<SourceScreen> {
                       if (unhealthy)
                         Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(Icons.error_outline,
-                              size: 18, color: scheme.error),
+                          child: Icon(
+                            Icons.error_outline,
+                            size: 18,
+                            color: scheme.error,
+                          ),
                         ),
                     ],
                   ),
@@ -521,7 +546,12 @@ class _SourceScreenState extends State<SourceScreen> {
             ],
           ),
         ),
-        Divider(height: 1, indent: 48, color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        Divider(
+          height: 1,
+          indent: 56,
+          endIndent: 20,
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ],
     );
   }
@@ -559,40 +589,30 @@ class _SourceHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 4, 0),
+      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 12, 4, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (canPop)
             IconButton(
               tooltip: '返回',
               icon: const Icon(Icons.arrow_back),
               onPressed: onBack,
-            )
-          else
-            const SizedBox(width: 8),
+            ),
           Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(left: canPop ? 0 : 8),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '源',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ScreenTitle('源'),
+                if (pending > 0)
+                  Text(
+                    '$pending 个仓库待更新',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    if (pending > 0)
-                      TextSpan(
-                        text: '  $pending 个仓库待更新',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
             ),
           ),
           TextButton(
@@ -606,6 +626,7 @@ class _SourceHeader extends StatelessWidget {
                 : Text(
                     '＋ 订阅仓库',
                     style: TextStyle(
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: scheme.primary,
                     ),
@@ -680,9 +701,7 @@ class _SourceHeader extends StatelessWidget {
                     color: hasUnhealthy ? scheme.error : null,
                   ),
                   title: const Text('禁用失效源'),
-                  subtitle: Text(
-                    '连续失败≥3 的启用源（当前 $unhealthyEnabled 个）',
-                  ),
+                  subtitle: Text('连续失败≥3 的启用源（当前 $unhealthyEnabled 个）'),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -712,13 +731,13 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

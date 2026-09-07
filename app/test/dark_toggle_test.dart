@@ -40,7 +40,7 @@ void main() {
     expect(find.text('数据'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
     expect(find.text('Comic Forge v0.1.0'), findsOneWidget);
-    expect(find.text('本地工具 · 不内置任何源 · 不提供任何内容'), findsOneWidget);
+    expect(find.text('本地规则工具 · 不提供漫画内容'), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
     st.dispose();
   });
