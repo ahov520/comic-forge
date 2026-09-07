@@ -26,7 +26,7 @@ class ScreenTitle extends StatelessWidget {
   );
 }
 
-/// 书架与探索共用的单选筛选标签。
+/// 书架与探索共用的单选筛选标签，对齐 six-screens `.chip`（7×14、13px）。
 class FilterChoiceChip extends StatelessWidget {
   const FilterChoiceChip({
     super.key,
@@ -47,8 +47,10 @@ class FilterChoiceChip extends StatelessWidget {
       selected: selected,
       onSelected: onSelected,
       showCheckmark: false,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       shape: const StadiumBorder(),
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       labelPadding: const EdgeInsets.symmetric(horizontal: 14),
       backgroundColor: scheme.brightness == Brightness.light
           ? scheme.surfaceContainerLowest
@@ -61,9 +63,28 @@ class FilterChoiceChip extends StatelessWidget {
       ),
       labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
         fontSize: 13,
+        height: 1.0,
         fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
         color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
       ),
+    );
+  }
+}
+
+/// 书架状态筛选条，对齐 six-screens ① `.chip-row`（间距 8、底边距 12）。
+class FilterChipRow extends StatelessWidget {
+  const FilterChipRow({super.key, required this.children});
+
+  final List<Widget> children;
+
+  static const padding = EdgeInsets.fromLTRB(20, 0, 20, 12);
+  static const double spacing = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Wrap(spacing: spacing, runSpacing: spacing, children: children),
     );
   }
 }

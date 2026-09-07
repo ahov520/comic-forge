@@ -84,6 +84,53 @@ void main() {
     expect(find.byType(ShelfScreen), findsNothing);
   });
 
+  testWidgets('筛选条与标题左对齐，距封面 12，标签在胶囊内居中', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShelfScreen(state: state, onExplore: () {}),
+        ),
+      ),
+    );
+
+    final title = tester.getRect(find.text('书架'));
+    final allChip = find.widgetWithText(ChoiceChip, '全部');
+    final serialChip = find.widgetWithText(ChoiceChip, '连载中');
+    final allRect = tester.getRect(allChip);
+    final serialRect = tester.getRect(serialChip);
+    final allLabel = tester.getRect(find.text('全部'));
+
+    expect(find.byType(FilterChipRow), findsOneWidget);
+    expect(allRect.left, closeTo(title.left, 0.5));
+    expect(allRect.center.dy, closeTo(serialRect.center.dy, 0.5));
+    expect(allRect.height, lessThan(40));
+    expect(allLabel.center.dx, closeTo(allRect.center.dx, 1.5));
+    expect(allLabel.center.dy, closeTo(allRect.center.dy, 1.5));
+    expect(find.text('书架还没有漫画'), findsOneWidget);
+    expect(find.text('去探索'), findsOneWidget);
+
+    await state.toggleShelf(
+      Book(
+        name: '海贼王',
+        kind: '连载中',
+        bookUrl: 'https://example.com/book/one-piece',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final cover = tester.getRect(find.byType(BookCover).first);
+    expect(cover.left, closeTo(title.left, 0.5));
+    expect(
+      cover.top - tester.getRect(allChip).bottom,
+      closeTo(FilterChipRow.padding.bottom, 1.5),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('空分类可恢复全部藏书，移除最后一本后显示收藏引导', (tester) async {
     final book = Book(
       name: '测试漫画',

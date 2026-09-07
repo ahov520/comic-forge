@@ -58,23 +58,23 @@ class _ShelfScreenState extends State<ShelfScreen> {
                 ),
               ),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: ['全部', '连载中', '已完结']
-                        .asMap()
-                        .entries
-                        .map(
-                          (e) => FilterChoiceChip(
-                            label: Text(e.value),
-                            selected: _filter == e.key,
-                            onSelected: (_) => setState(() => _filter = e.key),
+                child: FilterChipRow(
+                  children: ['全部', '连载中', '已完结']
+                      .asMap()
+                      .entries
+                      .map(
+                        (e) => FilterChoiceChip(
+                          label: Text(
+                            e.value,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        )
-                        .toList(),
-                  ),
+                          selected: _filter == e.key,
+                          onSelected: (_) => setState(() => _filter = e.key),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
               if (books.isEmpty)
@@ -98,7 +98,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
