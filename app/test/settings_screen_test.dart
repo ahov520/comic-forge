@@ -74,6 +74,17 @@ void main() {
       );
     }
     final arrow = tester.getRect(find.byIcon(Icons.chevron_right));
+    final toggle = tester.getRect(find.byType(Switch));
+    expect(toggle.right, arrow.right);
+    expect(toggle.width, greaterThanOrEqualTo(48));
+    expect(toggle.height, greaterThanOrEqualTo(48));
+    final wasDark = state.darkMode;
+    await tester.tapAt(Offset(toggle.center.dx, toggle.top + 2));
+    await tester.pumpAndSettle();
+    expect(state.darkMode, !wasDark);
+    await tester.tap(find.text('深色模式'));
+    await tester.pumpAndSettle();
+    expect(state.darkMode, wasDark);
     expect(
       tester.getRect(find.byIcon(Icons.upload_file_outlined)).right,
       arrow.right,

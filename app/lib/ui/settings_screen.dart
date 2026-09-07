@@ -304,11 +304,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const _Header('外观'),
               row(
-                SwitchListTile(
-                  secondary: const Icon(Icons.dark_mode_outlined),
-                  title: const Text('深色模式'),
-                  value: widget.state.darkMode,
-                  onChanged: (v) => widget.state.setDark(v),
+                SwitchTheme(
+                  // 去掉轨道两侧内边距，让可见右缘与其它行尾控件对齐。
+                  data: SwitchTheme.of(
+                    context,
+                  ).copyWith(padding: EdgeInsets.zero),
+                  child: SwitchListTile(
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    secondary: const Icon(Icons.dark_mode_outlined),
+                    title: const Text('深色模式'),
+                    value: widget.state.darkMode,
+                    onChanged: (v) => widget.state.setDark(v),
+                  ),
                 ),
               ),
               const _Header('数据'),
