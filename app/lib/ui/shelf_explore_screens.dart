@@ -436,14 +436,21 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           ),
                         ),
                         if (entries.isNotEmpty)
-                          // 保留右端渐隐提示；高度随字号增长，长分类名可查看完整提示。
+                          // 渐隐只占右侧留白，滚到底时末项仍完整；长分类名保留提示。
                           ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              stops: [0.9, 1.0],
-                              colors: [Colors.white, Colors.transparent],
-                            ).createShader(bounds),
+                            shaderCallback: (bounds) =>
+                                const LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [Colors.white, Colors.transparent],
+                                ).createShader(
+                                  Rect.fromLTWH(
+                                    bounds.right - 20,
+                                    bounds.top,
+                                    20,
+                                    bounds.height,
+                                  ),
+                                ),
                             blendMode: BlendMode.dstIn,
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -451,33 +458,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                 horizontal: 20,
                               ),
                               child: Row(
+                                spacing: 8,
                                 children: entries
                                     .map(
-                                      (entry) => Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 8,
-                                        ),
-                                        child: Tooltip(
-                                          message: entry.$1,
-                                          child: FilterChoiceChip(
-                                            label: ConstrainedBox(
-                                              constraints: BoxConstraints(
-                                                maxWidth:
-                                                    MediaQuery.sizeOf(
-                                                      context,
-                                                    ).width *
-                                                    0.7,
-                                              ),
-                                              child: Text(
-                                                entry.$1,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                      (entry) => Tooltip(
+                                        message: entry.$1,
+                                        child: FilterChoiceChip(
+                                          label: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth:
+                                                  MediaQuery.sizeOf(
+                                                    context,
+                                                  ).width *
+                                                  0.7,
                                             ),
-                                            selected: _entry == entry,
-                                            onSelected: (_) =>
-                                                _loadEntry(entry),
+                                            child: Text(
+                                              entry.$1,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
+                                          selected: _entry == entry,
+                                          onSelected: (_) => _loadEntry(entry),
                                         ),
                                       ),
                                     )

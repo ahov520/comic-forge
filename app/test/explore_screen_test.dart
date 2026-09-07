@@ -274,7 +274,7 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
-    testWidgets('窄屏大字号长源名仍可切换，空态按钮可滚动操作：${brightness.name}', (tester) async {
+    testWidgets('窄屏大字号长源名与末尾分类可切换，空态按钮可操作：${brightness.name}', (tester) async {
       tester.view.physicalSize = const Size(320, 480);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -285,7 +285,7 @@ void main() {
         _source(
           name: name,
           url: 'https://second.example.com',
-          entries: '$category::/serial',
+          entries: '$category::/serial\n最新::/latest',
         ),
       );
       respond = (_) => '<html></html>';
@@ -326,6 +326,23 @@ void main() {
         fetcher.requests.every((uri) => uri.host == 'second.example.com'),
         isTrue,
       );
+      await tester.drag(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.horizontal,
+        ),
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(_category('最新')).right,
+        closeTo(selector.right, 0.5),
+      );
+      await tester.tap(_category('最新'));
+      await tester.pumpAndSettle();
+      expect(fetcher.requests, hasLength(3));
+      expect(fetcher.requests.last.path, '/latest');
       expect(tester.takeException(), isNull);
     });
   }
