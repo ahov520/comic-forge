@@ -13,6 +13,7 @@ import 'scroll_restore.dart';
 import 'shelf_updates.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
+import 'shelf_groups.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -81,7 +82,11 @@ class CachedDetail {
 
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
-  AppState({DownloadQueue? downloadQueue}) : _downloads = downloadQueue;
+  AppState({DownloadQueue? downloadQueue}) : _downloads = downloadQueue {
+    shelfGroups.addListener(notifyListeners);
+  }
+
+  final ShelfGroups shelfGroups = ShelfGroups();
 
   DownloadQueue? _downloads;
   DownloadQueue get downloads => _downloads ??= DownloadQueue(
@@ -90,6 +95,8 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    shelfGroups.removeListener(notifyListeners);
+    shelfGroups.dispose();
     _downloads?.dispose();
     super.dispose();
   }
@@ -172,6 +179,7 @@ class AppState extends ChangeNotifier {
       ..addAll((jsonDecode(sp.getString(_kShelf) ?? '[]') as List)
           .whereType<Map<String, dynamic>>()
           .map(Book.fromJson));
+    await shelfGroups.load(shelf.map((book) => book.bookUrl));
     progress
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kProgress) ?? '{}') as Map<String, dynamic>)
@@ -1176,6 +1184,7 @@ class AppState extends ChangeNotifier {
       shelf.removeWhere((e) => e.bookUrl == b.bookUrl);
       _shelfChapters.remove(b.bookUrl);
       _shelfDismissals.remove(b.bookUrl);
+      await shelfGroups.removeBook(b.bookUrl);
     } else {
       shelf.insert(0, b);
       final cached = detailCacheFor(b.bookUrl);
@@ -1198,6 +1207,10 @@ class AppState extends ChangeNotifier {
   }
 
   bool inShelf(Book b) => shelf.any((e) => e.bookUrl == b.bookUrl);
+
+  Future<void> assignShelfGroups(Book book, Iterable<String> groupIds) async {
+    if (inShelf(book)) await shelfGroups.assign(book.bookUrl, groupIds);
+  }
 
   Future<void> setDark(bool v) async {
     darkMode = v;

@@ -12,6 +12,7 @@ import 'book_tile_typography.dart';
 import 'explore_results.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
+import 'shelf_groups_screen.dart';
 import 'search_screen.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
@@ -67,6 +68,14 @@ class _ShelfScreenState extends State<ShelfScreen> {
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('设置分组'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                showShelfGroupPicker(context, widget.state, book);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.done_all),
               title: const Text('清除更新角标'),
               subtitle: const Text('保留阅读进度，新章节更新后再次提醒'),
@@ -92,6 +101,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
         // 筛选：kind 含「完结」→ 已完结；kind 非空且不含「完结」→ 连载中；kind 空 → 仅「全部」可见
         final books =
             widget.state.shelf.where((b) {
+              if (!widget.state.shelfGroups.matches(b.bookUrl)) return false;
               switch (_filter) {
                 case 2:
                   return b.kind.contains('完结');
@@ -137,7 +147,14 @@ class _ShelfScreenState extends State<ShelfScreen> {
                         PopupMenuButton<String>(
                           tooltip: '书架操作',
                           onSelected: (action) {
-                            if (action == 'history') {
+                            if (action == 'groups') {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ShelfGroupsScreen(state: widget.state),
+                                ),
+                              );
+                            } else if (action == 'history') {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) =>
@@ -156,6 +173,10 @@ class _ShelfScreenState extends State<ShelfScreen> {
                             }
                           },
                           itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'groups',
+                              child: Text('分组管理'),
+                            ),
                             const PopupMenuItem(
                               value: 'history',
                               child: Text('阅读历史'),
@@ -177,6 +198,39 @@ class _ShelfScreenState extends State<ShelfScreen> {
                     ),
                   ),
                 ),
+                if (widget.state.shelfGroups.groups.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(widget.state.shelfGroups.filter),
+                        initialValue: widget.state.shelfGroups.filter ?? 'all',
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: '书架分组',
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('全部分组'),
+                          ),
+                          const DropdownMenuItem(value: '', child: Text('未分组')),
+                          for (final group in widget.state.shelfGroups.groups)
+                            DropdownMenuItem(
+                              value: group.id,
+                              child: Text(
+                                group.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (id) => widget.state.shelfGroups
+                            .selectFilter(id == 'all' ? null : id),
+                      ),
+                    ),
+                  ),
                 SliverToBoxAdapter(
                   child: FilterChipRow(
                     children: ['全部', '连载中', '已完结']
@@ -213,7 +267,10 @@ class _ShelfScreenState extends State<ShelfScreen> {
                             title: '这个分类还没有漫画',
                             message: '试试其他分类，或查看书架中的全部漫画。',
                             actionLabel: '查看全部',
-                            onAction: () => setState(() => _filter = 0),
+                            onAction: () {
+                              setState(() => _filter = 0);
+                              widget.state.shelfGroups.selectFilter(null);
+                            },
                           ),
                   )
                 else
