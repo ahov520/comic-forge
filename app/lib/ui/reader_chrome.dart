@@ -416,40 +416,71 @@ class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final compact =
+        media.size.width >= 480 &&
+        media.size.height - media.viewInsets.bottom - media.padding.vertical <
+            260;
+    final actions = [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('跳转')),
+    ];
     return AlertDialog(
       backgroundColor: const Color(0xFF161619),
       scrollable: true,
-      title: const Text('跳转章节'),
+      semanticLabel: '跳转章节',
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 24 : 40,
+        vertical: compact ? 8 : 24,
+      ),
+      contentPadding: compact
+          ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+          : const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      title: compact ? null : const Text('跳转章节'),
       content: Form(
         key: _formKey,
-        child: TextFormField(
-          controller: _controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          textInputAction: TextInputAction.go,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: InputDecoration(
-            labelText: '章节序号',
-            helperText: '共 ${widget.chapterCount} 话',
-            errorMaxLines: 2,
+        child: SizedBox(
+          width: compact ? 500 : null,
+          child: Flex(
+            direction: compact ? Axis.horizontal : Axis.vertical,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                fit: compact ? FlexFit.tight : FlexFit.loose,
+                child: TextFormField(
+                  controller: _controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.go,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: compact ? '跳转章节' : '章节序号',
+                    hintText: compact ? '1–${widget.chapterCount}' : null,
+                    helperText: compact ? null : '共 ${widget.chapterCount} 话',
+                    isDense: compact,
+                    errorMaxLines: 2,
+                  ),
+                  validator: (value) {
+                    final number = int.tryParse(value ?? '');
+                    if (number == null ||
+                        number < 1 ||
+                        number > widget.chapterCount) {
+                      return '请输入 1–${widget.chapterCount} 之间的序号';
+                    }
+                    return null;
+                  },
+                  onFieldSubmitted: (_) => _submit(),
+                ),
+              ),
+              if (compact) ...[const SizedBox(width: 12), ...actions],
+            ],
           ),
-          validator: (value) {
-            final number = int.tryParse(value ?? '');
-            if (number == null || number < 1 || number > widget.chapterCount) {
-              return '请输入 1–${widget.chapterCount} 之间的序号';
-            }
-            return null;
-          },
-          onFieldSubmitted: (_) => _submit(),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('跳转')),
-      ],
+      actions: compact ? null : actions,
     );
   }
 }

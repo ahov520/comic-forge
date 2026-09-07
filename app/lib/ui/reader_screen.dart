@@ -548,6 +548,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final brightness = widget.appState?.readerBrightness ?? 1.0;
     return Scaffold(
       backgroundColor: const Color(0xFF0C0C0E),
+      // 跳转弹窗自行避让键盘，正文保持原尺寸和阅读位置。
+      resizeToAvoidBottomInset: false,
       body: FutureBuilder<List<String>>(
         future: _images,
         builder: (context, snap) {

@@ -132,4 +132,69 @@ void main() {
     expect(picked, 699);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('阅读器横屏弹出跳转键盘时，正文保持尺寸并能完成跳转', (tester) async {
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 24, bottom: 16);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewInsets);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    SharedPreferences.setMockInitialValues({});
+    final state = AppState();
+    addTearDown(state.dispose);
+    final book = Book(name: '漫画', bookUrl: 'https://jump.example/book');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReaderScreen(
+          runtime: SourceRuntime(
+            source: ComicSource.fromJson({
+              'id': 'chapter-jump-keyboard',
+              'url': 'https://jump.example',
+            }),
+            fetcher: FakeFetcher((_) => '<html></html>'),
+          ),
+          book: book,
+          chapters: _chapters(),
+          initialIndex: 1043,
+          appState: state,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final readerBottom = tester.getRect(find.byType(ReaderBottomChrome)).bottom;
+    await tester.tap(find.byTooltip('目录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('跳转'));
+    await tester.pumpAndSettle();
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 160);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getRect(find.byType(ReaderBottomChrome)).bottom,
+      readerBottom,
+    );
+    expect(find.byType(EditableText).hitTestable(), findsOneWidget);
+    final input = tester.getRect(find.byType(EditableText));
+    expect(input.top, greaterThanOrEqualTo(24));
+    expect(input.bottom, lessThanOrEqualTo(160));
+    await tester.enterText(find.byType(TextField), '0');
+    await tester.testTextInput.receiveAction(TextInputAction.go);
+    await tester.pumpAndSettle();
+    expect(find.text('请输入 1–1300 之间的序号').hitTestable(), findsOneWidget);
+    await tester.ensureVisible(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), '700');
+    await tester.testTextInput.receiveAction(TextInputAction.go);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+    expect(find.byType(ReaderCatalogSheet), findsNothing);
+    expect(find.text('漫画 · 第700话'), findsOneWidget);
+    expect(state.progressFor(book.bookUrl)?.chapterIndex, 699);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
