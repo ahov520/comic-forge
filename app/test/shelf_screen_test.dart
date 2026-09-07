@@ -114,7 +114,7 @@ void main() {
     expect(find.text('去探索'), findsOneWidget);
 
     await state.toggleShelf(
-      const Book(
+      Book(
         name: '海贼王',
         kind: '连载中',
         bookUrl: 'https://example.com/book/one-piece',
