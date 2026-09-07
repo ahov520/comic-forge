@@ -42,6 +42,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   bool _fromCache = false;
   bool _carryDone = false;
   int? _switchCount; // 换源可命中数（后台预扫完成后显示角标）
+  Future<List<(ComicSource, Book)>>? _switchTargets;
+
   /// 缓存命中时首帧直出的数据（避免 FutureBuilder 首帧闪骨架）。
   (Book, List<Chapter>)? _initialData;
 
@@ -49,17 +51,40 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    widget.appState.addListener(_scanSwitchTargets);
     _scanSwitchTargets();
+  }
+
+  @override
+  void didUpdateWidget(covariant BookDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.appState != widget.appState) {
+      oldWidget.appState.removeListener(_scanSwitchTargets);
+      widget.appState.addListener(_scanSwitchTargets);
+      _scanSwitchTargets();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.appState.removeListener(_scanSwitchTargets);
+    super.dispose();
   }
 
   /// 后台预扫换源目标（结果入 SourceService 缓存，面板复用；失败静默）。
   Future<void> _scanSwitchTargets() async {
     try {
-      final r = await SourceService.instance.scanSwitchTargets(
+      final pending = SourceService.instance.scanSwitchTargets(
         book: widget.book,
         allSources: widget.appState.sources,
       );
-      if (mounted) setState(() => _switchCount = r.length);
+      if (identical(_switchTargets, pending)) return;
+      _switchTargets = pending;
+      if (_switchCount != null) setState(() => _switchCount = null);
+      final result = await pending;
+      if (mounted && identical(_switchTargets, pending)) {
+        setState(() => _switchCount = result.length);
+      }
     } catch (_) {
       // 静默：角标不显示也不影响换源面板（面板会再扫）
     }
@@ -160,31 +185,43 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       showDragHandle: true,
       builder: (sheetCtx) => SizedBox(
         height: MediaQuery.of(sheetCtx).size.height * 0.7,
-        child: FutureBuilder<List<(ComicSource, Book)>>(
-          future: SourceService.instance.scanSwitchTargets(
-            book: widget.book,
-            allSources: widget.appState.sources,
-          ),
-          builder: (context, snap) => SwitchSourcePanel(
-            bookName: widget.book.name,
-            snapshot: snap,
-            state: widget.appState,
-            onPick: (_, b) {
-              final carry = widget.appState
-                  .progressFor(widget.book.bookUrl)
-                  ?.chapterIndex;
-              Navigator.of(sheetCtx).pop();
-              Navigator.of(this.context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => BookDetailScreen(
-                    book: b,
-                    appState: widget.appState,
-                    carryChapterIndex: carry,
-                  ),
-                ),
-              );
-            },
-          ),
+        child: AnimatedBuilder(
+          animation: widget.appState,
+          builder: (context, _) {
+            final pending = SourceService.instance.scanSwitchTargets(
+              book: widget.book,
+              allSources: widget.appState.sources,
+            );
+            return FutureBuilder<List<(ComicSource, Book)>>(
+              key: ObjectKey(pending),
+              future: pending,
+              builder: (context, snap) => SwitchSourcePanel(
+                bookName: widget.book.name,
+                snapshot: snap,
+                state: widget.appState,
+                onPick: (source, b) {
+                  if (!widget.appState.sources.any(
+                    (s) => identical(s, source) && s.enabled,
+                  )) {
+                    return;
+                  }
+                  final carry = widget.appState
+                      .progressFor(widget.book.bookUrl)
+                      ?.chapterIndex;
+                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(this.context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => BookDetailScreen(
+                        book: b,
+                        appState: widget.appState,
+                        carryChapterIndex: carry,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
     );
