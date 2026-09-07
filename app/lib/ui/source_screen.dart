@@ -670,9 +670,9 @@ class _SourceHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 12, 4, 12),
+      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 4, 4, 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (canPop)
             IconButton(
@@ -681,19 +681,22 @@ class _SourceHeader extends StatelessWidget {
               onPressed: onBack,
             ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ScreenTitle('源'),
-                if (pending > 0)
-                  Text(
-                    '$pending 个仓库待更新',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w600,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ScreenTitle('源'),
+                  if (pending > 0)
+                    Text(
+                      '$pending 个仓库待更新',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           TextButton(

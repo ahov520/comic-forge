@@ -249,7 +249,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _titleBar(BuildContext context, bool canPop) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 12, 20, 12),
+      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 4, 20, 4),
       child: Row(
         children: [
           if (canPop)
@@ -258,7 +258,12 @@ class _SearchScreenState extends State<SearchScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
-          const Expanded(child: ScreenTitle('搜索')),
+          const Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: ScreenTitle('搜索'),
+            ),
+          ),
         ],
       ),
     );
