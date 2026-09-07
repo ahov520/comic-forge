@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/search_screen.dart';
+import 'package:comic_forge/ui/skeleton.dart';
 import 'package:comic_forge/ui/source_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
@@ -14,8 +15,15 @@ import 'support/fake_fetcher.dart';
 String _results(String query) =>
     '<div class="item"><a class="title" href="/book/1">结果：$query</a></div>';
 
-Future<void> _showSearch(WidgetTester tester, AppState state) =>
-    tester.pumpWidget(MaterialApp(home: SearchScreen(state: state)));
+Future<void> _showSearch(
+  WidgetTester tester,
+  AppState state, {
+  Duration sourceTimeout = const Duration(days: 1),
+}) => tester.pumpWidget(
+  MaterialApp(
+    home: SearchScreen(state: state, sourceTimeout: sourceTimeout),
+  ),
+);
 
 void main() {
   late AppState state;
@@ -154,7 +162,7 @@ void main() {
     await tester.enterText(find.byType(TextField), '旧词');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.text('正在聚合 1 个源'), findsOneWidget);
 
     await tester.tap(find.byTooltip('清空输入'));
     await tester.pumpAndSettle();
@@ -241,27 +249,22 @@ void main() {
     await tester.enterText(find.byType(TextField), '海贼王');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pump();
-    expect(find.text('正在搜索 0/2 个源 · 已找到 0 条'), findsOneWidget);
+    expect(find.text('正在聚合 2 个源'), findsOneWidget);
+    expect(find.byType(BookListSkeleton), findsOneWidget);
 
     first.complete(_results('海贼王'));
     await tester.pumpAndSettle();
-    expect(find.text('正在搜索 1/2 个源 · 已找到 1 条'), findsOneWidget);
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      0.5,
-    );
+    expect(find.text('正在聚合 2 个源 · 1 成功'), findsOneWidget);
     expect(find.text('结果：海贼王'), findsOneWidget);
+    expect(find.text('源: 测试源'), findsOneWidget);
     expect(find.byTooltip('来源：测试源'), findsOneWidget);
 
     second.completeError(FetchException('offline'));
     await tester.pumpAndSettle();
     expect(find.text('结果：海贼王'), findsOneWidget);
-    expect(find.text('1 条结果 · 1 个源命中'), findsOneWidget);
-    expect(find.text('1 个源暂时不可用：备用源'), findsOneWidget);
+    expect(find.text('已聚合 2 个源 · 1 成功 1 失败'), findsOneWidget);
+    expect(find.text('1 个源失败：备用源'), findsOneWidget);
     expect(find.text('暂时无法连接漫画源'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
   testWidgets('全部源失败与无匹配分开显示，同名源分别计数且可重试恢复', (tester) async {
@@ -282,14 +285,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('暂时无法连接漫画源'), findsOneWidget);
     expect(find.text('没有找到相关漫画'), findsNothing);
-    expect(find.text('2 个源暂时不可用：测试源、测试源'), findsOneWidget);
+    expect(find.text('已聚合 2 个源 · 2 失败'), findsOneWidget);
+    expect(find.text('2 个源失败：测试源、测试源'), findsOneWidget);
 
     respond = (_) => _results('海贼王');
     await tester.tap(find.text('重新搜索'));
     await tester.pumpAndSettle();
     expect(find.text('结果：海贼王'), findsOneWidget);
     expect(find.text('暂时无法连接漫画源'), findsNothing);
-    expect(find.text('1 条结果 · 2 个源命中 · 去重 1'), findsOneWidget);
+    expect(find.text('已聚合 2 个源 · 2 成功'), findsOneWidget);
+    expect(find.text('源: 测试源'), findsOneWidget);
     expect(state.searchHistory, ['海贼王']);
     expect(fetcher.requests, hasLength(4));
   });
@@ -307,6 +312,41 @@ void main() {
     await tester.tap(find.text('管理源'));
     await tester.pumpAndSettle();
     expect(find.byType(SourceScreen), findsOneWidget);
+  });
+
+  testWidgets('源超时计入聚合状态并点名超时源', (tester) async {
+    final hang = Completer<String>();
+    respond = (_) => hang.future;
+    await _showSearch(
+      tester,
+      state,
+      sourceTimeout: const Duration(milliseconds: 20),
+    );
+    await tester.enterText(find.byType(TextField), '海贼王');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(find.text('已聚合 1 个源 · 1 超时'), findsOneWidget);
+    expect(find.text('1 个源超时：测试源'), findsOneWidget);
+    expect(find.text('暂时无法连接漫画源'), findsOneWidget);
+    expect(find.text('没有找到相关漫画'), findsNothing);
+
+    hang.complete(_results('海贼王'));
+    await tester.pumpAndSettle();
+    expect(find.text('结果：海贼王'), findsNothing);
+    expect(find.text('已聚合 1 个源 · 1 超时'), findsOneWidget);
+  });
+
+  testWidgets('搜索页展示大标题，空历史与设计稿间距一致', (tester) async {
+    await _showSearch(tester, state);
+    expect(find.text('搜索'), findsOneWidget);
+    expect(find.text('最近10词'), findsOneWidget);
+    expect(find.text('输入关键词开始聚合搜索'), findsOneWidget);
+    final title = tester.getRect(find.text('搜索').first);
+    final field = tester.getRect(find.byType(TextField));
+    expect(title.left, closeTo(20, 0.5));
+    expect(field.left, closeTo(20, 0.5));
+    expect(field.top, greaterThan(title.bottom));
   });
 
   testWidgets('窄屏长历史词可回填完整内容且不溢出', (tester) async {

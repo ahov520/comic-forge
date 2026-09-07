@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:engine/engine.dart';
 
 /// 聚合搜索结果加工：去重（同名同作者）+ 按源权重排序 + 命中统计。
@@ -85,4 +87,62 @@ class AggregatedSearch {
   final List<String> sourceIds;
   final int sourcesHit;
   final int duplicatesRemoved;
+}
+
+/// 单源失败原因：超时与其它错误分开提示。
+enum SearchSourceFailKind { timeout, error }
+
+class SearchSourceFailure {
+  const SearchSourceFailure({required this.name, required this.kind});
+
+  final String name;
+  final SearchSourceFailKind kind;
+}
+
+/// 搜索页状态行：对齐 six-screens ③「正在聚合 N 个源 · 2 成功 1 超时」。
+String searchAggregateStatus({
+  required int sourceCount,
+  required int successCount,
+  required int timeoutCount,
+  required int errorCount,
+  required bool searching,
+}) {
+  final counts = <String>[
+    if (successCount > 0) '$successCount 成功',
+    if (timeoutCount > 0) '$timeoutCount 超时',
+    if (errorCount > 0) '$errorCount 失败',
+  ];
+  final prefix = searching ? '正在聚合' : '已聚合';
+  if (counts.isEmpty) return '$prefix $sourceCount 个源';
+  return '$prefix $sourceCount 个源 · ${counts.join(' ')}';
+}
+
+/// 失败源可读提示：点名源，并区分超时 / 失败。
+String? searchFailureTip(Iterable<SearchSourceFailure> failures) {
+  final timeouts = <String>[];
+  final errors = <String>[];
+  for (final f in failures) {
+    switch (f.kind) {
+      case SearchSourceFailKind.timeout:
+        timeouts.add(f.name);
+      case SearchSourceFailKind.error:
+        errors.add(f.name);
+    }
+  }
+  final parts = <String>[
+    if (timeouts.isNotEmpty) '${timeouts.length} 个源超时：${timeouts.join('、')}',
+    if (errors.isNotEmpty) '${errors.length} 个源失败：${errors.join('、')}',
+  ];
+  if (parts.isEmpty) return null;
+  return parts.join(' · ');
+}
+
+/// 将异常归类为超时或其它失败（TimeoutException / 文案含 timeout、超时）。
+SearchSourceFailKind classifySearchFailure(Object error) {
+  if (error is TimeoutException) return SearchSourceFailKind.timeout;
+  final text = error.toString().toLowerCase();
+  if (text.contains('timeout') || text.contains('超时')) {
+    return SearchSourceFailKind.timeout;
+  }
+  return SearchSourceFailKind.error;
 }
