@@ -40,9 +40,24 @@ void main() {
     test('未知 id 回报是 no-op', () async {
       final st = AppState();
       await st.addSourceManual(_src('z'));
+      var notifications = 0;
+      st.addListener(() => notifications++);
       await st.reportSourceHealth(const [], {'no-such-id': 'err'});
       await st.reportSourceHealth(['no-such-id'], const {});
       expect(st.sources.first.failCount, 0);
+      expect(notifications, 0);
+    });
+
+    test('已健康源再次探测成功也保存最新成功时间，重启不会反复当作过期源', () async {
+      final st = AppState();
+      addTearDown(st.dispose);
+      final s = _src('healthy-again')..lastOkAt = 1;
+      await st.addSourceManual(s);
+      await st.reportSourceHealth([s.id], const {});
+      final sp = await SharedPreferences.getInstance();
+      final saved = (jsonDecode(sp.getString('cf.sources')!) as List).single;
+      expect(saved['lastOkAt'], s.lastOkAt);
+      expect(saved['lastOkAt'], greaterThan(1));
     });
 
     test('连续失败≥3 → isUnhealthy，一键禁用后不再参与聚合搜索', () async {

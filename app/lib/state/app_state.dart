@@ -631,7 +631,7 @@ class AppState extends ChangeNotifier {
     for (final id in okIds) {
       final s = _find(id);
       if (s == null) continue;
-      if (s.failCount != 0 || s.lastError.isNotEmpty || s.lastOkAt == 0) {
+      if (s.failCount != 0 || s.lastError.isNotEmpty || s.lastOkAt != now) {
         changed = true;
       }
       s.failCount = 0;
@@ -642,7 +642,8 @@ class AppState extends ChangeNotifier {
       final s = _find(id);
       if (s == null) return;
       final msg = err.length > 120 ? err.substring(0, 120) : err;
-      if (s.lastError != msg || s.lastFailedAt == 0) changed = true;
+      // 即使错误文案相同，连续失败次数和探测时间也需要落盘并刷新界面。
+      changed = true;
       s.lastError = msg;
       s.lastFailedAt = now;
       s.failCount++;

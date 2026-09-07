@@ -148,6 +148,29 @@ void main() {
     expect(state.sources.first.enabled, isFalse);
   });
 
+  testWidgets('相同错误连续回报会即时更新次数与失效标记，重启后仍保留', (tester) async {
+    final source = _src();
+    await state.addSourceManual(source);
+    await _show(tester, state);
+    for (var count = 1; count <= 3; count++) {
+      await state.reportSourceHealth(const [], {source.id: 'timeout'});
+      await tester.pumpAndSettle();
+      expect(find.textContaining('最近失败($count)'), findsOneWidget);
+    }
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    final restored = AppState();
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.sources.single.failCount, 3);
+    expect(restored.sources.single.isUnhealthy, isTrue);
+
+    await state.reportSourceHealth([source.id], const {});
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.error_outline), findsNothing);
+    expect(find.textContaining('最近失败'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('从其它页推入时显示返回', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
