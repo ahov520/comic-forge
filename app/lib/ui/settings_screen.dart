@@ -263,6 +263,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final textTheme = Theme.of(context).textTheme;
     final server =
         Uri.tryParse(widget.state.webDavConfig?['url'] ?? '')?.host ?? '';
+    final ruleActionStyle = IconButton.styleFrom(
+      // 图标与行尾箭头对齐，同时保留 48px 点击区域。
+      minimumSize: const Size(48, 48),
+      padding: EdgeInsets.zero,
+      alignment: AlignmentDirectional.centerEnd,
+    );
     Widget row(Widget child) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: DecoratedBox(
@@ -276,11 +282,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bottom: false,
       child: ListTileTheme(
         data: ListTileThemeData(
-          dense: true,
+          // dense 会把标题强制改为 13px；稿中行标题为 bodyMedium（14px）。
+          minTileHeight: 48,
           contentPadding: const EdgeInsets.symmetric(horizontal: 4),
           minLeadingWidth: 18,
           horizontalTitleGap: 12,
-          minVerticalPadding: 12,
+          minVerticalPadding: 13,
           titleTextStyle: textTheme.bodyMedium,
           subtitleTextStyle: textTheme.bodySmall?.copyWith(
             color: scheme.onSurfaceVariant,
@@ -338,11 +345,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   trailing: adBlock == null
                       ? IconButton(
+                          style: ruleActionStyle,
                           tooltip: '导入广告规则',
                           icon: const Icon(Icons.upload_file_outlined),
                           onPressed: _importAdBlock,
                         )
                       : IconButton(
+                          style: ruleActionStyle,
                           tooltip: '清除规则',
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () async {

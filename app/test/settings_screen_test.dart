@@ -2,6 +2,7 @@ import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,8 +10,10 @@ Future<void> _showSettings(
   WidgetTester tester,
   AppState state, {
   Brightness brightness = Brightness.light,
+  Size size = const Size(320, 640),
+  double textScale = 2,
 }) async {
-  tester.view.physicalSize = const Size(320, 640);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -20,7 +23,7 @@ Future<void> _showSettings(
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(
           context,
-        ).copyWith(textScaler: const TextScaler.linear(2)),
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
       home: Scaffold(body: SettingsScreen(state: state)),
@@ -38,6 +41,56 @@ void main() {
   tearDown(() {
     state.dispose();
     SourceService.instance.adBlock = null;
+  });
+
+  testWidgets('设置行保留 14px 标题，操作图标与箭头对齐且整块区域可点击', (tester) async {
+    await _showSettings(
+      tester,
+      state,
+      size: const Size(340, 720),
+      textScale: 1,
+    );
+    final firstTitle = tester.getRect(find.text('深色模式'));
+    for (final label in [
+      '深色模式',
+      'WebDAV 备份 / 恢复',
+      '广告拦截规则',
+      'Comic Forge v0.1.0',
+    ]) {
+      final title = find.text(label);
+      final tile = find.widgetWithText(ListTile, label);
+      final leading = find
+          .descendant(of: tile, matching: find.byType(Icon))
+          .first;
+      expect(tester.getRect(title).left, firstTitle.left);
+      expect(tester.getRect(leading).left, 24);
+      expect(
+        tester.getRect(leading).center.dy,
+        closeTo(tester.getRect(tile).center.dy, 0.5),
+      );
+      expect(
+        tester.renderObject<RenderParagraph>(title).text.style?.fontSize,
+        14,
+      );
+    }
+    final arrow = tester.getRect(find.byIcon(Icons.chevron_right));
+    expect(
+      tester.getRect(find.byIcon(Icons.upload_file_outlined)).right,
+      arrow.right,
+    );
+    await state.setAdBlock('{"urlRules":["tracking"]}');
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.byIcon(Icons.delete_outline)).right,
+      arrow.right,
+    );
+    final clear = tester.getRect(find.byTooltip('清除规则'));
+    expect(clear.width, greaterThanOrEqualTo(48));
+    expect(clear.height, greaterThanOrEqualTo(48));
+    await tester.tapAt(Offset(clear.left + 2, clear.center.dy));
+    await tester.pumpAndSettle();
+    expect(state.adBlock, isNull);
+    expect(tester.takeException(), isNull);
   });
 
   for (final brightness in Brightness.values) {
