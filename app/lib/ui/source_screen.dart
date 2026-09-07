@@ -10,6 +10,7 @@ import '../state/clipboard_import.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'source_editor_screen.dart';
+import 'source_subscription_dialog.dart';
 import 'widgets.dart';
 
 /// 仓库 URL → 设计稿短名（`user/repo`）。
@@ -35,8 +36,9 @@ String repoSyncLabel(int? epochMs) {
 
 /// 源管理：订阅仓库 / 手动导入 / 启停。
 class SourceScreen extends StatefulWidget {
-  const SourceScreen({super.key, required this.state});
+  const SourceScreen({super.key, required this.state, this.repoClient});
   final AppState state;
+  final RepoClient? repoClient;
 
   @override
   State<SourceScreen> createState() => _SourceScreenState();
@@ -128,46 +130,26 @@ class _SourceScreenState extends State<SourceScreen> {
   }
 
   Future<void> _subscribeDialog() async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
+    final url = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('订阅源仓库'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'github.com/user/repo 或 gitee.com/user/repo',
-            helperText: '明文仓库全量导入；ppcat 加密仓库自动提取明文分片（约半数源）',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('订阅'),
-          ),
-        ],
-      ),
+      builder: (_) => const SourceSubscriptionDialog(),
     );
-    if (ok != true) return;
-    final url = controller.text.trim();
-    if (url.isEmpty) return;
+    if (url == null || !mounted) return;
+    final state = widget.state;
     setState(() => _subscribing = true);
     try {
-      final bundle = await RepoClient(
-        fetcher: SourceService.instance.fetcher,
-      ).subscribe(url);
-      await widget.state.addRepoSubscribed(url, bundle.sources);
+      final bundle =
+          await (widget.repoClient ?? SourceService.instance.repoClient)
+              .subscribe(url);
+      await state.addRepoSubscribed(url, bundle.sources);
+      if (!mounted) return;
       setState(
         () => _lastResult =
-            '订阅成功：${bundle.ref.canonical} 导入 ${bundle.sources.length} 个源（Track ${bundle.track}）',
+            '订阅成功：${bundle.ref.canonical} 导入 ${bundle.sources.length} 个源'
+            '${bundle.track == 'B-partial' ? '（部分源暂不支持）' : ''}',
       );
     } catch (e) {
-      setState(() => _lastResult = '订阅失败：$e');
+      if (mounted) setState(() => _lastResult = '订阅失败：$e');
     } finally {
       if (mounted) setState(() => _subscribing = false);
     }
@@ -281,6 +263,7 @@ class _SourceScreenState extends State<SourceScreen> {
         final pending = widget.state.pendingUpdateCount;
         final canPop = Navigator.of(context).canPop();
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           body: SafeArea(
             bottom: false,
             child: Column(

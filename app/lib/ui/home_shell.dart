@@ -41,6 +41,8 @@ class _HomeShellState extends State<HomeShell> {
     return AnimatedBuilder(
       animation: s,
       builder: (context, _) => Scaffold(
+        // 搜索页的输入框在正文中，其它表单由弹窗或独立页面避让键盘。
+        resizeToAvoidBottomInset: _tab == 2,
         body: IndexedStack(
           index: _tab,
           children: [
