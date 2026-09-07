@@ -187,11 +187,14 @@ class ChapterTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
-                SizedBox(
-                  width: 28,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 28, maxWidth: 44),
                   child: Text(
                     '${index + 1}',
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
                     style: textTheme.labelMedium?.copyWith(
                       color: numColor,
                       fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,

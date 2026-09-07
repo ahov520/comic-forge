@@ -101,6 +101,21 @@ void main() {
       tester.getSize(find.byType(ChapterTile).first).height,
       lessThan(48),
     );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChapterTile(
+            index: 1043,
+            title: '第1044话',
+            isCurrent: true,
+            onTap: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('1044'), findsOneWidget);
+    expect(tester.getSize(find.text('1044')).height, lessThan(22));
   });
 
   testWidgets('换源面板加载骨架、空态 EmptyState、命中用 BookTile', (tester) async {
