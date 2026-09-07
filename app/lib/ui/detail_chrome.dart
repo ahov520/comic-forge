@@ -245,11 +245,18 @@ class SwitchSourcePanel extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: Row(
-            children: [
-              Text('换源 · $bookName', style: textTheme.titleMedium),
-            ],
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Semantics(
+              header: true,
+              child: Text(
+                '换源 · $bookName',
+                style: textTheme.titleMedium,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ),
         Expanded(child: _body()),
@@ -258,6 +265,13 @@ class SwitchSourcePanel extends StatelessWidget {
   }
 
   Widget _body() {
+    if (snapshot.hasError) {
+      return const EmptyStateView(
+        icon: Icons.cloud_off_outlined,
+        title: '暂时无法查找其它来源',
+        message: '检查网络后，重新打开换源面板试试。',
+      );
+    }
     if (!snapshot.hasData) {
       return const BookListSkeleton();
     }

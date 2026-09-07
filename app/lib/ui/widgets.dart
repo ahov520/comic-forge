@@ -270,6 +270,8 @@ class EmptyStateView extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
   });
 
   final IconData icon;
@@ -277,6 +279,8 @@ class EmptyStateView extends StatelessWidget {
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
 
   @override
   Widget build(BuildContext context) {
@@ -301,11 +305,14 @@ class EmptyStateView extends StatelessWidget {
                 child: Icon(icon, size: 32, color: scheme.onPrimaryContainer),
               ),
               const SizedBox(height: 20),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -316,11 +323,21 @@ class EmptyStateView extends StatelessWidget {
                   color: scheme.onSurfaceVariant,
                 ),
               ),
-              if (actionLabel != null && onAction != null) ...[
+              if (actionLabel != null) ...[
                 const SizedBox(height: 20),
                 FilledButton.tonal(
                   onPressed: onAction,
-                  child: Text(actionLabel!),
+                  child: Text(actionLabel!, textAlign: TextAlign.center),
+                ),
+              ],
+              if (secondaryActionLabel != null) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: onSecondaryAction,
+                  child: Text(
+                    secondaryActionLabel!,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
             ],
@@ -331,17 +348,21 @@ class EmptyStateView extends StatelessWidget {
   }
 }
 
-/// 简易错误视图。
+/// 错误与空状态共用布局；恢复来源等操作优先，重试作为次要操作。
 class ErrorView extends StatelessWidget {
   const ErrorView({
     super.key,
     this.error,
+    this.title = '暂时无法加载内容',
+    this.message,
     this.onRetry,
     this.actionLabel,
     this.onAction,
     this.icon = Icons.cloud_off_outlined,
   });
   final Object? error;
+  final String title;
+  final String? message;
   final VoidCallback? onRetry;
 
   /// 附加动作（如「启用该源并重试」）。
@@ -351,30 +372,15 @@ class ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              '加载失败：$error',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(height: 12),
-              FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
-            ],
-            if (onAction != null && actionLabel != null) ...[
-              const SizedBox(height: 8),
-              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-            ],
-          ],
-        ),
-      ),
+    final hasAction = actionLabel != null;
+    return EmptyStateView(
+      icon: icon,
+      title: title,
+      message: message ?? (error == null ? '检查网络后重试。' : '加载失败：$error'),
+      actionLabel: hasAction ? actionLabel : (onRetry == null ? null : '重试'),
+      onAction: hasAction ? onAction : onRetry,
+      secondaryActionLabel: hasAction && onRetry != null ? '重试' : null,
+      onSecondaryAction: onRetry,
     );
   }
 }

@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../state/source_share.dart';
 import 'detail_chrome.dart';
 import 'skeleton.dart';
+import 'source_screen.dart';
 import 'widgets.dart';
 
 /// 书籍详情 + 章节列表。
@@ -24,7 +25,7 @@ class BookDetailScreen extends StatefulWidget {
 
   /// 详情加载器（测试接缝；null 用真实源运行时）。
   final Future<(Book, List<Chapter>)> Function(String bookUrl)?
-      detailLoaderOverride;
+  detailLoaderOverride;
 
   /// 换源迁移：以章序号对齐旧进度（皮皮喵语义，跨源章节名不一致按序号近似）。
   final int? carryChapterIndex;
@@ -89,9 +90,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     }
     _initialData = null;
     _fromCache = false;
-    _future = _source == null
-        ? Future.error('未找到可用的来源源')
-        : _fetchDetail();
+    _future = _source == null ? Future.error('未找到可用的来源源') : _fetchDetail();
   }
 
   /// 一键启用被禁用的来源源并重新加载（体检自动禁用后的死路解法）。
@@ -101,6 +100,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     await widget.appState.toggleSource(id);
     if (mounted) setState(_load);
   }
+
+  void _openSources() => Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => SourceScreen(state: widget.appState)),
+  );
 
   ComicSource? _findSource() {
     for (final s in widget.appState.sources) {
@@ -113,8 +116,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     final (book, chapters) = widget.detailLoaderOverride != null
         ? await widget.detailLoaderOverride!(widget.book.bookUrl)
         : await SourceService.instance
-            .runtimeFor(_source!)
-            .detail(widget.book.bookUrl);
+              .runtimeFor(_source!)
+              .detail(widget.book.bookUrl);
     await widget.appState.saveDetailCache(book, chapters);
     return (book, chapters);
   }
@@ -138,14 +141,17 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   /// 换源：在其它启用源中搜同名书，列表点选后替换当前详情页。
   /// 复用详情加载时的预扫缓存（无缓存/在途则共享同一次扫描）。
   Future<void> _showSwitchSourceSheet() async {
-    final othersExist = widget.appState.sources.any((s) =>
-        s.enabled &&
-        s.id != widget.book.sourceId &&
-        s.rules.searchUrl.isNotEmpty);
+    final othersExist = widget.appState.sources.any(
+      (s) =>
+          s.enabled &&
+          s.id != widget.book.sourceId &&
+          s.rules.searchUrl.isNotEmpty,
+    );
     if (!othersExist) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('没有其它启用的源可换')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有其它启用的源可换')));
       return;
     }
     await showModalBottomSheet<void>(
@@ -195,15 +201,24 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             return Scaffold(
               appBar: AppBar(title: Text(widget.book.name)),
               body: ErrorView(
-                error: snap.error,
+                title: _disabledSource != null
+                    ? '漫画源已停用'
+                    : (_source == null ? '找不到这本书的来源' : '暂时无法加载漫画'),
+                message: _disabledSource != null
+                    ? '启用来源后，即可重新加载这本漫画。'
+                    : (_source == null
+                          ? '到「源」页添加或恢复来源后重试。'
+                          : '检查网络后重试，或到「源」页查看来源状态。'),
                 onRetry: () => setState(_load),
                 icon: _disabledSource != null
                     ? Icons.block_outlined
                     : Icons.cloud_off_outlined,
                 actionLabel: _disabledSource != null
                     ? '启用「${_disabledSource!.name}」并重试'
-                    : null,
-                onAction: _disabledSource != null ? _enableSourceAndReload : null,
+                    : (_source == null ? '管理源' : null),
+                onAction: _disabledSource != null
+                    ? _enableSourceAndReload
+                    : (_source == null ? _openSources : null),
               ),
             );
           }
@@ -221,15 +236,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               !_carryDone &&
               chapters.isNotEmpty) {
             _carryDone = true;
-            final idx =
-                widget.carryChapterIndex!.clamp(0, chapters.length - 1);
+            final idx = widget.carryChapterIndex!.clamp(0, chapters.length - 1);
             final c = chapters[idx];
             // ignore: unawaited_futures
-            widget.appState.saveProgress(book,
-                chapterUrl: c.url,
-                chapterTitle: c.title,
-                chapterIndex: idx,
-                chapterCount: chapters.length);
+            widget.appState.saveProgress(
+              book,
+              chapterUrl: c.url,
+              chapterTitle: c.title,
+              chapterIndex: idx,
+              chapterCount: chapters.length,
+            );
           }
           final scheme = Theme.of(context).colorScheme;
           final prog = widget.appState.progressFor(widget.book.bookUrl);
@@ -263,7 +279,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     count: _switchCount ?? 0,
                     isLabelVisible: (_switchCount ?? 0) > 0,
                     child: IconButton(
-                      tooltip: '换源${_switchCount != null && _switchCount! > 0 ? '（$_switchCount 源命中）' : ''}',
+                      tooltip:
+                          '换源${_switchCount != null && _switchCount! > 0 ? '（$_switchCount 源命中）' : ''}',
                       icon: const Icon(Icons.swap_horiz),
                       onPressed: _showSwitchSourceSheet,
                     ),
@@ -273,12 +290,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     tooltip: '复制本书源 JSON（可分享）',
                     icon: const Icon(Icons.ios_share),
                     onPressed: () async {
-                      await Clipboard.setData(ClipboardData(
-                          text: sourceShareJson(_source!)));
+                      await Clipboard.setData(
+                        ClipboardData(text: sourceShareJson(_source!)),
+                      );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                              content: Text('已复制源 JSON，对方可在「源 → 剪贴板导入」粘贴使用')),
+                            content: Text('已复制源 JSON，对方可在「源 → 剪贴板导入」粘贴使用'),
+                          ),
                         );
                       }
                     },
@@ -300,8 +319,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     book: book,
                     sourceName: sourceName,
                     switchCount: _switchCount,
-                    onSwitchSource:
-                        _source == null ? null : _showSwitchSourceSheet,
+                    onSwitchSource: _source == null
+                        ? null
+                        : _showSwitchSourceSheet,
                     readLabel: readLabel,
                     onRead: readLabel == null
                         ? null
@@ -313,13 +333,17 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
                     child: Row(
                       children: [
-                        Text('章节 (${chapters.length})',
-                            style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          '章节 (${chapters.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const Spacer(),
                         if (_fromCache)
                           Chip(
-                            label: const Text('离线目录',
-                                style: TextStyle(fontSize: 11)),
+                            label: const Text(
+                              '离线目录',
+                              style: TextStyle(fontSize: 11),
+                            ),
                             visualDensity: VisualDensity.compact,
                             backgroundColor: scheme.surfaceContainerHighest,
                           ),
@@ -327,17 +351,33 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     ),
                   ),
                 ),
-                SliverList.builder(
-                  itemCount: chapters.length,
-                  itemBuilder: (context, i) {
-                    return ChapterTile(
-                      index: i,
-                      title: chapters[i].title,
-                      isCurrent: i == savedIdx,
-                      onTap: () => openAt(i),
-                    );
-                  },
-                ),
+                if (chapters.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyStateView(
+                      icon: Icons.auto_stories_outlined,
+                      title: '暂无章节',
+                      message: _source == null
+                          ? '添加或启用来源后，重新打开这本漫画。'
+                          : '当前源还没有提供章节，可以重新加载或稍后再试。',
+                      actionLabel: _source == null ? '管理源' : '重新加载',
+                      onAction: _source == null
+                          ? _openSources
+                          : () => setState(_load),
+                    ),
+                  )
+                else
+                  SliverList.builder(
+                    itemCount: chapters.length,
+                    itemBuilder: (context, i) {
+                      return ChapterTile(
+                        index: i,
+                        title: chapters[i].title,
+                        isCurrent: i == savedIdx,
+                        onTap: () => openAt(i),
+                      );
+                    },
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
               ],
             ),
