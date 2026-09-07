@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/ui/search_failure_panel.dart';
 import 'package:comic_forge/ui/search_screen.dart';
 import 'package:comic_forge/ui/source_screen.dart';
 import 'package:comic_forge/ui/widgets.dart';
@@ -12,9 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_fetcher.dart';
 
-ComicSource _source(int i) => ComicSource.fromJson({
+ComicSource _source(int i, {String? name}) => ComicSource.fromJson({
   'id': '$i',
-  'name': '社区漫画源 $i · 提供完整连载和完结漫画的备用线路',
+  'name': name ?? '社区漫画源 $i · 提供完整连载和完结漫画的备用线路',
   'url': 'https://source-$i.example.com',
   'rules': {
     'searchUrl': '/search?q=searchKey',
@@ -61,6 +62,37 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('少量失败源面板按内容收拢，列表后可直接管理源', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await state.addSourceManual(_source(1, name: '社区源 A'));
+    await state.addSourceManual(_source(2, name: '社区源 B'));
+    respond = (_) => throw FetchException('offline');
+
+    await search(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('查看失败源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('社区源 A').hitTestable(), findsOneWidget);
+    expect(find.text('社区源 B').hitTestable(), findsOneWidget);
+    final panel = tester.getRect(find.byType(SearchFailurePanel));
+    final list = tester.getRect(
+      find.byKey(const ValueKey('search-failure-list')),
+    );
+    final action = tester.getRect(find.widgetWithText(FilledButton, '管理源'));
+    expect(panel.height, lessThan(320));
+    expect(action.top - list.bottom, inInclusiveRange(8, 16));
+    expect(action.height, greaterThanOrEqualTo(48));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('管理源'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceScreen), findsOneWidget);
+  });
+
   for (final textScale in [1.0, 1.6]) {
     testWidgets('窄屏 $textScale 倍字号下，大量失败源不挤掉结果且可查看完整列表', (tester) async {
       tester.view.physicalSize = const Size(320, 640);
@@ -95,6 +127,7 @@ void main() {
         ),
         maxScrolls: 40,
       );
+      await tester.pumpAndSettle();
       expect(last.hitTestable(), findsOneWidget);
       expect(find.text('连接失败'), findsWidgets);
       expect(tester.takeException(), isNull);

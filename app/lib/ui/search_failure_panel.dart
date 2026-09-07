@@ -16,9 +16,12 @@ class SearchFailurePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return SafeArea(
       top: false,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
@@ -30,7 +33,7 @@ class SearchFailurePanel extends StatelessWidget {
                     liveRegion: true,
                     child: Text(
                       '未响应的源 · ${failures.length}',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: textTheme.titleMedium,
                     ),
                   ),
                 ),
@@ -42,36 +45,73 @@ class SearchFailurePanel extends StatelessWidget {
               ],
             ),
           ),
-          Expanded(
+          Flexible(
             child: failures.isEmpty
-                ? const Center(child: Text('暂无失败源'))
-                : ListView.builder(
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                    child: Text(
+                      '暂无失败源',
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
                     key: const ValueKey('search-failure-list'),
-                    padding: const EdgeInsets.only(bottom: 8),
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     itemCount: failures.length,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: scheme.outlineVariant),
                     itemBuilder: (context, i) {
                       final failure = failures[i];
                       final timedOut =
                           failure.kind == SearchSourceFailKind.timeout;
                       return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
+                        minTileHeight: 60,
+                        minVerticalPadding: 12,
+                        minLeadingWidth: 18,
+                        horizontalTitleGap: 12,
                         leading: Icon(
                           timedOut
                               ? Icons.timer_outlined
                               : Icons.cloud_off_outlined,
+                          size: 18,
                           color: scheme.onSurfaceVariant,
                         ),
-                        title: Text(failure.name),
-                        subtitle: Text(timedOut ? '连接超时' : '连接失败'),
+                        title: Text(failure.name, style: textTheme.bodyMedium),
+                        subtitle: Text(
+                          timedOut ? '连接超时' : '连接失败',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
                       );
                     },
                   ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
             child: FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(64, 44),
+                backgroundColor: scheme.primaryContainer,
+                foregroundColor: scheme.primary,
+                textStyle: textTheme.labelLarge?.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
               onPressed: onManageSources,
-              icon: const Icon(Icons.source_outlined),
-              label: const Text('管理源'),
+              icon: const Icon(Icons.source_outlined, size: 18),
+              label: const Text('管理源', textAlign: TextAlign.center),
             ),
           ),
         ],

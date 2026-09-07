@@ -227,8 +227,10 @@ class _SearchScreenState extends State<SearchScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (sheetContext) => SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+      builder: (sheetContext) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+        ),
         child: ValueListenableBuilder<Map<String, SearchSourceFailure>>(
           valueListenable: _failed,
           builder: (context, failures, _) => SearchFailurePanel(
