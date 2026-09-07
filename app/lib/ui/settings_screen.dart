@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../backup_service.dart';
 import '../state/app_state.dart';
 import 'downloads_screen.dart';
+import 'reading_history_screen.dart';
 import 'widgets.dart';
 
 /// 设置。
@@ -320,6 +321,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const _Header('数据'),
+              row(
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: const Text('阅读历史'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ReadingHistoryScreen(state: widget.state),
+                    ),
+                  ),
+                ),
+              ),
               row(
                 ListTile(
                   leading: const Icon(Icons.download_outlined),

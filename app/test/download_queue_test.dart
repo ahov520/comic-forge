@@ -136,6 +136,30 @@ void main() {
     expect(failed.error, isNull);
   });
 
+  test('最后一张图落盘后中断完成标记，重启断网仍识别为可阅读', () async {
+    final downloads = queue();
+    await downloads.enqueue(book, chapters, [0]);
+    await downloads.idle;
+    final prefs = await SharedPreferences.getInstance();
+    final saved =
+        jsonDecode(prefs.getString('cf.downloadQueue')!)
+            as Map<String, dynamic>;
+    (saved['tasks'] as List).single['status'] = 'downloading';
+    await prefs.setString('cf.downloadQueue', jsonEncode(saved));
+    var networkCalls = 0;
+    final restored = queue(
+      images: (_, _) async {
+        networkCalls++;
+        throw StateError('offline');
+      },
+    );
+    await restored.load();
+    await restored.idle;
+    expect(restored.tasks.single.status, DownloadStatus.completed);
+    expect((await restored.offlineImages(book, chapters[0]))?.length, 2);
+    expect(networkCalls, 0);
+  });
+
   test('进程中断后恢复下载，已经落盘的前缀图片不会重复请求', () async {
     final started = Completer<void>();
     final response = Completer<List<int>>();

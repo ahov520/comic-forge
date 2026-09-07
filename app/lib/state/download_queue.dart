@@ -174,13 +174,20 @@ class DownloadQueue extends ChangeNotifier {
           if (task.status == DownloadStatus.downloading) {
             task.status = DownloadStatus.queued;
           }
-          if (task.status == DownloadStatus.completed) {
+          final wasCompleted = task.status == DownloadStatus.completed;
+          if (wasCompleted ||
+              (task.status == DownloadStatus.queued &&
+                  task.imageUrls.isNotEmpty)) {
             task.downloadedPages = 0;
             for (final url in task.imageUrls) {
               if (await store.contains(task.id, url)) task.downloadedPages++;
             }
-            if (task.imageUrls.isEmpty ||
-                task.downloadedPages != task.imageUrls.length) {
+            if (task.imageUrls.isNotEmpty &&
+                task.downloadedPages == task.imageUrls.length) {
+              // 最后一张图已落盘、完成标记尚未写入时退出，也能断网恢复阅读。
+              task.status = DownloadStatus.completed;
+              task.error = null;
+            } else if (wasCompleted) {
               task.status = DownloadStatus.failed;
               task.error = '离线图片缺失，请重试下载';
             }

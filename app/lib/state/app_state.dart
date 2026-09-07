@@ -12,6 +12,7 @@ import 'safe_prefs.dart';
 import 'scroll_restore.dart';
 import 'shelf_updates.dart';
 import 'download_queue.dart';
+import 'reading_history.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -100,6 +101,7 @@ class AppState extends ChangeNotifier {
   static const _kShelfDismissals = 'cf.shelfDismissals';
   static const _kDark = 'cf.dark';
   static const _kProgress = 'cf.progress';
+  static const _kReadingHistory = 'cf.readingHistory';
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kReaderMode = 'cf.readerMode';
@@ -132,6 +134,8 @@ class AppState extends ChangeNotifier {
   List<String> get searchHistory => List.unmodifiable(_searchHistory);
 
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
+  final List<ReadingHistoryEntry> _readingHistory = [];
+  List<ReadingHistoryEntry> get readingHistory => List.unmodifiable(_readingHistory);
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
   final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
@@ -245,6 +249,8 @@ class AppState extends ChangeNotifier {
       await _importBuiltinSources(addMissing: false);
     }
     await downloads.load();
+    _restoreReadingHistory(sp.get(_kReadingHistory));
+    if (!sp.containsKey(_kReadingHistory)) await _persistReadingHistory();
   }
 
   void _restoreSearchHistory(Object? saved) {
@@ -294,7 +300,7 @@ class AppState extends ChangeNotifier {
       required String chapterTitle,
       required int chapterIndex,
       required int chapterCount}) async {
-    progress[book.bookUrl] = ReadingProgress(
+    final reading = ReadingProgress(
       bookUrl: book.bookUrl,
       sourceId: book.sourceId ?? '',
       chapterUrl: chapterUrl,
@@ -303,15 +309,105 @@ class AppState extends ChangeNotifier {
       chapterCount: chapterCount,
       at: DateTime.now().millisecondsSinceEpoch,
     );
+    progress[book.bookUrl] = reading;
+    _rememberReading(book, reading);
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(
         _kProgress,
         jsonEncode(progress
             .map((k, v) => MapEntry(k, v.toJson()))));
+    await _persistReadingHistory();
     notifyListeners();
   }
 
   ReadingProgress? progressFor(String bookUrl) => progress[bookUrl];
+
+  Book _historyBook(ReadingProgress reading, {Book? preferred}) {
+    final sourceId = reading.sourceId;
+    final url = reading.bookUrl;
+    final old = _readingHistory.where((entry) => entry.book.bookUrl == url &&
+        (entry.book.sourceId ?? '') == sourceId).firstOrNull?.book;
+    final cached = detailCacheFor(url)?.book;
+    final saved = shelf.where((book) => book.bookUrl == url &&
+        (book.sourceId ?? '') == sourceId).firstOrNull;
+    final base = old ?? saved ??
+        ((cached?.sourceId ?? '') == sourceId ? cached : null);
+    final fresh = preferred ?? base ?? Book();
+    return Book.fromJson({
+      ...?base?.toJson(),
+      ...fresh.toJson(),
+      'bookUrl': url,
+      'sourceId': sourceId,
+      if (fresh.name.trim().isEmpty) 'name': base?.name ?? '未命名漫画',
+    });
+  }
+
+  void _rememberReading(Book book, ReadingProgress reading) {
+    if (reading.bookUrl.isEmpty) return;
+    final entry = ReadingHistoryEntry(
+      book: _historyBook(reading, preferred: book),
+      chapter: Chapter(title: reading.chapterTitle, url: reading.chapterUrl),
+      chapterIndex: reading.chapterIndex,
+      chapterCount: reading.chapterCount,
+      at: reading.at,
+    );
+    _readingHistory.removeWhere((old) => old.key == entry.key);
+    final index = _readingHistory.indexWhere((old) => old.at <= entry.at);
+    _readingHistory.insert(index < 0 ? _readingHistory.length : index, entry);
+  }
+
+  void _restoreReadingHistory(Object? saved) {
+    _readingHistory.clear();
+    if (saved == null) {
+      // 首次升级只迁移一次；已移除的记录不会在下次启动时重新出现。
+      final readings = progress.values.toList()..sort((a, b) => a.at.compareTo(b.at));
+      for (final reading in readings) {
+        _rememberReading(_historyBook(reading), reading);
+      }
+      return;
+    }
+    if (saved is! String) return;
+    try {
+      final decoded = jsonDecode(saved);
+      if (decoded is! List) return;
+      final entries = <(int, ReadingHistoryEntry)>[];
+      for (final (index, value) in decoded.indexed) {
+        try {
+          if (value is! Map<String, dynamic>) continue;
+          final entry = ReadingHistoryEntry.fromJson(value);
+          if (entry.book.bookUrl.isEmpty || entry.chapterIndex < 0 ||
+              entry.chapterCount < 0 || entry.at < 0) {
+            continue;
+          }
+          entries.add((index, entry));
+        } catch (_) {
+          // 保留同一列表中其它完整记录。
+        }
+      }
+      entries.sort((a, b) {
+        final byTime = b.$2.at.compareTo(a.$2.at);
+        return byTime == 0 ? a.$1.compareTo(b.$1) : byTime;
+      });
+      final seen = <String>{};
+      _readingHistory.addAll(entries.map((entry) => entry.$2)
+          .where((entry) => seen.add(entry.key)));
+    } on FormatException {
+      // 历史损坏不影响书架、阅读进度或应用启动。
+    }
+  }
+
+  Future<void> _persistReadingHistory() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kReadingHistory,
+        jsonEncode(_readingHistory.map((entry) => entry.toJson()).toList()));
+  }
+
+  /// 仅从时间线移除，保留书架、章节进度和章内位置以便再次续读。
+  Future<void> removeReadingHistory(String key) async {
+    _readingHistory.removeWhere((entry) => entry.key == key);
+    await _persistReadingHistory();
+    notifyListeners();
+  }
 
   void _restoreShelfUpdates(SharedPreferences sp) {
     _shelfChapters.clear();
@@ -789,6 +885,7 @@ class AppState extends ChangeNotifier {
       final cur = this.progress[k];
       if (cur == null || v.at > cur.at) {
         this.progress[k] = v;
+        _rememberReading(_historyBook(v), v);
         nProg++;
       }
     });
@@ -804,6 +901,7 @@ class AppState extends ChangeNotifier {
     await sp.setStringSafe(_kProgress,
         jsonEncode(this.progress.map((k, v) => MapEntry(k, v.toJson()))));
     await sp.setStringSafe(_kRepos, jsonEncode(this.repos));
+    await _persistReadingHistory();
     notifyListeners();
     return (sources: nSrc, shelf: nShelf, progress: nProg, repos: nRepo);
   }

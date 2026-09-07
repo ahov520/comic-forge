@@ -11,6 +11,7 @@ import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
 import 'explore_results.dart';
 import 'downloads_screen.dart';
+import 'reading_history_screen.dart';
 import 'search_screen.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
@@ -136,7 +137,14 @@ class _ShelfScreenState extends State<ShelfScreen> {
                         PopupMenuButton<String>(
                           tooltip: '书架操作',
                           onSelected: (action) {
-                            if (action == 'downloads') {
+                            if (action == 'history') {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ReadingHistoryScreen(state: widget.state),
+                                ),
+                              );
+                            } else if (action == 'downloads') {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) =>
@@ -148,6 +156,10 @@ class _ShelfScreenState extends State<ShelfScreen> {
                             }
                           },
                           itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'history',
+                              child: Text('阅读历史'),
+                            ),
                             const PopupMenuItem(
                               value: 'downloads',
                               child: Text('下载管理'),
