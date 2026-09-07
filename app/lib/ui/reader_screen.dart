@@ -164,6 +164,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         widget.chapters[index].url,
         refresh: refresh,
       );
+      // 下一帧才订阅；即时失败或提前切话也要接住异常，界面仍能读取错误。
+      _images.ignore();
     });
     _nextChapterWarmed = false;
     _offsetRestored = false;

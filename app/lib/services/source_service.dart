@@ -19,8 +19,8 @@ class SourceService {
 
   final Map<String, SourceRuntime> _runtimes = {};
 
-  /// 章节图片 Future 缓存：同章节去重 + 预加载下一话复用。
-  final Map<String, Future<List<String>>> _imgFutures = {};
+  /// 按源与章节缓存原始图片：并发/预取复用，读取时再应用当前广告规则。
+  final Map<(String, String), Future<List<String>>> _imgFutures = {};
 
   /// 订阅/更新检查用（fetcher 复用全局实例）。
   RepoClient get repoClient => RepoClient(fetcher: fetcher);
@@ -109,25 +109,27 @@ class SourceService {
     SourceRuntime runtime,
     String chapterUrl, {
     bool refresh = false,
-  }) {
-    final cached = _imgFutures[chapterUrl];
-    if (!refresh && cached != null) return cached;
-    final future = Future<List<String>>.sync(
-      () => runtime.images(chapterUrl),
-    ).then((urls) => adBlock?.filterImages(urls) ?? urls);
-    _imgFutures[chapterUrl] = future;
-    unawaited(future.then<void>((_) {}, onError: (Object _, StackTrace _) {
-      // 失败不缓存；旧请求晚到不能删除重试后的新结果。
-      if (identical(_imgFutures[chapterUrl], future)) {
-        _imgFutures.remove(chapterUrl);
-      }
-    }));
-    return future;
+  }) async {
+    final key = (runtime.source.id, chapterUrl);
+    var future = refresh ? null : _imgFutures[key];
+    if (future == null) {
+      final request = Future<List<String>>.sync(() => runtime.images(chapterUrl));
+      _imgFutures[key] = request;
+      unawaited(request.then<void>((_) {}, onError: (Object _, StackTrace _) {
+        // 失败不缓存；旧请求晚到不能删除重试后的新结果。
+        if (identical(_imgFutures[key], request)) {
+          _imgFutures.remove(key);
+        }
+      }));
+      future = request;
+    }
+    final urls = await future;
+    return adBlock?.filterImages(urls) ?? urls;
   }
 
   /// 主动预取（失败静默，不阻塞阅读）。
   void prefetchImages(SourceRuntime runtime, String chapterUrl) {
-    if (_imgFutures.containsKey(chapterUrl)) return;
+    if (_imgFutures.containsKey((runtime.source.id, chapterUrl))) return;
     imagesFor(runtime, chapterUrl).catchError((_) => const <String>[]);
   }
 
