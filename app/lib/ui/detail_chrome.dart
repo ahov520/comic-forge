@@ -22,6 +22,8 @@ class DetailHero extends StatelessWidget {
     this.switchCount,
     this.onSwitchSource,
     this.readLabel,
+    this.readHint,
+    this.readIcon = Icons.play_arrow_rounded,
     this.onRead,
   });
 
@@ -33,6 +35,8 @@ class DetailHero extends StatelessWidget {
   final int? switchCount;
   final VoidCallback? onSwitchSource;
   final String? readLabel;
+  final String? readHint;
+  final IconData readIcon;
   final VoidCallback? onRead;
 
   @override
@@ -143,6 +147,15 @@ class DetailHero extends StatelessWidget {
             ],
             if (onRead != null && readLabel != null) ...[
               const SizedBox(height: 12),
+              if (readHint != null) ...[
+                Text(
+                  readHint!,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               FilledButton.icon(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(44),
@@ -155,7 +168,7 @@ class DetailHero extends StatelessWidget {
                   ),
                 ),
                 onPressed: onRead,
-                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                icon: Icon(readIcon, size: 20),
                 label: Text(readLabel!),
               ),
             ],
@@ -250,14 +263,19 @@ class ChapterTile extends StatelessWidget {
   final int index;
   final String title;
   final bool isCurrent;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final fg = isCurrent ? scheme.onPrimaryContainer : scheme.onSurface;
-    final numColor = isCurrent ? scheme.primary : scheme.onSurfaceVariant;
+    final enabled = onTap != null;
+    final fg = enabled
+        ? (isCurrent ? scheme.onPrimaryContainer : scheme.onSurface)
+        : scheme.onSurface.withValues(alpha: 0.38);
+    final numColor = enabled
+        ? (isCurrent ? scheme.primary : scheme.onSurfaceVariant)
+        : fg;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       child: Material(
@@ -298,8 +316,7 @@ class ChapterTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (isCurrent)
-                  Icon(Icons.bookmark, size: 16, color: scheme.primary),
+                if (isCurrent) Icon(Icons.bookmark, size: 16, color: numColor),
               ],
             ),
           ),

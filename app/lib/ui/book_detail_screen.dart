@@ -38,7 +38,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   late Future<(Book, List<Chapter>)> _future;
   Book? _book;
   ComicSource? _source;
-  ComicSource? _disabledSource; // 来源源存在但被禁用 → 提供一键启用
+  int _detailGeneration = 0;
   bool _fromCache = false;
   bool _carryDone = false;
   int? _switchCount; // 换源可命中数（后台预扫完成后显示角标）
@@ -95,17 +95,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 
   void _load() {
+    final generation = ++_detailGeneration;
     _book = null;
     _source = _findSource();
-    _disabledSource = null;
-    if (_source == null) {
-      for (final s in widget.appState.sources) {
-        if (s.id == widget.book.sourceId && !s.enabled) {
-          _disabledSource = s;
-          break;
-        }
-      }
-    }
     final cached = widget.appState.detailCacheFor(widget.book.bookUrl);
     if (cached != null) {
       // stale-while-revalidate：先秒开缓存，再后台刷新（失败静默回退缓存）。
@@ -114,56 +106,68 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       final cachedPair = (cached.book, cached.chapters);
       _initialData = cachedPair;
       _future = Future<(Book, List<Chapter>)>.value(cachedPair);
-      _refreshInBackground(cachedPair);
+      _refreshInBackground(generation);
       return;
     }
     _initialData = null;
     _fromCache = false;
-    _future = _source == null ? Future.error('未找到可用的来源源') : _fetchDetail();
+    _future = _source == null
+        ? Future.error('未找到可用的来源源')
+        : _fetchDetail(generation);
+    _future.ignore();
   }
 
   /// 一键启用被禁用的来源源并重新加载（体检自动禁用后的死路解法）。
   Future<void> _enableSourceAndReload() async {
-    final id = _disabledSource?.id;
-    if (id == null) return;
-    await widget.appState.toggleSource(id);
+    final source = _findSource(includeDisabled: true);
+    if (source == null) return;
+    if (!source.enabled) await widget.appState.toggleSource(source.id);
     if (mounted) setState(_load);
   }
 
-  void _openSources() => Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => SourceScreen(state: widget.appState)),
-  );
+  Future<void> _openSources() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => SourceScreen(state: widget.appState)),
+    );
+    if (mounted) setState(_load);
+  }
 
-  ComicSource? _findSource() {
+  ComicSource? _findSource({bool includeDisabled = false}) {
     for (final s in widget.appState.sources) {
-      if (s.id == widget.book.sourceId && s.enabled) return s;
+      if (s.id == widget.book.sourceId && (includeDisabled || s.enabled)) {
+        return s;
+      }
     }
     return null;
   }
 
-  Future<(Book, List<Chapter>)> _fetchDetail() async {
+  bool _isCurrentDetail(int generation) =>
+      mounted && generation == _detailGeneration;
+
+  Future<(Book, List<Chapter>)> _fetchDetail(int generation) async {
     final (book, chapters) = widget.detailLoaderOverride != null
         ? await widget.detailLoaderOverride!(widget.book.bookUrl)
         : await SourceService.instance
               .runtimeFor(_source!)
               .detail(widget.book.bookUrl);
-    await widget.appState.saveDetailCache(book, chapters);
+    if (_isCurrentDetail(generation)) {
+      await widget.appState.saveDetailCache(book, chapters);
+    }
     return (book, chapters);
   }
 
-  Future<void> _refreshInBackground((Book, List<Chapter>) cachedPair) async {
+  Future<void> _refreshInBackground(int generation) async {
     if (_source == null) return;
     try {
-      final fresh = await _fetchDetail();
-      if (mounted) {
+      final fresh = await _fetchDetail(generation);
+      if (_isCurrentDetail(generation)) {
         setState(() {
           _fromCache = false;
           _future = Future<(Book, List<Chapter>)>.value(fresh);
         });
       }
     } catch (_) {
-      // 网络失败：保持缓存内容，不打断阅读
-      _future = Future<(Book, List<Chapter>)>.value(cachedPair);
+      // 保持当前内容；过时刷新失败也不能把较新的目录回退成旧缓存。
     }
   }
 
@@ -242,6 +246,21 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 
   Widget _buildDetail(BuildContext context) {
+    final currentSource = _findSource(includeDisabled: true);
+    final sourceDisabled = currentSource?.enabled == false;
+    final canRead = _source != null && currentSource?.enabled == true;
+    final recoveryLabel = currentSource == null
+        ? '管理源'
+        : (sourceDisabled ? '启用漫画源' : '重新加载目录');
+    final recoveryHint = currentSource == null
+        ? '目录已保存在本地，恢复来源后即可阅读。'
+        : (sourceDisabled ? '漫画源已停用，启用后即可继续阅读。' : '重新加载目录后，即可继续阅读。');
+    final recoveryIcon = currentSource == null
+        ? Icons.source_outlined
+        : (sourceDisabled ? Icons.power_settings_new : Icons.refresh);
+    final VoidCallback recoverSource = currentSource == null
+        ? _openSources
+        : (sourceDisabled ? _enableSourceAndReload : () => setState(_load));
     return Scaffold(
       body: FutureBuilder<(Book, List<Chapter>)>(
         future: _future,
@@ -251,24 +270,24 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             return Scaffold(
               appBar: AppBar(title: Text(widget.book.name)),
               body: ErrorView(
-                title: _disabledSource != null
+                title: sourceDisabled
                     ? '漫画源已停用'
-                    : (_source == null ? '找不到这本书的来源' : '暂时无法加载漫画'),
-                message: _disabledSource != null
+                    : (currentSource == null ? '找不到这本书的来源' : '暂时无法加载漫画'),
+                message: sourceDisabled
                     ? '启用来源后，即可重新加载这本漫画。'
-                    : (_source == null
+                    : (currentSource == null
                           ? '到「源」页添加或恢复来源后重试。'
                           : '检查网络后重试，或到「源」页查看来源状态。'),
                 onRetry: () => setState(_load),
-                icon: _disabledSource != null
+                icon: sourceDisabled
                     ? Icons.block_outlined
                     : Icons.cloud_off_outlined,
-                actionLabel: _disabledSource != null
-                    ? '启用「${_disabledSource!.name}」并重试'
-                    : (_source == null ? '管理源' : null),
-                onAction: _disabledSource != null
-                    ? _enableSourceAndReload
-                    : (_source == null ? _openSources : null),
+                actionLabel: sourceDisabled
+                    ? '启用「${currentSource!.name}」并重试'
+                    : (currentSource == null ? '管理源' : null),
+                onAction: sourceDisabled || currentSource == null
+                    ? recoverSource
+                    : null,
               ),
             );
           }
@@ -302,14 +321,19 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           final savedIdx = (prog != null)
               ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
               : -1;
-          final sourceName = _source == null
+          final labelSource = _source ?? currentSource;
+          final sourceName = labelSource == null
               ? null
-              : (_source!.name.trim().isEmpty ? _source!.id : _source!.name);
+              : (labelSource.name.trim().isEmpty
+                    ? labelSource.id
+                    : labelSource.name);
           final readLabel = chapters.isEmpty
               ? null
-              : (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读');
+              : (canRead
+                    ? (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读')
+                    : recoveryLabel);
           void openAt(int index) {
-            if (_source == null) return;
+            if (!canRead) return;
             openReader(
               context,
               SourceService.instance.runtimeFor(_source!),
@@ -324,7 +348,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             appBar: AppBar(
               title: Text(book.name),
               actions: [
-                if (_source != null)
+                if (canRead)
                   Badge.count(
                     count: _switchCount ?? 0,
                     isLabelVisible: (_switchCount ?? 0) > 0,
@@ -335,7 +359,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       onPressed: _showSwitchSourceSheet,
                     ),
                   ),
-                if (_source != null)
+                if (canRead)
                   IconButton(
                     tooltip: '复制本书源 JSON（可分享）',
                     icon: const Icon(Icons.ios_share),
@@ -362,13 +386,15 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     book: book,
                     sourceName: sourceName,
                     switchCount: _switchCount,
-                    onSwitchSource: _source == null
-                        ? null
-                        : _showSwitchSourceSheet,
+                    onSwitchSource: canRead ? _showSwitchSourceSheet : null,
                     readLabel: readLabel,
+                    readHint: canRead ? null : recoveryHint,
+                    readIcon: canRead ? Icons.play_arrow_rounded : recoveryIcon,
                     onRead: readLabel == null
                         ? null
-                        : () => openAt(savedIdx >= 0 ? savedIdx : 0),
+                        : (canRead
+                              ? () => openAt(savedIdx >= 0 ? savedIdx : 0)
+                              : recoverSource),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -384,7 +410,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           '章节 (${chapters.length})',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        if (_fromCache)
+                        if (_fromCache || !canRead)
                           Chip(
                             label: const Text(
                               '离线目录',
@@ -403,13 +429,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     child: EmptyStateView(
                       icon: Icons.auto_stories_outlined,
                       title: '暂无章节',
-                      message: _source == null
-                          ? '添加或启用来源后，重新打开这本漫画。'
-                          : '当前源还没有提供章节，可以重新加载或稍后再试。',
-                      actionLabel: _source == null ? '管理源' : '重新加载',
-                      onAction: _source == null
-                          ? _openSources
-                          : () => setState(_load),
+                      message: canRead
+                          ? '当前源还没有提供章节，可以重新加载或稍后再试。'
+                          : recoveryHint,
+                      actionLabel: canRead ? '重新加载' : recoveryLabel,
+                      onAction: canRead ? () => setState(_load) : recoverSource,
                     ),
                   )
                 else
@@ -420,7 +444,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         index: i,
                         title: chapters[i].title,
                         isCurrent: i == savedIdx,
-                        onTap: () => openAt(i),
+                        onTap: canRead ? () => openAt(i) : null,
                       );
                     },
                   ),
