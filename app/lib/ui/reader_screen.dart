@@ -554,13 +554,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         future: _images,
         builder: (context, snap) {
           final pad = MediaQuery.paddingOf(context);
+          final showStatus =
+              snap.connectionState == ConnectionState.done &&
+              (snap.hasError || snap.data?.isEmpty == true);
           Widget status({required bool failed}) => Padding(
-            padding: EdgeInsets.fromLTRB(
-              pad.left,
-              pad.top + 64,
-              pad.right,
-              pad.bottom + 80,
-            ),
+            padding: EdgeInsets.fromLTRB(pad.left, pad.top + 64, pad.right, 16),
             child: EmptyStateView(
               icon: failed
                   ? Icons.cloud_off_outlined
@@ -590,14 +588,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
               page = _buildReaderBody(context, urls);
             }
           }
-          return Stack(
+          final bottomChrome = ReaderBottomChrome(
+            visible: _chromeVisible,
+            progressLabel: '${_index + 1}/${widget.chapters.length}',
+            canPrev: _index > 0,
+            canNext: _index + 1 < widget.chapters.length,
+            onPrev: () => _go(-1),
+            onNext: () => _go(1),
+            onCatalog: () => _showCatalog(context),
+            onBrightness: widget.appState == null
+                ? null
+                : () => _showReaderSettingsSheet(context),
+          );
+          final body = Stack(
             children: [
               page,
-              ReaderChromeOverlay(
-                visible: _chromeVisible,
-                topInset: pad.top,
-                bottomInset: pad.bottom,
-              ),
+              if (!showStatus)
+                ReaderChromeOverlay(
+                  visible: _chromeVisible,
+                  topInset: pad.top,
+                  bottomInset: pad.bottom,
+                ),
               if (brightness < 1.0)
                 IgnorePointer(
                   child: ColoredBox(
@@ -605,6 +616,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     child: const SizedBox.expand(),
                   ),
                 ),
+            ],
+          );
+          return Stack(
+            children: [
+              if (showStatus)
+                // 空态和重试入口避让底栏的实际高度，包括大字号多行计数。
+                Column(
+                  children: [
+                    Expanded(child: body),
+                    bottomChrome,
+                  ],
+                )
+              else
+                body,
               Positioned(
                 top: pad.top,
                 left: pad.left + 12,
@@ -617,23 +642,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       : () => _showReaderSettingsSheet(context),
                 ),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: ReaderBottomChrome(
-                  visible: _chromeVisible,
-                  progressLabel: '${_index + 1}/${widget.chapters.length}',
-                  canPrev: _index > 0,
-                  canNext: _index + 1 < widget.chapters.length,
-                  onPrev: () => _go(-1),
-                  onNext: () => _go(1),
-                  onCatalog: () => _showCatalog(context),
-                  onBrightness: widget.appState == null
-                      ? null
-                      : () => _showReaderSettingsSheet(context),
-                ),
-              ),
+              if (!showStatus)
+                Positioned(left: 0, right: 0, bottom: 0, child: bottomChrome),
             ],
           );
         },

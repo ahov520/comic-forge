@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:comic_forge/ui/reader_chrome.dart';
 import 'package:comic_forge/ui/reader_screen.dart';
 import 'package:comic_forge/ui/skeleton.dart';
 import 'package:engine/engine.dart';
@@ -21,8 +22,8 @@ void main() {
         'url': 'https://reader.example',
         'rules': {'contentUrl': '.page@src'},
       }),
-      fetcher: FakeFetcher((_) {
-        attempts++;
+      fetcher: FakeFetcher((uri) {
+        if (uri.path == '/small/1043') attempts++;
         throw StateError('offline');
       }),
     );
@@ -38,21 +39,29 @@ void main() {
         home: ReaderScreen(
           runtime: runtime,
           book: Book(name: '很长的漫画书名包含特别篇和完整的番外故事'),
-          chapters: [
-            Chapter(title: '第一话', url: 'https://reader.example/small'),
-          ],
-          initialIndex: 0,
+          chapters: List.generate(
+            1300,
+            (i) => Chapter(
+              title: '第${i + 1}话',
+              url: 'https://reader.example/small/$i',
+            ),
+          ),
+          initialIndex: 1043,
         ),
       ),
     );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('重试'));
+    expect(
+      tester.getRect(find.widgetWithText(FilledButton, '重试')).bottom,
+      lessThanOrEqualTo(tester.getRect(find.byType(ReaderBottomChrome)).top),
+    );
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    expect(find.text('目录 · 1 话'), findsOneWidget);
+    expect(find.text('目录 · 1300 话'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

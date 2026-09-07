@@ -1,5 +1,6 @@
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:comic_forge/ui/reader_chrome.dart';
@@ -150,6 +151,13 @@ void main() {
     );
 
     await tester.pumpWidget(reader(visible: true));
+    final progress = tester.renderObject<RenderParagraph>(
+      find.descendant(
+        of: find.text('1044/\n1300'),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(progress.didExceedMaxLines, isFalse, reason: '当前话和总话数均应完整可读');
     await tester.tap(find.byIcon(Icons.menu));
     await tester.tap(find.text('亮度'));
     expect(catalog, 1);

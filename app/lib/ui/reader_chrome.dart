@@ -209,6 +209,7 @@ class ReaderBottomChrome extends StatelessWidget {
             child: SafeArea(
               top: false,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _NavItem(
                     icon: Icons.chevron_left,
@@ -220,6 +221,7 @@ class ReaderBottomChrome extends StatelessWidget {
                     icon: Icons.menu,
                     label: progressLabel,
                     tooltip: '目录',
+                    wrapLabel: true,
                     enabled: onCatalog != null,
                     onTap: onCatalog,
                   ),
@@ -494,6 +496,7 @@ class _NavItem extends StatelessWidget {
     this.tooltip,
     this.onTap,
     this.enabled = true,
+    this.wrapLabel = false,
   });
 
   final IconData icon;
@@ -501,6 +504,7 @@ class _NavItem extends StatelessWidget {
   final String? tooltip;
   final VoidCallback? onTap;
   final bool enabled;
+  final bool wrapLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -521,22 +525,49 @@ class _NavItem extends StatelessWidget {
                 children: [
                   Icon(icon, color: color, size: 20),
                   const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                  _buildLabel(context, color),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLabel(BuildContext context, Color color) {
+    final style = DefaultTextStyle.of(context).style.merge(
+      TextStyle(
+        color: color,
+        fontSize: 10.5,
+        fontWeight: FontWeight.w400,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    Widget text(String value) => Text(
+      value,
+      semanticsLabel: label,
+      textAlign: TextAlign.center,
+      maxLines: wrapLabel ? null : 1,
+      overflow: wrapLabel ? TextOverflow.clip : TextOverflow.ellipsis,
+      style: style,
+    );
+    if (!wrapLabel) return text(label);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout(maxWidth: constraints.maxWidth);
+        // 只在一行放不下时从斜杠后换行，避免拆开总话数。
+        final value = painter.didExceedMaxLines
+            ? label.replaceFirst('/', '/\n')
+            : label;
+        painter.dispose();
+        return text(value);
+      },
     );
   }
 }
