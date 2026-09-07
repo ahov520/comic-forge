@@ -331,7 +331,8 @@ class _SourceScreenState extends State<SourceScreen> {
     final empty = repos.isEmpty && sources.isEmpty;
     return Column(
       children: [
-        Expanded(
+        Flexible(
+          fit: sources.isEmpty ? FlexFit.tight : FlexFit.loose,
           child: empty
               ? EmptyStateView(
                   icon: Icons.source_outlined,
@@ -341,6 +342,8 @@ class _SourceScreenState extends State<SourceScreen> {
                   onAction: _subscribing ? null : _subscribeDialog,
                 )
               : CustomScrollView(
+                  // 短列表让导入按钮紧随内容；长列表仍受可用高度约束。
+                  shrinkWrap: sources.isNotEmpty,
                   slivers: [
                     if (repos.isNotEmpty) ...[
                       const SliverToBoxAdapter(child: _SectionLabel('已订阅仓库')),
@@ -377,11 +380,14 @@ class _SourceScreenState extends State<SourceScreen> {
                     if (sources.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                          padding: const EdgeInsets.fromLTRB(24, 6, 24, 4),
                           child: Text(
                             '长按删除 · 开关控制聚合范围',
                             style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: scheme.onSurfaceVariant),
+                                ?.copyWith(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ),
@@ -389,10 +395,22 @@ class _SourceScreenState extends State<SourceScreen> {
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                backgroundColor: scheme.primaryContainer,
+                foregroundColor: scheme.primary,
+                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onPressed: _importFromClipboard,
               child: const Text('粘贴导入单个源 JSON'),
             ),
@@ -418,7 +436,7 @@ class _SourceScreenState extends State<SourceScreen> {
           ? scheme.surfaceContainerLowest
           : scheme.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
         child: Row(
           children: [
             Expanded(
@@ -430,6 +448,7 @@ class _SourceScreenState extends State<SourceScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -487,7 +506,7 @@ class _SourceScreenState extends State<SourceScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 12, 4),
+          padding: const EdgeInsets.fromLTRB(24, 0, 16, 0),
           child: Row(
             children: [
               Expanded(
@@ -495,7 +514,11 @@ class _SourceScreenState extends State<SourceScreen> {
                   onLongPress: () => _showSourceActions(s),
                   child: Row(
                     children: [
-                      Icon(Icons.grid_view_outlined, color: iconColor),
+                      Icon(
+                        Icons.grid_view_outlined,
+                        size: 18,
+                        color: iconColor,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -505,10 +528,9 @@ class _SourceScreenState extends State<SourceScreen> {
                               name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge
+                              style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(
                                     color: unhealthy ? scheme.error : null,
-                                    fontWeight: FontWeight.w500,
                                   ),
                             ),
                             if (subtitle.isNotEmpty)
@@ -518,6 +540,7 @@ class _SourceScreenState extends State<SourceScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
+                                      fontSize: 11,
                                       color: unhealthy
                                           ? scheme.error
                                           : scheme.onSurfaceVariant,
@@ -548,7 +571,7 @@ class _SourceScreenState extends State<SourceScreen> {
         ),
         Divider(
           height: 1,
-          indent: 56,
+          indent: 20,
           endIndent: 20,
           color: scheme.outlineVariant.withValues(alpha: 0.5),
         ),
@@ -732,11 +755,15 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+      child: Semantics(
+        header: true,
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
