@@ -230,33 +230,52 @@ class BookTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (showShelfAction)
-                ListenableBuilder(
-                  listenable: state,
-                  builder: (context, _) {
-                    final saved = state.inShelf(book);
-                    return IconButton(
-                      tooltip: saved ? '移出书架' : '加入书架',
-                      isSelected: saved,
-                      iconSize: 20,
-                      onPressed: () => state.toggleShelf(book),
-                      icon: AnimatedSwitcher(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 160),
-                        child: Icon(
-                          saved ? Icons.favorite : Icons.favorite_border,
-                          key: ValueKey(saved),
-                          color: scheme.primary,
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              if (showShelfAction) ShelfButton(book: book, state: state),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 列表与详情共用的收藏操作，外部书架变更也会即时同步。
+class ShelfButton extends StatelessWidget {
+  const ShelfButton({
+    super.key,
+    required this.book,
+    required this.state,
+    this.iconSize = 20,
+  });
+
+  final Book book;
+  final AppState state;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) {
+        final saved = state.inShelf(book);
+        return IconButton(
+          tooltip: saved ? '移出书架' : '加入书架',
+          isSelected: saved,
+          iconSize: iconSize,
+          onPressed: () => state.toggleShelf(book),
+          icon: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 160),
+            child: Icon(
+              saved ? Icons.favorite : Icons.favorite_border,
+              key: ValueKey(saved),
+              color: scheme.primary,
+            ),
+          ),
+        );
+      },
     );
   }
 }

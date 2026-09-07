@@ -396,7 +396,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (agg != null && agg.books.isNotEmpty) {
       return ListView.builder(
         key: ValueKey('results-$_query'),
-        padding: const EdgeInsets.only(top: 4, bottom: 12),
+        padding: const EdgeInsets.only(bottom: 12),
         itemCount: agg.books.length,
         itemBuilder: (context, i) => BookTile(
           key: ObjectKey(agg.books[i]),

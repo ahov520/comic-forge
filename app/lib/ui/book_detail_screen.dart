@@ -302,14 +302,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       }
                     },
                   ),
-                IconButton(
-                  icon: Icon(
-                    widget.appState.inShelf(widget.book)
-                        ? Icons.favorite
-                        : Icons.favorite_border,
-                  ),
-                  onPressed: () => widget.appState.toggleShelf(widget.book),
-                ),
+                ShelfButton(book: book, state: widget.appState, iconSize: 24),
               ],
             ),
             body: CustomScrollView(
@@ -331,13 +324,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                    child: Row(
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         Text(
                           '章节 (${chapters.length})',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const Spacer(),
                         if (_fromCache)
                           Chip(
                             label: const Text(

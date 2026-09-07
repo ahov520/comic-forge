@@ -8,6 +8,7 @@ import 'package:engine/engine.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/book_detail_screen.dart';
 import 'package:comic_forge/ui/skeleton.dart';
+import 'package:comic_forge/ui/widgets.dart';
 
 void main() {
   testWidgets('SkeletonBox 渲染且持续脉冲（呼吸动画）', (tester) async {
@@ -79,9 +80,14 @@ void main() {
     expect(tester.binding.hasScheduledFrame, isFalse);
   });
 
-  testWidgets('书籍详情加载中显示骨架布局（封面块+章节行）', (tester) async {
+  testWidgets('窄屏大字号详情骨架不溢出，加载完成后封面位置保持一致', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues({});
     final st = AppState();
+    addTearDown(st.dispose);
     final src = ComicSource.fromPpcatFlat({
       'bookSourceName': '测试源',
       'bookSourceUrl': 'https://m.example.com',
@@ -89,16 +95,23 @@ void main() {
     });
     await st.addSourceManual(src);
 
-    // 详情 future 永不完成 → 停在加载态
+    final book = Book(
+      name: '很长的漫画书名包含特别篇',
+      kind: '很长的分类标签用于测试窄屏/冒险/热血',
+      bookUrl: 'https://m.example.com/b/1',
+      sourceId: src.id,
+    );
     final loader = Completer<(Book, List<Chapter>)>();
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
         home: BookDetailScreen(
-          book: Book(
-            name: '书',
-            bookUrl: 'https://m.example.com/b/1',
-            sourceId: src.id,
-          ),
+          book: book,
           appState: st,
           detailLoaderOverride: (_) => loader.future,
         ),
@@ -114,5 +127,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(SkeletonBox).evaluate().length, greaterThan(6));
+    final coverRect = tester.getRect(
+      find.byWidgetPredicate((w) => w is SkeletonBox && w.height == 164),
+    );
+    expect(tester.takeException(), isNull);
+
+    loader.complete((book, [Chapter(title: '第一话', url: '${book.bookUrl}/1')]));
+    await tester.pumpAndSettle();
+    expect(find.byType(DetailSkeleton), findsNothing);
+    expect(tester.getRect(find.byType(BookCover)), coverRect);
+    expect(tester.takeException(), isNull);
   });
 }

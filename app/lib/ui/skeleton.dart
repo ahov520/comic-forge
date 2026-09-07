@@ -62,9 +62,11 @@ class _SkeletonBoxState extends State<SkeletonBox>
   }
 }
 
-/// 探索列表骨架：封面、标题与元信息的位置对齐 BookTile，加载后不跳布局。
+/// 书籍列表骨架：对齐探索、搜索和换源面板的 BookTile。
 class BookListSkeleton extends StatelessWidget {
-  const BookListSkeleton({super.key});
+  const BookListSkeleton({super.key, this.showShelfAction = true});
+
+  final bool showShelfAction;
 
   @override
   Widget build(BuildContext context) {
@@ -88,14 +90,14 @@ class BookListSkeleton extends StatelessWidget {
                 color: scheme.outlineVariant.withValues(alpha: 0.5),
               ),
             ),
-            child: const Padding(
-              padding: EdgeInsets.all(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  SkeletonBox(width: 60, height: 80, radius: 10),
-                  SizedBox(width: 12),
-                  Expanded(
+                  const SkeletonBox(width: 60, height: 80, radius: 10),
+                  const SizedBox(width: 12),
+                  const Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -114,13 +116,14 @@ class BookListSkeleton extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: SkeletonBox(width: 20, height: 20, radius: 10),
+                  if (showShelfAction)
+                    const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Center(
+                        child: SkeletonBox(width: 20, height: 20, radius: 10),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -140,75 +143,100 @@ class DetailSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      children: [
-        Card(
-          color: scheme.surfaceContainerLow,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: 0.5),
-            ),
-          ),
-          child: const Padding(
-            padding: EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return Semantics(
+      label: '正在加载漫画详情',
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          children: [
+            Card(
+              margin: EdgeInsets.zero,
+              color: scheme.surfaceContainerLow,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(14),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SkeletonBox(width: 120, height: 164, radius: 10),
-                    SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SkeletonBox(height: 22, radius: 6),
-                          SizedBox(height: 10),
-                          SkeletonBox(width: 90, height: 12, radius: 6),
-                          SizedBox(height: 12),
-                          SkeletonBox(width: 96, height: 22, radius: 8),
-                          SizedBox(height: 12),
-                          Row(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SkeletonBox(width: 120, height: 164, radius: 10),
+                        SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SkeletonBox(width: 48, height: 22, radius: 999),
-                              SizedBox(width: 6),
-                              SkeletonBox(width: 60, height: 22, radius: 999),
-                              SizedBox(width: 6),
-                              SkeletonBox(width: 40, height: 22, radius: 999),
+                              SkeletonBox(height: 22, radius: 6),
+                              SizedBox(height: 10),
+                              SkeletonBox(width: 90, height: 12, radius: 6),
+                              SizedBox(height: 12),
+                              SkeletonBox(width: 96, height: 22, radius: 8),
+                              SizedBox(height: 12),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  SkeletonBox(
+                                    width: 48,
+                                    height: 22,
+                                    radius: 999,
+                                  ),
+                                  SkeletonBox(
+                                    width: 60,
+                                    height: 22,
+                                    radius: 999,
+                                  ),
+                                  SkeletonBox(
+                                    width: 40,
+                                    height: 22,
+                                    radius: 999,
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+                    SizedBox(height: 14),
+                    SkeletonBox(height: 40, radius: 12),
                   ],
                 ),
-                SizedBox(height: 14),
-                SkeletonBox(height: 40, radius: 12),
-              ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const SkeletonBox(height: 16, width: 90, radius: 6),
-        const SizedBox(height: 12),
-        ...List.generate(
-          chapterRows,
-          (i) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                const SkeletonBox(width: 22, height: 12, radius: 4),
-                const SizedBox(width: 12),
-                const Expanded(child: SkeletonBox(height: 13, radius: 6)),
-              ],
+            const SizedBox(height: 16),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: SkeletonBox(height: 24, width: 90, radius: 6),
             ),
-          ),
+            const SizedBox(height: 6),
+            ...List.generate(
+              chapterRows,
+              (i) => Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    const SkeletonBox(width: 28, height: 12, radius: 4),
+                    const SizedBox(width: 8),
+                    const Expanded(child: SkeletonBox(height: 20, radius: 6)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

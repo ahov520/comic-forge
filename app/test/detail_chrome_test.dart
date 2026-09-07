@@ -12,24 +12,22 @@ Book _book({
   String author = '尾田荣一郎',
   String kind = '冒险/热血',
   String introduce = '伟大航道上的冒险。',
-}) =>
-    Book(
-      name: name,
-      author: author,
-      kind: kind,
-      introduce: introduce,
-      bookUrl: 'https://example.com/book/1',
-    );
+}) => Book(
+  name: name,
+  author: author,
+  kind: kind,
+  introduce: introduce,
+  bookUrl: 'https://example.com/book/1',
+);
 
 ComicSource _src({
   String name = '社区源 A',
   String url = 'https://a.example.com',
-}) =>
-    ComicSource.fromPpcatFlat({
-      'bookSourceName': name,
-      'bookSourceUrl': url,
-      'ruleSearchUrl': '/s?q=searchKey',
-    });
+}) => ComicSource.fromPpcatFlat({
+  'bookSourceName': name,
+  'bookSourceUrl': url,
+  'ruleSearchUrl': '/s?q=searchKey',
+});
 
 void main() {
   test('splitKindTags 按中英分隔符拆标签并截断', () {
@@ -97,10 +95,7 @@ void main() {
     expect(find.text('第1话'), findsOneWidget);
     expect(find.text('第4话'), findsOneWidget);
     expect(find.byIcon(Icons.bookmark), findsOneWidget);
-    expect(
-      tester.getSize(find.byType(ChapterTile).first).height,
-      lessThan(48),
-    );
+    expect(tester.getSize(find.byType(ChapterTile).first).height, lessThan(48));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -138,6 +133,15 @@ void main() {
     );
     expect(find.text('换源 · 海贼王'), findsOneWidget);
     expect(find.byType(BookListSkeleton), findsOneWidget);
+    final metadataRight = tester
+        .getRect(
+          find
+              .byWidgetPredicate(
+                (w) => w is SkeletonBox && w.width == null && w.height == 20,
+              )
+              .first,
+        )
+        .right;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -176,6 +180,20 @@ void main() {
     expect(find.byType(BookTile), findsOneWidget);
     expect(find.byTooltip('加入书架'), findsNothing);
     expect(find.byTooltip('来源：源B'), findsOneWidget);
+    expect(
+      tester
+          .getRect(
+            find
+                .ancestor(
+                  of: find.text(hit.name),
+                  matching: find.byType(Column),
+                )
+                .first,
+          )
+          .right,
+      metadataRight,
+      reason: '换源骨架与实际卡片都不为收藏预留空白',
+    );
     await tester.tap(find.text('海贼王（源B）'));
     expect(picked, '海贼王（源B）');
   });

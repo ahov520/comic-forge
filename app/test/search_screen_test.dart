@@ -5,6 +5,7 @@ import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/search_screen.dart';
 import 'package:comic_forge/ui/skeleton.dart';
 import 'package:comic_forge/ui/source_screen.dart';
+import 'package:comic_forge/ui/widgets.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -251,6 +252,13 @@ void main() {
     await tester.pump();
     expect(find.text('正在聚合 2 个源'), findsOneWidget);
     expect(find.byType(BookListSkeleton), findsOneWidget);
+    final coverRect = tester.getRect(
+      find
+          .byWidgetPredicate(
+            (w) => w is SkeletonBox && w.width == 60 && w.height == 80,
+          )
+          .first,
+    );
 
     first.complete(_results('海贼王'));
     await tester.pumpAndSettle();
@@ -258,6 +266,7 @@ void main() {
     expect(find.text('结果：海贼王'), findsOneWidget);
     expect(find.text('源: 测试源'), findsOneWidget);
     expect(find.byTooltip('来源：测试源'), findsOneWidget);
+    expect(tester.getRect(find.byType(BookCover).first), coverRect);
 
     second.completeError(FetchException('offline'));
     await tester.pumpAndSettle();

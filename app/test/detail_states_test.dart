@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/ui/book_detail_screen.dart';
 import 'package:comic_forge/ui/detail_chrome.dart';
@@ -17,6 +19,62 @@ void main() {
   });
 
   tearDown(() => state.dispose());
+
+  for (final brightness in Brightness.values) {
+    testWidgets('窄屏离线目录与收藏状态正常更新：${brightness.name}', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '测试源',
+        'bookSourceUrl': 'https://example.com',
+      });
+      await state.addSourceManual(source);
+      final book = Book(
+        name: '漫画',
+        bookUrl: 'https://example.com/book/1',
+        sourceId: source.id,
+      );
+      await state.saveDetailCache(
+        book,
+        List.generate(
+          1004,
+          (i) => Chapter(title: '第 $i 话', url: '${book.bookUrl}/$i'),
+        ),
+      );
+      final refresh = Completer<(Book, List<Chapter>)>();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: BookDetailScreen(
+            book: book,
+            appState: state,
+            detailLoaderOverride: (_) => refresh.future,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('离线目录'));
+      expect(find.text('章节 (1004)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byTooltip('加入书架'));
+      await tester.pumpAndSettle();
+      expect(state.inShelf(book), isTrue);
+      expect(find.byTooltip('移出书架'), findsOneWidget);
+
+      await state.toggleShelf(book);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('加入书架'), findsOneWidget);
+    });
+  }
 
   testWidgets('空目录可重新加载，返回章节后恢复阅读入口', (tester) async {
     final source = ComicSource.fromPpcatFlat({

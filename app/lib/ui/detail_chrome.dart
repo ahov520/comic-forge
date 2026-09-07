@@ -108,13 +108,20 @@ class DetailHero extends StatelessWidget {
                             runSpacing: 6,
                             children: tags
                                 .map(
-                                  (k) => Chip(
-                                    label: Text(k),
-                                    labelStyle: const TextStyle(fontSize: 11),
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    padding: EdgeInsets.zero,
+                                  (k) => Tooltip(
+                                    message: k,
+                                    child: Chip(
+                                      label: Text(
+                                        k,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      labelStyle: textTheme.labelSmall,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: EdgeInsets.zero,
+                                    ),
                                   ),
                                 )
                                 .toList(),
@@ -273,7 +280,7 @@ class SwitchSourcePanel extends StatelessWidget {
       );
     }
     if (!snapshot.hasData) {
-      return const BookListSkeleton();
+      return const BookListSkeleton(showShelfAction: false);
     }
     final hits = snapshot.data!;
     if (hits.isEmpty) {
