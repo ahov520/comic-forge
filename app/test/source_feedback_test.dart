@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/source_update.dart';
 import 'package:comic_forge/ui/source_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
@@ -21,11 +22,28 @@ class _FailingRepoClient extends RepoClient {
       throw FetchException(_longReason);
 }
 
+class _PendingRepoClient extends RepoClient {
+  _PendingRepoClient(this.result) : super(fetcher: FakeFetcher((_) => ''));
+
+  final Future<StoreBundle> result;
+
+  @override
+  Future<StoreBundle> subscribe(String input) => result;
+}
+
+class _PendingRefreshState extends AppState {
+  late Future<RepoRefreshResult> refreshResult;
+
+  @override
+  Future<RepoRefreshResult> refreshRepo(String repoUrl, {RepoClient? client}) =>
+      refreshResult;
+}
+
 void main() {
-  late AppState state;
+  late _PendingRefreshState state;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    state = AppState();
+    state = _PendingRefreshState();
     await state.addSourceManual(
       ComicSource.fromJson({
         'id': 'existing',
@@ -36,6 +54,74 @@ void main() {
     );
   });
   tearDown(() => state.dispose());
+
+  testWidgets('订阅等待期间保留页头按钮的宽度与位置', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final pending = Completer<StoreBundle>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceScreen(
+          state: state,
+          repoClient: _PendingRepoClient(pending.future),
+        ),
+      ),
+    );
+    final subscribe = find.widgetWithText(TextButton, '＋ 订阅仓库');
+    final initialBounds = tester.getRect(subscribe);
+    await tester.tap(subscribe);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'github.com/team/comics');
+    await tester.tap(find.widgetWithText(FilledButton, '订阅'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getRect(subscribe), initialBounds);
+    expect(tester.widget<TextButton>(subscribe).onPressed, isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    pending.completeError(FetchException('offline'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(subscribe), initialBounds);
+    expect(tester.widget<TextButton>(subscribe).onPressed, isNotNull);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('订阅失败'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('仓库刷新进度占位稳定，长仓库名不会随加载伸缩', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final refresh = Completer<RepoRefreshResult>();
+    state.refreshResult = refresh.future;
+    const repo = 'https://github.com/example/very-long-comic-source-repository';
+    await state.addRepoSubscribed(repo, const []);
+    await tester.pumpWidget(MaterialApp(home: SourceScreen(state: state)));
+    final name = find.text(repoDisplayName(repo));
+    final initialNameSize = tester.getSize(name);
+    final initialCardSize = tester.getSize(find.byType(Card));
+    final action = tester.getRect(find.byTooltip('检查更新'));
+
+    await tester.tap(find.byTooltip('检查更新'));
+    await tester.pump();
+    expect(tester.getSize(name), initialNameSize);
+    expect(tester.getSize(find.byType(Card)), initialCardSize);
+    expect(
+      tester.getCenter(find.byType(CircularProgressIndicator)),
+      action.center,
+    );
+    refresh.complete(
+      RepoRefreshResult(repo: repo, added: 0, updated: 0, total: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(name), initialNameSize);
+    expect(tester.getSize(find.byType(Card)), initialCardSize);
+    expect(find.byTooltip('检查更新'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final brightness in Brightness.values) {
     testWidgets('长操作反馈不挤走源列表，全文可滚动查看并关闭：${brightness.name}', (tester) async {

@@ -344,32 +344,49 @@ class _SourceScreenState extends State<SourceScreen> {
                   onMore: _onMoreSelected,
                 ),
                 if (_feedback.value != null)
-                  Material(
-                    color: scheme.surfaceContainerHighest,
-                    child: Tooltip(
-                      message: '查看操作详情',
-                      child: ListTile(
-                        dense: true,
-                        minVerticalPadding: 4,
-                        leading: const Icon(Icons.info_outline, size: 20),
-                        title: Text(
-                          _feedback.value!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, height: 1.35),
-                        ),
-                        onTap: _showFeedback,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.chevron_right, size: 18),
-                            IconButton(
-                              tooltip: '关闭提示',
-                              icon: const Icon(Icons.close, size: 16),
-                              onPressed: () =>
-                                  setState(() => _feedback.value = null),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Material(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                      clipBehavior: Clip.antiAlias,
+                      child: Tooltip(
+                        message: '查看操作详情',
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.only(left: 12),
+                          minTileHeight: 48,
+                          minVerticalPadding: 4,
+                          minLeadingWidth: 18,
+                          horizontalTitleGap: 8,
+                          leading: Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          title: Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _feedback.value!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(height: 1.35),
                             ),
-                          ],
+                          ),
+                          onTap: _showFeedback,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.chevron_right, size: 18),
+                              IconButton(
+                                tooltip: '关闭提示',
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () =>
+                                    setState(() => _feedback.value = null),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -525,12 +542,18 @@ class _SourceScreenState extends State<SourceScreen> {
               ),
             ),
             refreshing
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          semanticsLabel: '正在检查仓库更新',
+                        ),
+                      ),
                     ),
                   )
                 : IconButton(
@@ -701,13 +724,15 @@ class _SourceHeader extends StatelessWidget {
           ),
           TextButton(
             onPressed: onSubscribe,
-            child: subscribing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Visibility(
+                  visible: !subscribing,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Text(
                     '＋ 订阅仓库',
                     style: TextStyle(
                       fontSize: 13,
@@ -715,6 +740,18 @@ class _SourceHeader extends StatelessWidget {
                       color: scheme.primary,
                     ),
                   ),
+                ),
+                if (subscribing)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      semanticsLabel: '正在订阅仓库',
+                    ),
+                  ),
+              ],
+            ),
           ),
           PopupMenuButton<String>(
             tooltip: '更多',
