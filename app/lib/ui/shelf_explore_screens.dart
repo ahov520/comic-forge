@@ -6,6 +6,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
+import 'explore_results.dart';
 import 'search_screen.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
@@ -269,12 +270,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
     });
   }
 
-  Future<Paged<Book>> _fetchEntry(ComicSource source, String url) async {
+  Future<Paged<Book>> _fetchEntry(
+    ComicSource source,
+    String url, {
+    int page = 1,
+    String? nextUrl,
+  }) async {
     final state = widget.state;
     try {
-      final page = await SourceService.instance.runtimeFor(source).explore(url);
+      final result = await SourceService.instance
+          .runtimeFor(source)
+          .explore(url, page: page, nextUrl: nextUrl);
       await state.reportSourceHealth([source.id], const {});
-      return page;
+      return result;
     } catch (e) {
       await state.reportSourceHealth(const [], {source.id: e.toString()});
       rethrow;
@@ -489,6 +497,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         message: '点按上方分类，发现下一部喜欢的漫画。',
       );
     }
+    final source = _source!;
     return FutureBuilder<Paged<Book>>(
       // 每次切分类或重试都丢弃旧快照，避免旧漫画短暂出现在新分类下。
       key: ObjectKey(_future),
@@ -517,18 +526,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   actionLabel: '重新加载',
                   onAction: () => _loadEntry(entry),
                 )
-              : RefreshIndicator(
-                  key: _refreshKey,
+              : ExploreResults(
+                  key: ObjectKey(snapshot.data),
+                  firstPage: snapshot.data!,
+                  entryUrl: entry.$2,
+                  state: widget.state,
+                  refreshKey: _refreshKey,
                   onRefresh: _refreshCurrent,
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 12),
-                    itemCount: books.length,
-                    itemBuilder: (context, i) => BookTile(
-                      key: ObjectKey(books[i]),
-                      book: books[i],
-                      state: widget.state,
-                    ),
+                  loadPage: (page, nextUrl) => _fetchEntry(
+                    source,
+                    entry.$2,
+                    page: page,
+                    nextUrl: nextUrl,
                   ),
                 );
         }
