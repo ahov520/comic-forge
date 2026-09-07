@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../backup_service.dart';
 import '../state/app_state.dart';
+import 'downloads_screen.dart';
 import 'widgets.dart';
 
 /// 设置。
@@ -319,6 +320,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const _Header('数据'),
+              row(
+                ListTile(
+                  leading: const Icon(Icons.download_outlined),
+                  title: const Text('下载管理'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DownloadsScreen(state: widget.state),
+                    ),
+                  ),
+                ),
+              ),
               row(
                 ListTile(
                   leading: Icon(

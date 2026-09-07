@@ -10,6 +10,7 @@ import '../state/app_state.dart';
 import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
 import 'explore_results.dart';
+import 'downloads_screen.dart';
 import 'search_screen.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
@@ -134,8 +135,23 @@ class _ShelfScreenState extends State<ShelfScreen> {
                         ),
                         PopupMenuButton<String>(
                           tooltip: '书架操作',
-                          onSelected: (_) => widget.state.clearShelfUpdates(),
+                          onSelected: (action) {
+                            if (action == 'downloads') {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      DownloadsScreen(state: widget.state),
+                                ),
+                              );
+                            } else {
+                              widget.state.clearShelfUpdates();
+                            }
+                          },
                           itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'downloads',
+                              child: Text('下载管理'),
+                            ),
                             PopupMenuItem(
                               value: 'clear',
                               enabled: widget.state.shelf.any(

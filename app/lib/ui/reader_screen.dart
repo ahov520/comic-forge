@@ -9,6 +9,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
+import '../state/download_queue.dart';
 import 'reader_chrome.dart';
 import 'reader_image_page.dart';
 import 'reader_network_image.dart';
@@ -174,18 +175,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     setState(() {
       _index = index;
       _chromeVisible = true;
-      _images = SourceService.instance.imagesFor(
-        widget.runtime,
-        widget.chapters[index].url,
-        refresh: refresh,
-      );
+      _images = _imagesForChapter(widget.chapters[index], refresh: refresh);
       // 下一帧才订阅；即时失败或提前切话也要接住异常，界面仍能读取错误。
       _images.ignore();
     });
     _nextChapterWarmed = false;
     _offsetRestored = false;
     // 预加载下一话 URL 列表（失败静默）
-    if (index + 1 < widget.chapters.length) {
+    if (index + 1 < widget.chapters.length && !_downloaded(index + 1)) {
       SourceService.instance.prefetchImages(
         widget.runtime,
         widget.chapters[index + 1].url,
@@ -202,12 +199,36 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  bool _downloaded(int index) =>
+      widget.appState?.downloads
+          .taskFor(widget.book, widget.chapters[index])
+          ?.status ==
+      DownloadStatus.completed;
+
+  Future<List<String>> _imagesForChapter(
+    Chapter chapter, {
+    required bool refresh,
+  }) async {
+    final offline = await widget.appState?.downloads.offlineImages(
+      widget.book,
+      chapter,
+      adBlock: SourceService.instance.adBlock,
+    );
+    if (offline != null) return offline;
+    return SourceService.instance.imagesFor(
+      widget.runtime,
+      chapter.url,
+      refresh: refresh,
+    );
+  }
+
   /// 接近本章末页时预热下一话图片字节（每章只触发一次）。
   void _warmNextChapterIfNeeded(int page, int pageCount) {
     if (_nextChapterWarmed) return;
     if (page < pageCount - 2) return;
     final next = _index + 1;
     if (next >= widget.chapters.length) return;
+    if (_downloaded(next)) return;
     _nextChapterWarmed = true;
     SourceService.instance.prefetchImages(
       widget.runtime,
@@ -229,6 +250,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (c.position.maxScrollExtent - c.offset < 800) {
       final next = _index + 1;
       if (next >= widget.chapters.length) return;
+      if (_downloaded(next)) return;
       _nextChapterWarmed = true;
       SourceService.instance.prefetchImages(
         widget.runtime,

@@ -6,7 +6,10 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/source_share.dart';
+import '../state/download_queue.dart';
 import 'detail_chrome.dart';
+import 'download_selection_sheet.dart';
+import 'downloads_screen.dart';
 import 'skeleton.dart';
 import 'source_screen.dart';
 import 'widgets.dart';
@@ -133,6 +136,36 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     if (mounted) setState(_load);
   }
 
+  Future<void> _showDownloads(Book book, List<Chapter> chapters) async {
+    final added = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => DownloadSelectionSheet(
+        state: widget.appState,
+        book: book,
+        chapters: chapters,
+      ),
+    );
+    if (!mounted || added == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(added == 0 ? '所选章节已在下载队列中' : '已加入 $added 话下载'),
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DownloadsScreen(state: widget.appState),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   ComicSource? _findSource({bool includeDisabled = false}) {
     for (final s in widget.appState.sources) {
       if (s.id == widget.book.sourceId && (includeDisabled || s.enabled)) {
@@ -242,7 +275,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.appState,
+      animation: Listenable.merge([widget.appState, widget.appState.downloads]),
       builder: (context, _) => _buildDetail(context),
     );
   }
@@ -332,6 +365,20 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             final savedIdx = (prog != null)
                 ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
                 : -1;
+            final offlineIndices = <int>{
+              for (var i = 0; i < chapters.length; i++)
+                if (widget.appState.downloads
+                        .taskFor(book, chapters[i])
+                        ?.status ==
+                    DownloadStatus.completed)
+                  i,
+            };
+            final hasOffline = offlineIndices.isNotEmpty;
+            final resumeIndex = savedIdx >= 0 ? savedIdx : 0;
+            final readIndex =
+                !canRead && hasOffline && !offlineIndices.contains(resumeIndex)
+                ? offlineIndices.first
+                : resumeIndex;
             final labelSource = _source ?? currentSource;
             final sourceName = labelSource == null
                 ? null
@@ -342,9 +389,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 ? null
                 : (canRead
                       ? (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读')
-                      : recoveryLabel);
+                      : (hasOffline ? '离线阅读 ${readIndex + 1}' : recoveryLabel));
             void openAt(int index) {
-              if (!canRead) return;
+              if (!canRead) {
+                final task = widget.appState.downloads.taskFor(
+                  book,
+                  chapters[index],
+                );
+                if (task != null) {
+                  openDownloadedChapter(context, widget.appState, task);
+                }
+                return;
+              }
               openReader(
                 context,
                 SourceService.instance.runtimeFor(_source!),
@@ -359,6 +415,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               appBar: AppBar(
                 title: Text(book.name),
                 actions: [
+                  if (canRead &&
+                      chapters.isNotEmpty &&
+                      widget.appState.downloads.supported)
+                    IconButton(
+                      tooltip: '批量离线下载',
+                      icon: const Icon(Icons.download_outlined),
+                      onPressed: () => _showDownloads(book, chapters),
+                    ),
                   if (canRead)
                     Badge.count(
                       count: _switchCount ?? 0,
@@ -401,14 +465,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       switchCount: _switchCount,
                       onSwitchSource: canRead ? _showSwitchSourceSheet : null,
                       readLabel: readLabel,
-                      readHint: canRead ? null : recoveryHint,
-                      readIcon: canRead
+                      readHint: canRead || hasOffline ? null : recoveryHint,
+                      readIcon: canRead || hasOffline
                           ? Icons.play_arrow_rounded
                           : recoveryIcon,
                       onRead: readLabel == null
                           ? null
-                          : (canRead
-                                ? () => openAt(savedIdx >= 0 ? savedIdx : 0)
+                          : (canRead || hasOffline
+                                ? () => openAt(readIndex)
                                 : recoverSource),
                     ),
                   ),
@@ -476,7 +540,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           numberWidth: chapterNumberWidth,
                           title: chapters[index].title,
                           isCurrent: index == savedIdx,
-                          onTap: canRead ? () => openAt(index) : null,
+                          onTap: canRead || offlineIndices.contains(index)
+                              ? () => openAt(index)
+                              : null,
                         );
                       },
                     ),

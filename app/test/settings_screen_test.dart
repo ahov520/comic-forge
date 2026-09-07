@@ -73,7 +73,12 @@ void main() {
         14,
       );
     }
-    final arrow = tester.getRect(find.byIcon(Icons.chevron_right));
+    final arrow = tester.getRect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'WebDAV 备份 / 恢复'),
+        matching: find.byIcon(Icons.chevron_right),
+      ),
+    );
     final toggle = tester.getRect(find.byType(Switch));
     expect(toggle.right, arrow.right);
     expect(toggle.width, greaterThanOrEqualTo(48));

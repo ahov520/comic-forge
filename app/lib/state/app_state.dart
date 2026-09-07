@@ -11,6 +11,7 @@ import '../services/source_service.dart';
 import 'safe_prefs.dart';
 import 'scroll_restore.dart';
 import 'shelf_updates.dart';
+import 'download_queue.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -79,6 +80,19 @@ class CachedDetail {
 
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
+  AppState({DownloadQueue? downloadQueue}) : _downloads = downloadQueue;
+
+  DownloadQueue? _downloads;
+  DownloadQueue get downloads => _downloads ??= DownloadQueue(
+    sourceFor: (id) => sources.where((source) => source.id == id).firstOrNull,
+  );
+
+  @override
+  void dispose() {
+    _downloads?.dispose();
+    super.dispose();
+  }
+
   static const _kSources = 'cf.sources';
   static const _kRepos = 'cf.repos';
   static const _kShelf = 'cf.shelf';
@@ -230,6 +244,7 @@ class AppState extends ChangeNotifier {
       // 升级只修复已有内置源，不重新添加用户删掉的源。
       await _importBuiltinSources(addMissing: false);
     }
+    await downloads.load();
   }
 
   void _restoreSearchHistory(Object? saved) {
@@ -602,7 +617,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  CachedDetail? detailCacheFor(String bookUrl) => detailCache[bookUrl];
+  CachedDetail? detailCacheFor(String bookUrl) {
+    final cached = detailCache[bookUrl];
+    if (cached != null) return cached;
+    final offline = downloads.offlineCatalogFor(bookUrl);
+    return offline == null ? null : CachedDetail(
+      book: offline.book, chapters: offline.chapters, at: offline.at,
+    );
+  }
 
   /// 检查一个订阅仓库的更新：重新拉取 store，规则有变则就地更新（保留
   /// 启用/权重/健康），新增源直接追加。[client] 可注入（测试用）。
