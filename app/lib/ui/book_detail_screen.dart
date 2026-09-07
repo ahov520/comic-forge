@@ -324,6 +324,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               );
             }
             final scheme = Theme.of(context).colorScheme;
+            final chapterNumberWidth = ChapterTile.numberWidthFor(
+              context,
+              chapters.length,
+            );
             final prog = widget.appState.progressFor(widget.book.bookUrl);
             final savedIdx = (prog != null)
                 ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
@@ -467,6 +471,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                             : i;
                         return ChapterTile(
                           index: index,
+                          numberWidth: chapterNumberWidth,
                           title: chapters[index].title,
                           isCurrent: index == savedIdx,
                           onTap: canRead ? () => openAt(index) : null,

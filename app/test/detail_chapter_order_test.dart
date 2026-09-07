@@ -71,17 +71,27 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final firstTitleLeft = tester.getTopLeft(find.text('第1话')).dx;
     await tester.ensureVisible(find.widgetWithText(TextButton, '正序'));
     await tester.tap(find.widgetWithText(TextButton, '正序'));
     await tester.pumpAndSettle();
     expect(find.text('第1300话').hitTestable(), findsOneWidget);
+    expect(tester.getTopLeft(find.text('第1300话')).dx, firstTitleLeft);
     expect(
       tester
           .widget<ChapterTile>(find.widgetWithText(ChapterTile, '第1300话'))
           .isCurrent,
       isTrue,
     );
-    await tester.tap(find.text('第1300话'));
+    final currentTapArea = tester.getRect(
+      find.descendant(
+        of: find.widgetWithText(ChapterTile, '第1300话'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.tapAt(
+      Offset(currentTapArea.center.dx, currentTapArea.bottom - 2),
+    );
     await tester.pumpAndSettle();
     expect(find.text('漫画 · 第1300话'), findsOneWidget);
     await tester.tap(find.text('下一话'));

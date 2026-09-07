@@ -236,12 +236,12 @@ class DetailSkeleton extends StatelessWidget {
               (i) => Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 10,
+                  vertical: 14,
                 ),
                 child: Row(
                   children: [
                     const SkeletonBox(width: 28, height: 12, radius: 4),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     const Expanded(child: SkeletonBox(height: 20, radius: 6)),
                   ],
                 ),

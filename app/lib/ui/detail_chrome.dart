@@ -255,21 +255,39 @@ class ChapterTile extends StatelessWidget {
     required this.title,
     required this.isCurrent,
     required this.onTap,
+    this.numberWidth,
   });
 
   final int index;
   final String title;
   final bool isCurrent;
   final VoidCallback? onTap;
+  final double? numberWidth;
+
+  /// 用目录总话数预留序号列，排序或续读高亮变化时标题不左右跳动。
+  static double numberWidthFor(BuildContext context, int chapterCount) {
+    final style = Theme.of(context).textTheme.labelMedium!.copyWith(
+      fontWeight: FontWeight.w700,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final scaler = MediaQuery.textScalerOf(context);
+    final painter = TextPainter(
+      text: TextSpan(text: '$chapterCount', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    final minimum = 28 * scaler.scale(style.fontSize!) / style.fontSize!;
+    return width > minimum ? width : minimum;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final enabled = onTap != null;
-    final numberFontSize = textTheme.labelMedium?.fontSize ?? 12;
-    final numberScale =
-        MediaQuery.textScalerOf(context).scale(numberFontSize) / numberFontSize;
     final fg = enabled
         ? (isCurrent ? scheme.onPrimaryContainer : scheme.onSurface)
         : scheme.onSurface.withValues(alpha: 0.38);
@@ -277,7 +295,7 @@ class ChapterTile extends StatelessWidget {
         ? (isCurrent ? scheme.primary : scheme.onSurfaceVariant)
         : fg;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Material(
         color: isCurrent
             ? scheme.primaryContainer.withValues(alpha: 0.72)
@@ -286,41 +304,44 @@ class ChapterTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: 28 * numberScale,
-                    maxWidth: 44 * numberScale,
-                  ),
-                  child: Text(
-                    '${index + 1}',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.fade,
-                    softWrap: false,
-                    style: textTheme.labelMedium?.copyWith(
-                      color: numColor,
-                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: numberWidth ?? numberWidthFor(context, index + 1),
+                    child: Text(
+                      '${index + 1}',
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: numColor,
+                        fontWeight: isCurrent
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: fg,
-                      fontWeight: isCurrent ? FontWeight.w600 : null,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: fg,
+                        fontWeight: isCurrent ? FontWeight.w600 : null,
+                      ),
                     ),
                   ),
-                ),
-                if (isCurrent) Icon(Icons.bookmark, size: 16, color: numColor),
-              ],
+                  if (isCurrent)
+                    Icon(Icons.bookmark, size: 16, color: numColor),
+                ],
+              ),
             ),
           ),
         ),

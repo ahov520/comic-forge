@@ -143,7 +143,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('当前章节行更紧凑并高亮书签', (tester) async {
+  testWidgets('章节行保留紧凑的 48px 点击区域并高亮当前话', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -169,7 +169,15 @@ void main() {
     expect(find.text('第1话'), findsOneWidget);
     expect(find.text('第4话'), findsOneWidget);
     expect(find.byIcon(Icons.bookmark), findsOneWidget);
-    expect(tester.getSize(find.byType(ChapterTile).first).height, lessThan(48));
+    final tapArea = find.descendant(
+      of: find.byType(ChapterTile).first,
+      matching: find.byType(InkWell),
+    );
+    expect(tester.getSize(tapArea).height, greaterThanOrEqualTo(48));
+    expect(
+      tester.getSize(find.byType(ChapterTile).first).height,
+      lessThanOrEqualTo(52),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
