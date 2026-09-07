@@ -59,12 +59,21 @@ void main() {
   });
 
   testWidgets('列表骨架对齐结果封面，切换分类立即移除旧内容并显示加载状态', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final serial = Completer<String>();
     final completed = Completer<String>();
     respond = (uri) => uri.path == '/serial' ? serial.future : completed.future;
     await _showExplore(tester, state);
     expect(find.text('选一个分类开始探索'), findsOneWidget);
     expect(fetcher.requests, isEmpty);
+    expect(
+      tester.getTopLeft(_category('连载')).dx,
+      tester.getTopLeft(find.byType(DropdownButtonFormField<String>)).dx,
+      reason: '分类不足一行时仍与源入口左对齐',
+    );
 
     await tester.tap(_category('连载'));
     await tester.pump();
@@ -72,7 +81,7 @@ void main() {
     expect(find.byType(BookTile), findsNothing);
     final coverPlaceholder = find.byWidgetPredicate(
       (widget) =>
-          widget is SkeletonBox && widget.width == 64 && widget.height == 96,
+          widget is SkeletonBox && widget.width == 60 && widget.height == 80,
     );
     final coverRect = tester.getRect(coverPlaceholder.first);
 
@@ -138,6 +147,7 @@ void main() {
     final source = state.sources.single;
     await state.removeSource(source.id);
     await _showExplore(tester, state);
+    expect(find.text('探索'), findsOneWidget);
     expect(find.text('暂无可用漫画源'), findsOneWidget);
     await tester.tap(find.text('管理源'));
     await tester.pumpAndSettle();
@@ -151,6 +161,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('发现的漫画'), findsOneWidget);
     expect(fetcher.requests.single.host, 'example.com');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('源入口只列出启用源，切换后清空旧结果并展示新源分类', (tester) async {
+    await state.addSourceManual(
+      _source(
+        name: '备用源',
+        url: 'https://second.example.com',
+        entries: '最新::/latest',
+      ),
+    );
+    final disabled = _source(name: '已停用源', url: 'https://disabled.example.com');
+    await state.addSourceManual(disabled);
+    await state.toggleSource(disabled.id);
+    respond = (uri) => _books(uri.host == 'example.com' ? '原来的漫画' : '最新漫画');
+    await _showExplore(tester, state);
+    await tester.tap(_category('连载'));
+    await tester.pumpAndSettle();
+    expect(find.text('原来的漫画'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('已停用源'), findsNothing);
+    await tester.tap(find.text('备用源').last);
+    await tester.pumpAndSettle();
+    expect(find.text('原来的漫画'), findsNothing);
+    expect(_category('连载'), findsNothing);
+    expect(find.text('选一个分类开始探索'), findsOneWidget);
+    expect(fetcher.requests, hasLength(1));
+
+    await tester.tap(_category('最新'));
+    await tester.pumpAndSettle();
+    expect(find.text('最新漫画'), findsOneWidget);
+    expect(
+      fetcher.requests.last.toString(),
+      'https://second.example.com/latest',
+    );
     expect(tester.takeException(), isNull);
   });
 

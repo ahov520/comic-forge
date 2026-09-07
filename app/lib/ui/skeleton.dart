@@ -74,11 +74,13 @@ class BookListSkeleton extends StatelessWidget {
       liveRegion: true,
       child: ExcludeSemantics(
         child: ListView.builder(
-          padding: const EdgeInsets.only(top: 6, bottom: 12),
+          padding: const EdgeInsets.only(bottom: 12),
           itemCount: 6,
           itemBuilder: (context, index) => Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: scheme.surfaceContainerLow,
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            color: scheme.brightness == Brightness.light
+                ? scheme.surfaceContainerLowest
+                : scheme.surfaceContainerLow,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -89,27 +91,34 @@ class BookListSkeleton extends StatelessWidget {
             child: const Padding(
               padding: EdgeInsets.all(12),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  SkeletonBox(width: 64, height: 96, radius: 10),
+                  SkeletonBox(width: 60, height: 80, radius: 10),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(height: 12),
                         SkeletonBox(height: 20, radius: 6),
-                        SizedBox(height: 12),
+                        SizedBox(height: 4),
                         FractionallySizedBox(
                           widthFactor: 0.7,
                           child: SkeletonBox(height: 12, radius: 4),
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: 4),
                         FractionallySizedBox(
                           widthFactor: 0.9,
                           child: SkeletonBox(height: 12, radius: 4),
                         ),
                       ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: SkeletonBox(width: 20, height: 20, radius: 10),
                     ),
                   ),
                 ],

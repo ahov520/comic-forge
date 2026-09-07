@@ -24,6 +24,34 @@ void main() {
 
   tearDown(() => state.dispose());
 
+  testWidgets('手机宽度下信息按标题、作者标签、更新分层，收藏与封面居中', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [BookTile(book: book, state: state)],
+          ),
+        ),
+      ),
+    );
+    final cover = tester.getRect(find.byType(BookCover));
+    final favorite = tester.getRect(find.byType(IconButton));
+    final title = tester.getRect(find.text(book.name));
+    final metadata = tester.getRect(find.text('尾田荣一郎 · 冒险'));
+    final chapter = tester.getRect(find.text('更新至 第 1080 话'));
+    expect(favorite.center.dy, cover.center.dy);
+    expect(favorite.width, greaterThanOrEqualTo(48));
+    expect(favorite.height, greaterThanOrEqualTo(48));
+    expect(title.bottom, lessThan(metadata.top));
+    expect(metadata.bottom, lessThan(chapter.top));
+    expect(title.right, lessThanOrEqualTo(favorite.left));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('卡片分别展示元信息；收藏可即时切换且不会打开详情', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

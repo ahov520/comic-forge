@@ -51,12 +51,7 @@ class BookCover extends StatelessWidget {
 
 /// 来源角标：搜索/探索卡片与详情换源入口共用。
 class SourceBadge extends StatelessWidget {
-  const SourceBadge({
-    super.key,
-    required this.label,
-    this.onTap,
-    this.count,
-  });
+  const SourceBadge({super.key, required this.label, this.onTap, this.count});
 
   final String label;
   final VoidCallback? onTap;
@@ -153,8 +148,10 @@ class BookTile extends StatelessWidget {
     ].join(' · ');
     final source = sourceLabel?.trim() ?? '';
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: scheme.surfaceContainerLow,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      color: scheme.brightness == Brightness.light
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -162,77 +159,51 @@ class BookTile extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap ??
+        onTap:
+            onTap ??
             () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        BookDetailScreen(book: book, appState: state),
-                  ),
-                ),
+              MaterialPageRoute(
+                builder: (_) => BookDetailScreen(book: book, appState: state),
+              ),
+            ),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              BookCover(url: book.coverUrl, width: 64, height: 96),
+              BookCover(url: book.coverUrl, width: 60, height: 80),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            book.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (showShelfAction)
-                          ListenableBuilder(
-                            listenable: state,
-                            builder: (context, _) {
-                              final saved = state.inShelf(book);
-                              return IconButton(
-                                tooltip: saved ? '移出书架' : '加入书架',
-                                isSelected: saved,
-                                onPressed: () => state.toggleShelf(book),
-                                icon: AnimatedSwitcher(
-                                  duration:
-                                      MediaQuery.disableAnimationsOf(context)
-                                      ? Duration.zero
-                                      : const Duration(milliseconds: 160),
-                                  child: Icon(
-                                    saved
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    key: ValueKey(saved),
-                                    color: saved
-                                        ? scheme.primary
-                                        : scheme.outline,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
+                    Text(
+                      book.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium?.copyWith(
+                        fontSize: 15,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    if (metadata.isNotEmpty)
-                      Text(
-                        metadata,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                    if (metadata.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Tooltip(
+                        message: metadata,
+                        child: Text(
+                          metadata,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
+                    ],
                     if (book.lastChapter.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         '更新至 ${book.lastChapter.trim()}',
                         maxLines: 1,
@@ -252,6 +223,29 @@ class BookTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (showShelfAction)
+                ListenableBuilder(
+                  listenable: state,
+                  builder: (context, _) {
+                    final saved = state.inShelf(book);
+                    return IconButton(
+                      tooltip: saved ? '移出书架' : '加入书架',
+                      isSelected: saved,
+                      iconSize: 20,
+                      onPressed: () => state.toggleShelf(book),
+                      icon: AnimatedSwitcher(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 160),
+                        child: Icon(
+                          saved ? Icons.favorite : Icons.favorite_border,
+                          key: ValueKey(saved),
+                          color: scheme.primary,
+                        ),
+                      ),
+                    );
+                  },
+                ),
             ],
           ),
         ),
