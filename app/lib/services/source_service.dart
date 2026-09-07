@@ -19,8 +19,9 @@ class SourceService {
 
   final Map<String, SourceRuntime> _runtimes = {};
 
-  /// 按源与章节缓存原始图片：并发/预取复用，读取时再应用当前广告规则。
-  final Map<(String, String), Future<List<String>>> _imgFutures = {};
+  /// 按源运行时与章节缓存原始图片：规则更新后不再复用旧定义的结果。
+  /// 并发/预取仍共享请求，读取时再应用当前广告规则。
+  final Map<(SourceRuntime, String), Future<List<String>>> _imgFutures = {};
 
   /// 订阅/更新检查用（fetcher 复用全局实例）。
   RepoClient get repoClient => RepoClient(fetcher: fetcher);
@@ -88,21 +89,24 @@ class SourceService {
   /// 测试接缝：覆盖运行时构造（null = 默认实现）。
   SourceRuntime Function(ComicSource source)? debugRuntimeOverride;
 
-  /// 测试接缝：清空换源预扫缓存与运行时缓存。
+  /// 测试接缝：清空换源预扫、章节图片与运行时缓存。
   void debugClearSwitchCache() {
     _switchCache.clear();
+    _imgFutures.clear();
     _runtimes.clear();
   }
 
   SourceRuntime runtimeFor(ComicSource source) {
-    final override = debugRuntimeOverride;
-    if (override != null) {
-      return _runtimes.putIfAbsent(source.id, () => override(source));
+    final cached = _runtimes[source.id];
+    if (cached != null && identical(cached.source, source)) return cached;
+    if (cached != null) {
+      _imgFutures.removeWhere((key, _) => identical(key.$1, cached));
     }
-    return _runtimes.putIfAbsent(
-        source.id,
-        () => SourceRuntime(
-            source: source, fetcher: fetcher, jsHook: FlutterJsHook.instance.call));
+    final override = debugRuntimeOverride;
+    return _runtimes[source.id] = override != null
+        ? override(source)
+        : SourceRuntime(
+            source: source, fetcher: fetcher, jsHook: FlutterJsHook.instance.call);
   }
 
   Future<List<String>> imagesFor(
@@ -110,7 +114,7 @@ class SourceService {
     String chapterUrl, {
     bool refresh = false,
   }) async {
-    final key = (runtime.source.id, chapterUrl);
+    final key = (runtime, chapterUrl);
     var future = refresh ? null : _imgFutures[key];
     if (future == null) {
       final request = Future<List<String>>.sync(() => runtime.images(chapterUrl));
@@ -129,7 +133,7 @@ class SourceService {
 
   /// 主动预取（失败静默，不阻塞阅读）。
   void prefetchImages(SourceRuntime runtime, String chapterUrl) {
-    if (_imgFutures.containsKey((runtime.source.id, chapterUrl))) return;
+    if (_imgFutures.containsKey((runtime, chapterUrl))) return;
     imagesFor(runtime, chapterUrl).catchError((_) => const <String>[]);
   }
 
