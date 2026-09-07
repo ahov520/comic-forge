@@ -111,6 +111,7 @@ void main() {
         final title = tester.getRect(boxes.at(1));
         final metadata = tester.getRect(boxes.at(2));
         final chapter = tester.getRect(boxes.at(3));
+        final favorite = showShelfAction ? tester.getRect(boxes.at(4)) : null;
         final card = tester.getRect(find.byType(Card).first);
 
         await show(
@@ -127,6 +128,9 @@ void main() {
         );
         expect(tester.getRect(find.byType(BookCover)), cover);
         expect(tester.getRect(find.byType(Card)), card);
+        if (favorite != null) {
+          expect(tester.getRect(find.byIcon(Icons.favorite_border)), favorite);
+        }
         for (final pair in [
           (title, find.text('漫画')),
           (metadata, find.text('作者')),

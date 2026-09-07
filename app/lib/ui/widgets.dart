@@ -310,7 +310,17 @@ class BookTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (showShelfAction) ShelfButton(book: book, state: state),
+              if (showShelfAction)
+                IconButtonTheme(
+                  data: IconButtonThemeData(
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: EdgeInsets.zero,
+                      alignment: AlignmentDirectional.centerEnd,
+                    ),
+                  ),
+                  child: ShelfButton(book: book, state: state, iconSize: 16),
+                ),
             ],
           ),
         ),

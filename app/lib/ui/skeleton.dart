@@ -131,8 +131,9 @@ class BookListSkeleton extends StatelessWidget {
                     const SizedBox(
                       width: 48,
                       height: 48,
-                      child: Center(
-                        child: SkeletonBox(width: 20, height: 20, radius: 10),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: SkeletonBox(width: 16, height: 16, radius: 8),
                       ),
                     ),
                 ],

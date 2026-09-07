@@ -46,6 +46,10 @@ void main() {
     expect(favorite.center.dy, cover.center.dy);
     expect(favorite.width, greaterThanOrEqualTo(48));
     expect(favorite.height, greaterThanOrEqualTo(48));
+    expect(
+      tester.getRect(find.byIcon(Icons.favorite_border)).right,
+      favorite.right,
+    );
     expect(title.bottom, lessThan(metadata.top));
     expect(metadata.bottom, lessThan(chapter.top));
     expect(title.right, lessThanOrEqualTo(favorite.left));
