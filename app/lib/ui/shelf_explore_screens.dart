@@ -377,54 +377,60 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                           child: Semantics(
                             label: '漫画源',
-                            child: Tooltip(
-                              message: '切换漫画源',
-                              child: DropdownButtonFormField<String>(
-                                key: ValueKey(source.id),
-                                initialValue: source.id,
-                                isExpanded: true,
-                                itemHeight: null,
-                                icon: const Icon(Icons.expand_more, size: 20),
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 6,
-                                  ),
-                                  filled: true,
-                                  fillColor: surface,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: scheme.outlineVariant.withValues(
-                                        alpha: 0.6,
+                            child: ButtonTheme(
+                              // 菜单沿用入口宽度，避免默认外扩吃掉页面两侧留白。
+                              alignedDropdown: true,
+                              child: Tooltip(
+                                message: '切换漫画源',
+                                child: DropdownButtonFormField<String>(
+                                  key: ValueKey(source.id),
+                                  initialValue: source.id,
+                                  isExpanded: true,
+                                  itemHeight: null,
+                                  icon: const Icon(Icons.expand_more, size: 20),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
+                                    filled: true,
+                                    fillColor: surface,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: scheme.outlineVariant.withValues(
+                                          alpha: 0.6,
+                                        ),
                                       ),
                                     ),
                                   ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  items: enabled.map((s) {
+                                    final name = s.name.trim().isEmpty
+                                        ? s.id
+                                        : s.name;
+                                    return DropdownMenuItem(
+                                      value: s.id,
+                                      child: Tooltip(
+                                        message: name,
+                                        child: Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: _selectSource,
                                 ),
-                                borderRadius: BorderRadius.circular(12),
-                                items: enabled.map((s) {
-                                  final name = s.name.trim().isEmpty
-                                      ? s.id
-                                      : s.name;
-                                  return DropdownMenuItem(
-                                    value: s.id,
-                                    child: Tooltip(
-                                      message: name,
-                                      child: Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: _selectSource,
                               ),
                             ),
                           ),
@@ -479,7 +485,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               ),
                             ),
                           ),
-                        const SizedBox(height: 4),
+                        if (entries.isNotEmpty) const SizedBox(height: 12),
                         Expanded(child: _content(entries)),
                       ],
                     ),

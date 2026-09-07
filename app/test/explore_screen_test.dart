@@ -36,6 +36,16 @@ Future<void> _showExplore(WidgetTester tester, AppState state) =>
 
 Finder _category(String name) => find.widgetWithText(ChoiceChip, name);
 
+void _expectSourceMenuAligned(WidgetTester tester, Rect field, String name) {
+  final item = find
+      .ancestor(of: find.text(name).last, matching: find.byType(InkWell))
+      .first;
+  final rect = tester.getRect(item);
+  expect(rect.left, closeTo(field.left, 0.5));
+  expect(rect.right, closeTo(field.right, 0.5));
+  expect(rect.height, greaterThanOrEqualTo(48));
+}
+
 void main() {
   late AppState state;
   late FakeFetcher fetcher;
@@ -74,6 +84,13 @@ void main() {
       tester.getTopLeft(find.byType(DropdownButtonFormField<String>)).dx,
       reason: '分类不足一行时仍与源入口左对齐',
     );
+    final selector = tester.getRect(
+      find.byType(DropdownButtonFormField<String>),
+    );
+    final serialChip = tester.getRect(_category('连载'));
+    expect(selector.height, 36);
+    expect(serialChip.top - selector.bottom, 12);
+    expect(tester.getRect(_category('完结')).left - serialChip.right, 8);
 
     await tester.tap(_category('连载'));
     await tester.pump();
@@ -84,6 +101,15 @@ void main() {
           widget is SkeletonBox && widget.width == 60 && widget.height == 80,
     );
     final coverRect = tester.getRect(coverPlaceholder.first);
+    final loadingCard = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(BookListSkeleton),
+            matching: find.byType(Card),
+          )
+          .first,
+    );
+    expect(loadingCard.top - tester.getRect(_category('连载')).bottom, 12);
 
     serial.complete(_books('连载漫画'));
     await tester.pumpAndSettle();
@@ -181,9 +207,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('原来的漫画'), findsOneWidget);
 
+    final selector = tester.getRect(
+      find.byType(DropdownButtonFormField<String>),
+    );
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     expect(find.text('已停用源'), findsNothing);
+    _expectSourceMenuAligned(tester, selector, '备用源');
     await tester.tap(find.text('备用源').last);
     await tester.pumpAndSettle();
     expect(find.text('原来的漫画'), findsNothing);
@@ -277,8 +307,12 @@ void main() {
           home: ExploreScreen(state: state),
         ),
       );
+      final selector = tester.getRect(
+        find.byType(DropdownButtonFormField<String>),
+      );
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
+      _expectSourceMenuAligned(tester, selector, name);
       await tester.tap(find.text(name).last);
       await tester.pumpAndSettle();
       await tester.tap(_category(category));
