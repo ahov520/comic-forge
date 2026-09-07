@@ -18,12 +18,36 @@ class RepoRef {
   static RepoRef? parse(String input) {
     var s = input.trim();
     if (s.isEmpty) return null;
-    if (!s.startsWith('http')) {
+    final hostPrefix = RegExp(
+      r'^(?:www\.)?(?:gitee|github)\.com(?:/|$)',
+      caseSensitive: false,
+    );
+    if (hostPrefix.hasMatch(s)) {
+      s = 'https://$s';
+    } else if (!s.contains('://')) {
+      if (!RegExp(r'^[\w.\-]+/[\w.\-]+/?$').hasMatch(s)) return null;
       s = 'https://github.com/$s';
     }
-    final m = RegExp(r'https?://(?:www\.)?(gitee|github)\.com/([\w.\-]+)/([\w.\-]+)').firstMatch(s);
-    if (m == null) return null;
-    return RepoRef(host: m.group(1)!, user: m.group(2)!, repo: m.group(3)!);
+    final uri = Uri.tryParse(s);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.userInfo.isNotEmpty) {
+      return null;
+    }
+    final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
+    if (host != 'github.com' && host != 'gitee.com') return null;
+    final List<String> segments;
+    try {
+      segments = uri.pathSegments;
+    } on FormatException {
+      return null;
+    }
+    if (segments.length < 2) return null;
+    final user = segments[0];
+    final repo = segments[1].replaceFirst(RegExp(r'\.git$'), '');
+    final validName = RegExp(r'^[\w.\-]+$');
+    if (!validName.hasMatch(user) || !validName.hasMatch(repo)) return null;
+    return RepoRef(host: host.split('.').first, user: user, repo: repo);
   }
 
   /// 一个仓库的多个 raw 候选地址（按优先级）。
