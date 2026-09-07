@@ -110,7 +110,7 @@ void main() {
     expect(find.byType(DetailSkeleton), findsOneWidget);
     // 封面块 + 多个章节行骨架
     expect(
-      find.byWidgetPredicate((w) => w is SkeletonBox && (w.height == 150)),
+      find.byWidgetPredicate((w) => w is SkeletonBox && (w.height == 164)),
       findsOneWidget,
     );
     expect(find.byType(SkeletonBox).evaluate().length, greaterThan(6));

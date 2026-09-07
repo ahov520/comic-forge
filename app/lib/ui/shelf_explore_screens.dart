@@ -279,6 +279,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
     context,
   ).push(MaterialPageRoute(builder: (_) => SearchScreen(state: widget.state)));
 
+  /// 下拉刷新当前分类：保留旧结果直到新数据到达（不闪骨架）。
+  Future<void> _refreshCurrent() async {
+    final entry = _entry;
+    final source = _source;
+    if (entry == null || source == null) return;
+    final future = _fetchEntry(source, entry.$2);
+    future.ignore();
+    try {
+      final page = await future;
+      if (!mounted || !identical(_entry, entry)) return;
+      setState(() {
+        _future = Future<Paged<Book>>.value(page);
+      });
+    } catch (e) {
+      if (!mounted || !identical(_entry, entry)) return;
+      setState(() {
+        _future = Future<Paged<Book>>.error(e);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -288,98 +309,115 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ? const <(String, String)>[]
         : SourceService.instance.runtimeFor(source).exploreEntries();
     return Scaffold(
-      appBar: AppBar(title: const Text('探索')),
-      body: source == null
-          ? EmptyStateView(
-              icon: Icons.travel_explore,
-              title: '暂无可用漫画源',
-              message: '添加或启用一个漫画源，开始发现喜欢的漫画。',
-              actionLabel: '管理源',
-              onAction: _openSources,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Text(
+              '探索',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (source == null)
+            Expanded(
+              child: EmptyStateView(
+                icon: Icons.travel_explore,
+                title: '暂无可用漫画源',
+                message: '添加或启用一个漫画源，开始发现喜欢的漫画。',
+                actionLabel: '管理源',
+                onAction: _openSources,
+              ),
             )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey(source.id),
-                    initialValue: source.id,
-                    isExpanded: true,
-                    itemHeight: null,
-                    decoration: InputDecoration(
-                      labelText: '漫画源',
-                      prefixIcon: const Icon(Icons.public),
-                      filled: true,
-                      fillColor: scheme.surfaceContainerLow,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    items: enabled.map((s) {
-                      final name = s.name.trim().isEmpty ? s.id : s.name;
-                      return DropdownMenuItem(
-                        value: s.id,
-                        child: Tooltip(
-                          message: name,
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: _selectSource,
+          else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(source.id),
+                initialValue: source.id,
+                isExpanded: true,
+                itemHeight: null,
+                decoration: InputDecoration(
+                  labelText: '漫画源',
+                  prefixIcon: const Icon(Icons.public),
+                  filled: true,
+                  fillColor: scheme.surfaceContainerLow,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
                   ),
                 ),
-                if (entries.isNotEmpty)
-                  // 保留右端渐隐提示；高度随字号增长，长分类名可查看完整提示。
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      stops: [0.9, 1.0],
-                      colors: [Colors.white, Colors.transparent],
-                    ).createShader(bounds),
-                    blendMode: BlendMode.dstIn,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        children: entries
-                            .map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Tooltip(
-                                  message: entry.$1,
-                                  child: ChoiceChip(
-                                    label: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth:
-                                            MediaQuery.sizeOf(context).width *
-                                            0.7,
-                                      ),
-                                      child: Text(
-                                        entry.$1,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    selected: _entry == entry,
-                                    onSelected: (_) => _loadEntry(entry),
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
+                borderRadius: BorderRadius.circular(12),
+                items: enabled.map((s) {
+                  final name = s.name.trim().isEmpty ? s.id : s.name;
+                  return DropdownMenuItem(
+                    value: s.id,
+                    child: Tooltip(
+                      message: name,
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                Expanded(child: _content(entries)),
-              ],
+                  );
+                }).toList(),
+                onChanged: _selectSource,
+              ),
             ),
+            if (entries.isNotEmpty)
+              // 保留右端渐隐提示；高度随字号增长，长分类名可查看完整提示。
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  stops: [0.9, 1.0],
+                  colors: [Colors.white, Colors.transparent],
+                ).createShader(bounds),
+                blendMode: BlendMode.dstIn,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: entries
+                        .map(
+                          (entry) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Tooltip(
+                              message: entry.$1,
+                              child: ChoiceChip(
+                                label: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth:
+                                        MediaQuery.sizeOf(context).width * 0.7,
+                                  ),
+                                  child: Text(
+                                    entry.$1,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                selected: _entry == entry,
+                                onSelected: (_) => _loadEntry(entry),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            Expanded(child: _content(entries)),
+          ],
+        ],
+        ),
+      ),
     );
   }
 
@@ -429,14 +467,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   actionLabel: '重新加载',
                   onAction: () => _loadEntry(entry),
                 )
-              : ListView.builder(
+              : RefreshIndicator(
                   key: const ValueKey('results'),
-                  padding: const EdgeInsets.only(top: 6, bottom: 12),
-                  itemCount: books.length,
-                  itemBuilder: (context, i) => BookTile(
-                    key: ObjectKey(books[i]),
-                    book: books[i],
-                    state: widget.state,
+                  onRefresh: _refreshCurrent,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(top: 6, bottom: 12),
+                    itemCount: books.length,
+                    itemBuilder: (context, i) => BookTile(
+                      key: ObjectKey(books[i]),
+                      book: books[i],
+                      state: widget.state,
+                    ),
                   ),
                 );
         }

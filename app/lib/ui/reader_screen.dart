@@ -411,6 +411,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     canNext: _index + 1 < widget.chapters.length,
                     onPrev: () => _go(-1),
                     onNext: () => _go(1),
+                    onCatalog: () => _showCatalog(context),
                     onBrightness: widget.appState == null
                         ? null
                         : () => _showReaderSettingsSheet(context),
@@ -419,6 +420,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showCatalog(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF161619),
+      showDragHandle: true,
+      builder: (sheetCtx) => SizedBox(
+        height: MediaQuery.sizeOf(sheetCtx).height * 0.7,
+        child: ReaderCatalogSheet(
+          chapters: widget.chapters,
+          currentIndex: _index,
+          onPick: (i) {
+            Navigator.of(sheetCtx).pop();
+            if (i != _index) _loadChapter(i, save: true);
+          },
+        ),
       ),
     );
   }

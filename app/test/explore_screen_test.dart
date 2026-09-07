@@ -249,6 +249,28 @@ void main() {
     });
   }
 
+  testWidgets('页头是大标题而非 AppBar，结果可下拉刷新', (tester) async {
+    var loads = 0;
+    respond = (_) {
+      loads++;
+      return _books('发现的漫画$loads');
+    };
+    await _showExplore(tester, state);
+    expect(find.text('探索'), findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
+
+    await tester.tap(_category('连载'));
+    await tester.pumpAndSettle();
+    expect(find.text('发现的漫画1'), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.fling(find.text('发现的漫画1'), const Offset(0, 400), 1200);
+    await tester.pumpAndSettle();
+    expect(find.text('发现的漫画2'), findsOneWidget);
+    expect(find.text('发现的漫画1'), findsNothing);
+    expect(loads, 2);
+  });
+
   testWidgets('离开探索页后请求完成不会更新已销毁的页面', (tester) async {
     final response = Completer<String>();
     respond = (_) => response.future;
