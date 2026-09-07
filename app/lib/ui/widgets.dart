@@ -188,7 +188,12 @@ class SourceBadge extends StatelessWidget {
       ),
     );
     if ((count ?? 0) > 0) {
-      chip = Badge.count(count: count!, child: chip);
+      chip = Badge.count(
+        count: count!,
+        backgroundColor: scheme.primary,
+        textColor: scheme.onPrimary,
+        child: chip,
+      );
     }
     return Tooltip(
       message: switchable ? '换源：$label' : '来源：$label',

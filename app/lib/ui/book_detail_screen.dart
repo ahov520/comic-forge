@@ -362,6 +362,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   if (canRead)
                     Badge.count(
                       count: _switchCount ?? 0,
+                      backgroundColor: scheme.primary,
+                      textColor: scheme.onPrimary,
                       isLabelVisible: (_switchCount ?? 0) > 0,
                       child: IconButton(
                         tooltip:
