@@ -470,7 +470,7 @@ class _SourceScreenState extends State<SourceScreen> {
                 ),
               ),
               onPressed: _importFromClipboard,
-              child: const Text('粘贴导入单个源 JSON'),
+              child: const Text('粘贴导入单个源 JSON', textAlign: TextAlign.center),
             ),
           ),
         ),
