@@ -49,27 +49,23 @@ class _ShelfScreenState extends State<ShelfScreen> {
           bottom: false,
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
+              const SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Text(
-                    '书架',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  child: ScreenTitle('书架'),
                 ),
               ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
                   child: Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: ['全部', '连载中', '已完结']
                         .asMap()
                         .entries
                         .map(
-                          (e) => ChoiceChip(
+                          (e) => FilterChoiceChip(
                             label: Text(e.value),
                             selected: _filter == e.key,
                             onSelected: (_) => setState(() => _filter = e.key),
@@ -100,7 +96,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -130,42 +126,49 @@ class _ShelfScreenState extends State<ShelfScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: BookCover(url: b.coverUrl),
-                                  ),
-                                  if (progLabel.isNotEmpty)
-                                    Positioned(
-                                      left: 0,
-                                      right: 0,
-                                      bottom: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 4,
-                                          vertical: 2,
-                                        ),
-                                        color: Colors.black54,
-                                        child: Text(
-                                          progLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.white,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: BookCover(url: b.coverUrl),
+                                    ),
+                                    if (progLabel.isNotEmpty)
+                                      Positioned(
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 2,
+                                          ),
+                                          color: Colors.black54,
+                                          child: Text(
+                                            progLabel,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              b.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12),
+                            Tooltip(
+                              message: b.name,
+                              child: Text(
+                                b.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
                             ),
                           ],
                         ),
@@ -317,17 +320,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Semantics(
-                header: true,
-                child: Text(
-                  '探索',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: ScreenTitle('探索'),
             ),
             Expanded(
               child: source == null
@@ -421,7 +416,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                         ),
                                         child: Tooltip(
                                           message: entry.$1,
-                                          child: ChoiceChip(
+                                          child: FilterChoiceChip(
                                             label: ConstrainedBox(
                                               constraints: BoxConstraints(
                                                 maxWidth:
@@ -437,32 +432,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                               ),
                                             ),
                                             selected: _entry == entry,
-                                            showCheckmark: false,
-                                            shape: const StadiumBorder(),
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 6,
-                                            ),
-                                            labelPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 14,
-                                                ),
-                                            backgroundColor: surface,
-                                            selectedColor: scheme.primary,
-                                            side: BorderSide(
-                                              color: _entry == entry
-                                                  ? scheme.primary
-                                                  : scheme.outlineVariant
-                                                        .withValues(alpha: 0.6),
-                                            ),
-                                            labelStyle: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: _entry == entry
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w400,
-                                              color: _entry == entry
-                                                  ? scheme.onPrimary
-                                                  : scheme.onSurfaceVariant,
-                                            ),
                                             onSelected: (_) =>
                                                 _loadEntry(entry),
                                           ),

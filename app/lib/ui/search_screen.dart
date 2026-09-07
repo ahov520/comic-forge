@@ -171,17 +171,7 @@ class _SearchScreenState extends State<SearchScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(
-                '搜索',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
+          const Expanded(child: ScreenTitle('搜索')),
         ],
       ),
     );

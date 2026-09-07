@@ -7,6 +7,66 @@ import 'book_detail_screen.dart';
 import 'reader_screen.dart';
 import 'skeleton.dart';
 
+/// 顶层页面统一的标题字号与无障碍层级。
+class ScreenTitle extends StatelessWidget {
+  const ScreenTitle(this.title, {super.key});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    header: true,
+    child: Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+    ),
+  );
+}
+
+/// 书架与探索共用的单选筛选标签。
+class FilterChoiceChip extends StatelessWidget {
+  const FilterChoiceChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final Widget label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ChoiceChip(
+      label: label,
+      selected: selected,
+      onSelected: onSelected,
+      showCheckmark: false,
+      shape: const StadiumBorder(),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+      backgroundColor: scheme.brightness == Brightness.light
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
+      selectedColor: scheme.primary,
+      side: BorderSide(
+        color: selected
+            ? scheme.primary
+            : scheme.outlineVariant.withValues(alpha: 0.6),
+      ),
+      labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+        fontSize: 13,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
 /// 阅读器前的统一封面组件。
 class BookCover extends StatelessWidget {
   const BookCover({
