@@ -55,6 +55,33 @@ void main() {
   });
   tearDown(() => state.dispose());
 
+  testWidgets('简短操作详情按内容收拢，关闭后仍可管理源', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(home: SourceScreen(state: state)));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('清除失败记录'));
+    await tester.tap(find.text('清除失败记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('查看操作详情'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byType(BottomSheet)).height, lessThan(240));
+    expect(tester.getTopLeft(find.byType(SelectableText)).dx, 20);
+    expect(
+      tester.widget<SelectableText>(find.byType(SelectableText)).data,
+      '已清除 0 个源的失败记录',
+    );
+    await tester.tap(find.byTooltip('关闭详情'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectableText), findsNothing);
+    expect(find.text('现有漫画源').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('订阅等待期间保留页头按钮的宽度与位置', (tester) async {
     tester.view.physicalSize = const Size(340, 720);
     tester.view.devicePixelRatio = 1;
@@ -180,6 +207,10 @@ void main() {
   }
 
   testWidgets('操作详情打开时，源体检进度会更新为最终结果', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final pending = Completer<String>();
     final service = SourceService.instance;
     service.debugClearSwitchCache();
@@ -203,11 +234,16 @@ void main() {
       tester.widget<SelectableText>(find.byType(SelectableText)).data,
       contains('体检中'),
     );
+    final progressHeight = tester.getSize(find.byType(BottomSheet)).height;
     pending.complete('<html></html>');
     await tester.pumpAndSettle();
     expect(
       tester.widget<SelectableText>(find.byType(SelectableText)).data,
       contains('体检完成：可用 1 / 1'),
+    );
+    expect(
+      tester.getSize(find.byType(BottomSheet)).height,
+      greaterThan(progressHeight),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
