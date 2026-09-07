@@ -16,8 +16,11 @@ void main() {
 
     test('超出范围 clamp 到 maxExtent（图片渐进加载场景）', () {
       expect(resolveRestoredScroll(saved: 1500, maxExtent: 1000), 1000);
-      expect(resolveRestoredScroll(saved: 500, maxExtent: 0), 0,
-          reason: '首帧无可滚动范围时回顶，后续帧由用户位置接管');
+      expect(
+        resolveRestoredScroll(saved: 500, maxExtent: 0),
+        0,
+        reason: '首帧无可滚动范围时先回顶，图片展开后阅读器继续恢复原位置',
+      );
     });
   });
 }

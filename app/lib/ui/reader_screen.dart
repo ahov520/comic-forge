@@ -48,6 +48,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final _scrollController = ScrollController();
   bool _nextChapterWarmed = false;
   bool _offsetRestored = false;
+  double? _scrollRestoreTarget;
+  int _scrollRestoreGeneration = 0;
+  bool _scrollRestoreScheduled = false;
+  bool _applyingScrollRestore = false;
   Timer? _offsetSaveTimer;
   bool _volumeKeysEnabled = false;
   late bool _wasPaged;
@@ -100,6 +104,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_wasPaged != _isPaged) {
       _saveCurrentScrollOffset();
       _offsetSaveTimer?.cancel();
+      _cancelScrollRestore();
       _offsetRestored = false;
       _wasPaged = _isPaged;
       _pagedChapterUrl = null;
@@ -137,6 +142,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       return;
     }
     if (!_scrollController.hasClients) return;
+    _cancelScrollRestore();
     final position = _scrollController.position;
     if ((delta < 0 && position.extentBefore < 1) ||
         (delta > 0 && position.extentAfter < 1)) {
@@ -155,6 +161,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _loadChapter(int index, {bool save = false, bool refresh = false}) {
     _saveCurrentScrollOffset();
     _offsetSaveTimer?.cancel();
+    _cancelScrollRestore();
     _pageCount = 0;
     _pagedChapterUrl = null;
     _pageIndex = 0;
@@ -232,7 +239,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// 滚动位置节流保存（停顿 600ms 落盘一次）。
   void _saveOffsetDebounced() {
-    if (_isPaged) return;
+    if (_isPaged || _scrollRestoreTarget != null) return;
     final c = _scrollController;
     if (!c.hasClients) return;
     final chapterUrl = _scrollChapterUrl;
@@ -251,9 +258,49 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _saveCurrentScrollOffset() {
+    if (_scrollRestoreTarget != null) return;
     final url = _scrollChapterUrl;
     if (url == null || !_scrollController.hasClients) return;
     widget.appState?.saveScrollOffset(url, _scrollController.offset);
+  }
+
+  void _cancelScrollRestore() {
+    _scrollRestoreTarget = null;
+    _scrollRestoreGeneration++;
+    _scrollRestoreScheduled = false;
+  }
+
+  /// 图片尺寸渐进确定时继续恢复原偏移；用户主动滚动后停止。
+  void _scheduleScrollRestore() {
+    if (_scrollRestoreTarget == null || _scrollRestoreScheduled) return;
+    final generation = _scrollRestoreGeneration;
+    final chapterUrl = _scrollChapterUrl;
+    _scrollRestoreScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (generation != _scrollRestoreGeneration) return;
+      _scrollRestoreScheduled = false;
+      final saved = _scrollRestoreTarget;
+      if (!mounted ||
+          _isPaged ||
+          saved == null ||
+          chapterUrl != _chapter.url ||
+          !_scrollController.hasClients) {
+        return;
+      }
+      final target = resolveRestoredScroll(
+        saved: saved,
+        maxExtent: _scrollController.position.maxScrollExtent,
+      );
+      if ((_scrollController.offset - target).abs() < 0.5) return;
+      _applyingScrollRestore = true;
+      try {
+        _scrollController.jumpTo(target);
+      } finally {
+        _applyingScrollRestore = false;
+      }
+    });
+    // 尺寸通知可能在帧结束后到达，主动安排下一帧执行恢复。
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _go(int delta) {
@@ -268,6 +315,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // 退出阅读器时立即落盘当前滚动位置
     _saveCurrentScrollOffset();
     _offsetSaveTimer?.cancel();
+    _cancelScrollRestore();
     if (_volumeKeysEnabled) _enableVolumeKeys(false);
     _readerChannel.setMethodCallHandler(null);
     _pageController.dispose();
@@ -293,39 +341,39 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (!_isPaged) {
       final chapterUrl = _chapter.url;
       _scrollChapterUrl = chapterUrl;
+      if (!_offsetRestored) {
+        _offsetRestored = true;
+        final saved = widget.appState?.scrollOffsetFor(chapterUrl);
+        if (saved != null && saved.isFinite && saved > 0) {
+          _scrollRestoreTarget = saved;
+          _scheduleScrollRestore();
+        }
+      }
       return GestureDetector(
         onTap: () => setState(() => _chromeVisible = !_chromeVisible),
-        child: ListView.builder(
-          controller: _scrollController,
-          key: PageStorageKey<String>(_chapter.url),
-          padding: EdgeInsets.only(
-            top: MediaQuery.paddingOf(context).top,
-            bottom: 64 + MediaQuery.paddingOf(context).bottom,
-          ),
-          itemCount: urls.length,
-          itemBuilder: (context, i) {
-            // 首帧后恢复持久化的滚动位置（跨重启记忆，每章一次）
-            if (!_offsetRestored) {
-              _offsetRestored = true;
-              final saved = widget.appState?.scrollOffsetFor(chapterUrl);
-              if (saved != null && saved > 0) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted &&
-                      !_isPaged &&
-                      _chapter.url == chapterUrl &&
-                      _scrollController.hasClients) {
-                    _scrollController.jumpTo(
-                      resolveRestoredScroll(
-                        saved: saved,
-                        maxExtent: _scrollController.position.maxScrollExtent,
-                      ),
-                    );
-                  }
-                });
-              }
-            }
-            return img(i);
+        child: NotificationListener<ScrollMetricsNotification>(
+          onNotification: (notification) {
+            if (notification.depth == 0) _scheduleScrollRestore();
+            return false;
           },
+          child: NotificationListener<ScrollStartNotification>(
+            onNotification: (notification) {
+              if (notification.depth == 0 && !_applyingScrollRestore) {
+                _cancelScrollRestore();
+              }
+              return false;
+            },
+            child: ListView.builder(
+              controller: _scrollController,
+              key: PageStorageKey<String>(_chapter.url),
+              padding: EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top,
+                bottom: 64 + MediaQuery.paddingOf(context).bottom,
+              ),
+              itemCount: urls.length,
+              itemBuilder: (context, i) => img(i),
+            ),
+          ),
         ),
       );
     }
@@ -333,9 +381,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final chapterUrl = _chapter.url;
     if (_pagedChapterUrl != chapterUrl) {
       final previous = _pageController;
-      _pageIndex = (widget.appState?.readerPageFor(chapterUrl) ?? 0)
-          .clamp(0, urls.length - 1);
-      _pageController = PageController(initialPage: _pageIndex, keepPage: false);
+      _pageIndex = (widget.appState?.readerPageFor(chapterUrl) ?? 0).clamp(
+        0,
+        urls.length - 1,
+      );
+      _pageController = PageController(
+        initialPage: _pageIndex,
+        keepPage: false,
+      );
       _pagedChapterUrl = chapterUrl;
       widget.appState?.saveReaderPage(chapterUrl, _pageIndex);
       // 旧 PageView 在本帧结束前仍可能持有控制器。
