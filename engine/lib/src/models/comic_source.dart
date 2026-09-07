@@ -23,8 +23,8 @@ class RuleSet {
   String contentInit = '', contentUrl = '', contentUrlNext = '', contentWebUrl = '';
 
   /// 平铺键名 → 本模型字段名 的映射（按真实 .mh_rules 样本校准，2026-09）。
-  /// 注意：ruleBookContent 是取图规则（CSS 或 `$js`），ruleContentUrl 在
-  /// ruleChapterUrl 缺省时充当章节链接规则。
+  /// 注意：ruleBookContent 是取图规则（CSS 或 `$js`），ruleContentUrl 是
+  /// 章节链接规则；ruleChapterUrl 仅在 chapterUrl 仍为空时兼容回填。
   static const Map<String, String> ppcatFlatKeys = {
     // Snapshot / ppcat 平铺源用 ruleSearchUrl；嵌套/Track A 用 searchUrl。
     // 两者都映射到嵌套 searchUrl，缺一则聚合搜索会滤掉整源。
@@ -66,7 +66,6 @@ class RuleSet {
     'ruleChapterTime': 'chapterTime',
     'ruleChapterGroup': 'chapterGroup',
     'ruleContentUrl': 'chapterUrl',
-    'ruleChapterUrl': 'chapterUrl',
     'ruleChapterUrlNext': 'chapterUrlNext',
     'ruleChapterInit': 'chapterInit',
     'ruleContentInit': 'contentInit',
@@ -266,6 +265,7 @@ class ComicSource {
         s._setRule(RuleSet.ppcatFlatKeys[k]!, v);
       }
     });
+    s._applyChapterUrlFallback(j);
     return s;
   }
 
@@ -298,9 +298,18 @@ class ComicSource {
       if (v is String && v.isNotEmpty) fields[nested] = v;
     });
     s.rules.apply(fields);
+    s._applyChapterUrlFallback(j);
     // raw 保存原始平铺 JSON（此前误存合成 map，导出/分享会丢规则）
     s.raw = Map<String, dynamic>.from(j);
     return s;
+  }
+
+  void _applyChapterUrlFallback(Map<String, dynamic> j) {
+    // 双字段源的 ruleChapterUrl 可能是展开目录入口，不能覆盖逐章链接。
+    final fallback = j['ruleChapterUrl'];
+    if (rules.chapterUrl.isEmpty && fallback is String) {
+      _setRule('chapterUrl', fallback);
+    }
   }
 
   void _setRule(String nestedKey, String value) {

@@ -215,8 +215,9 @@ class AppState extends ChangeNotifier {
     if (sources.isEmpty) {
       await importBuiltinSources();
     } else if (sources.any((s) =>
-        s.rules.searchUrl.isEmpty && s.rules.searchList.isNotEmpty)) {
-      // 旧版曾漏映射 ruleSearchUrl；非空源库也需修复，否则搜索仍为 0 源。
+        (s.rules.searchUrl.isEmpty && s.rules.searchList.isNotEmpty) ||
+        s.rules.chapterUrl.isNotEmpty)) {
+      // 旧版曾漏映射 ruleSearchUrl、错误覆盖 chapterUrl；搜索正常也需检查目录。
       // 升级只修复已有内置源，不重新添加用户删掉的源。
       await _importBuiltinSources(addMissing: false);
     }
@@ -675,7 +676,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// 导入 APK 内置的源快照（assets/store.json，493 条社区规则文本）。
-  /// 按 id 去重：新源追加；修复缺失地址/请求头的旧源，保留已有字段和用户编辑。
+  /// 按 id 去重：新源追加；修复缺失地址/请求头及已知错误章节链接，保留用户编辑。
   /// 返回新增 + 修复数量。
   Future<int> importBuiltinSources() => _importBuiltinSources(addMissing: true);
 
@@ -704,15 +705,23 @@ class AppState extends ChangeNotifier {
       final needsSearchUrl =
           existing.rules.searchUrl.isEmpty && s.rules.searchUrl.isNotEmpty;
       final needsHeaders = existing.headers.isEmpty && s.headers.isNotEmpty;
-      if (needsUrl || needsSearchUrl || needsHeaders) {
+      // 仅替换与旧版错误映射完全相同的值，用户自行编辑的章节链接保持原样。
+      final legacyChapterUrl = s.raw['ruleChapterUrl'];
+      final needsChapterUrl = legacyChapterUrl is String &&
+          legacyChapterUrl.isNotEmpty &&
+          s.rules.chapterUrl.isNotEmpty &&
+          legacyChapterUrl != s.rules.chapterUrl &&
+          existing.rules.chapterUrl == legacyChapterUrl;
+      if (needsUrl || needsSearchUrl || needsHeaders || needsChapterUrl) {
         // 替换对象以刷新运行时缓存，但不覆盖已有列表规则、名称等用户编辑。
         sources[idx] = ComicSource.fromJson({
           ...existing.toJson(),
           if (needsUrl) 'url': s.url,
-          if (needsUrl || needsSearchUrl)
+          if (needsUrl || needsSearchUrl || needsChapterUrl)
             'rules': {
-              ...s.rules.toJson(),
+              if (needsUrl || needsSearchUrl) ...s.rules.toJson(),
               ...existing.rules.toJson(),
+              if (needsChapterUrl) 'chapterUrl': s.rules.chapterUrl,
             },
           if (needsHeaders) 'headers': s.headers,
         });

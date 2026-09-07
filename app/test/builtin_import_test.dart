@@ -80,7 +80,88 @@ void main() {
       state.sources.map((source) => source.toJson()),
     );
     expect(searchable(restarted), hasLength(474));
+    expect(
+      restarted.sources
+          .firstWhere((source) => source.id == _tencentUrl)
+          .rules
+          .chapterUrl,
+      tencent().rules.chapterUrl,
+    );
+    expect(tencent().rules.chapterUrl, startsWith('tag.a@href#'));
     expect(await restarted.importBuiltinSources(), 0);
+  });
+
+  test('升级修复腾讯双字段旧章节链接，保留源设置并持久化', () async {
+    final legacy = tencent()
+      ..name = '我的腾讯源'
+      ..enabled = false
+      ..weight = 9
+      ..lastError = '旧错误'
+      ..lastFailedAt = 100
+      ..lastOkAt = 50
+      ..failCount = 3;
+    legacy.rules.chapterUrl = 'id.btn_expandChapterList@href';
+    await state.addSourceManual(legacy);
+
+    final restarted = AppState();
+    addTearDown(restarted.dispose);
+    await restarted.load();
+    expect(
+      restarted.sources.single.rules.chapterUrl,
+      tencent().rules.chapterUrl,
+    );
+    final expected = {
+      ...legacy.toJson(),
+      'rules': {
+        ...legacy.rules.toJson(),
+        'chapterUrl': tencent().rules.chapterUrl,
+      },
+    };
+    expect(restarted.sources.single.toJson(), expected);
+
+    final prefs = await SharedPreferences.getInstance();
+    final saved = jsonDecode(prefs.getString('cf.sources')!) as List;
+    expect(saved.single, expected);
+
+    final secondRestart = AppState();
+    addTearDown(secondRestart.dispose);
+    await secondRestart.load();
+    expect(secondRestart.sources.single.toJson(), expected);
+  });
+
+  test('章节链接迁移保留手改规则及自定义源，恢复内置源也不覆盖', () async {
+    final edited = tencent();
+    edited.rules.chapterUrl = 'a.edited@href';
+    final custom = ComicSource.fromJson({
+      'id': 'custom',
+      'name': '自定义源',
+      'url': 'https://custom.example',
+      'rules': {
+        'chapterList': '.chapters li',
+        'chapterUrl': 'id.btn_expandChapterList@href',
+      },
+    });
+    await state.addSourceManual(edited);
+    await state.addSourceManual(custom);
+
+    final restarted = AppState();
+    addTearDown(restarted.dispose);
+    await restarted.load();
+    expect(restarted.sources.map((source) => source.toJson()), [
+      edited.toJson(),
+      custom.toJson(),
+    ]);
+    await restarted.importBuiltinSources();
+    expect(
+      restarted.sources
+          .firstWhere((source) => source.id == _tencentUrl)
+          .toJson(),
+      edited.toJson(),
+    );
+    expect(
+      restarted.sources.firstWhere((source) => source.id == custom.id).toJson(),
+      custom.toJson(),
+    );
   });
 
   test('升级时修复已有内置源的搜索地址，不重新添加已删除源或修改自定义源', () async {
