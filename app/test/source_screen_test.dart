@@ -148,6 +148,33 @@ void main() {
     expect(state.sources.first.enabled, isFalse);
   });
 
+  testWidgets('仓库卡间距为 10px，末卡到源分组不叠加外边距', (tester) async {
+    tester.view.physicalSize = const Size(340, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await state.addRepoSubscribed('https://github.com/team/first', const []);
+    await state.addRepoSubscribed('https://github.com/team/second', const []);
+    await state.addSourceManual(_src());
+    await _show(tester, state);
+
+    Rect cardBounds(int index) => tester.getRect(
+      find
+          .descendant(
+            of: find.byType(Card).at(index),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    final first = cardBounds(0);
+    final last = cardBounds(1);
+    final sourceLabel = tester.getRect(find.text('源（1）'));
+    expect(last.top - first.bottom, closeTo(10, 0.01));
+    expect(sourceLabel.top - last.bottom, closeTo(14, 0.01));
+    expect(sourceLabel.left, last.left);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('相同错误连续回报会即时更新次数与失效标记，重启后仍保留', (tester) async {
     final source = _src();
     await state.addSourceManual(source);

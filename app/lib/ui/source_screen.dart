@@ -424,8 +424,11 @@ class _SourceScreenState extends State<SourceScreen> {
                       const SliverToBoxAdapter(child: _SectionLabel('已订阅仓库')),
                       SliverList.builder(
                         itemCount: repos.length,
-                        itemBuilder: (context, i) =>
-                            _repoCard(repos[i], scheme),
+                        itemBuilder: (context, i) => _repoCard(
+                          repos[i],
+                          scheme,
+                          isLast: i == repos.length - 1,
+                        ),
                       ),
                     ],
                     SliverToBoxAdapter(
@@ -495,7 +498,7 @@ class _SourceScreenState extends State<SourceScreen> {
     );
   }
 
-  Widget _repoCard(String repo, ColorScheme scheme) {
+  Widget _repoCard(String repo, ColorScheme scheme, {required bool isLast}) {
     final lastAt = widget.state.repoLastRefresh[repo];
     final u = widget.state.repoUpdates[repo];
     final hasPending = u?.hasPending ?? false;
@@ -506,7 +509,8 @@ class _SourceScreenState extends State<SourceScreen> {
         : '';
     final refreshing = _refreshingRepo == repo || _refreshingRepo == '*';
     return Card(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      // 稿中相邻外边距会合并；末卡到分组只保留分组的 14px 上边距。
+      margin: EdgeInsets.fromLTRB(20, 0, 20, isLast ? 0 : 10),
       color: scheme.brightness == Brightness.light
           ? scheme.surfaceContainerLowest
           : scheme.surfaceContainerLow,
