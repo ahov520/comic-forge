@@ -49,6 +49,82 @@ class BookCover extends StatelessWidget {
   }
 }
 
+/// 来源角标：搜索/探索卡片与详情换源入口共用。
+class SourceBadge extends StatelessWidget {
+  const SourceBadge({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.count,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final switchable = onTap != null;
+    Widget chip = Material(
+      color: scheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.public,
+                      size: 14,
+                      color: scheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+                TextSpan(
+                  text: label,
+                  style: textTheme.labelSmall?.copyWith(
+                    color: scheme.onSecondaryContainer,
+                  ),
+                ),
+                if (switchable)
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.swap_horiz,
+                        size: 14,
+                        color: scheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+    if ((count ?? 0) > 0) {
+      chip = Badge.count(count: count!, child: chip);
+    }
+    return Tooltip(
+      message: switchable ? '换源：$label' : '来源：$label',
+      child: chip,
+    );
+  }
+}
+
 /// 搜索/探索结果条目。
 class BookTile extends StatelessWidget {
   const BookTile({
@@ -56,6 +132,8 @@ class BookTile extends StatelessWidget {
     required this.book,
     required this.state,
     this.sourceLabel,
+    this.onTap,
+    this.showShelfAction = true,
   });
 
   final Book book;
@@ -63,6 +141,12 @@ class BookTile extends StatelessWidget {
 
   /// 来源标签（聚合搜索结果显示用；null 不显示）。
   final String? sourceLabel;
+
+  /// 覆盖默认「打开详情」；换源面板点选用。
+  final VoidCallback? onTap;
+
+  /// 换源等场景隐藏收藏，避免误触。
+  final bool showShelfAction;
 
   @override
   Widget build(BuildContext context) {
@@ -83,11 +167,13 @@ class BookTile extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => BookDetailScreen(book: book, appState: state),
-          ),
-        ),
+        onTap: onTap ??
+            () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        BookDetailScreen(book: book, appState: state),
+                  ),
+                ),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -112,32 +198,33 @@ class BookTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        ListenableBuilder(
-                          listenable: state,
-                          builder: (context, _) {
-                            final saved = state.inShelf(book);
-                            return IconButton(
-                              tooltip: saved ? '移出书架' : '加入书架',
-                              isSelected: saved,
-                              onPressed: () => state.toggleShelf(book),
-                              icon: AnimatedSwitcher(
-                                duration:
-                                    MediaQuery.disableAnimationsOf(context)
-                                    ? Duration.zero
-                                    : const Duration(milliseconds: 160),
-                                child: Icon(
-                                  saved
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  key: ValueKey(saved),
-                                  color: saved
-                                      ? scheme.primary
-                                      : scheme.outline,
+                        if (showShelfAction)
+                          ListenableBuilder(
+                            listenable: state,
+                            builder: (context, _) {
+                              final saved = state.inShelf(book);
+                              return IconButton(
+                                tooltip: saved ? '移出书架' : '加入书架',
+                                isSelected: saved,
+                                onPressed: () => state.toggleShelf(book),
+                                icon: AnimatedSwitcher(
+                                  duration:
+                                      MediaQuery.disableAnimationsOf(context)
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 160),
+                                  child: Icon(
+                                    saved
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    key: ValueKey(saved),
+                                    color: saved
+                                        ? scheme.primary
+                                        : scheme.outline,
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
+                              );
+                            },
+                          ),
                       ],
                     ),
                     if (metadata.isNotEmpty)
@@ -162,39 +249,9 @@ class BookTile extends StatelessWidget {
                     ],
                     if (source.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Tooltip(
-                        message: '来源：$source',
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.secondaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.public,
-                                size: 14,
-                                color: scheme.onSecondaryContainer,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  source,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: textTheme.labelSmall?.copyWith(
-                                    color: scheme.onSecondaryContainer,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SourceBadge(label: source),
                       ),
                     ],
                   ],

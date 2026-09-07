@@ -6,8 +6,9 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/source_share.dart';
-import 'widgets.dart';
+import 'detail_chrome.dart';
 import 'skeleton.dart';
+import 'widgets.dart';
 
 /// 书籍详情 + 章节列表。
 class BookDetailScreen extends StatefulWidget {
@@ -150,6 +151,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (sheetCtx) => SizedBox(
         height: MediaQuery.of(sheetCtx).size.height * 0.7,
         child: FutureBuilder<List<(ComicSource, Book)>>(
@@ -157,59 +159,26 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             book: widget.book,
             allSources: widget.appState.sources,
           ),
-          builder: (context, snap) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(children: [
-                    Text('换源 · ${widget.book.name}',
-                        style: Theme.of(sheetCtx).textTheme.titleMedium),
-                  ]),
+          builder: (context, snap) => SwitchSourcePanel(
+            bookName: widget.book.name,
+            snapshot: snap,
+            state: widget.appState,
+            onPick: (_, b) {
+              final carry = widget.appState
+                  .progressFor(widget.book.bookUrl)
+                  ?.chapterIndex;
+              Navigator.of(sheetCtx).pop();
+              Navigator.of(this.context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => BookDetailScreen(
+                    book: b,
+                    appState: widget.appState,
+                    carryChapterIndex: carry,
+                  ),
                 ),
-                Expanded(
-                  child: !snap.hasData
-                      ? const Center(child: CircularProgressIndicator())
-                      : snap.data!.isEmpty
-                          ? const Center(child: Text('其它源没有搜到同名书'))
-                          : ListView.builder(
-                              itemCount: snap.data!.length,
-                              itemBuilder: (context, i) {
-                                final (s, b) = snap.data![i];
-                                return ListTile(
-                                  leading: BookCover(
-                                      url: b.coverUrl, width: 44, height: 60),
-                                  title: Text(b.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
-                                  subtitle: Text(
-                                    [s.name, if (b.author.isNotEmpty) b.author]
-                                        .join(' · '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  onTap: () {
-                                    final carry = widget.appState
-                                        .progressFor(widget.book.bookUrl)
-                                        ?.chapterIndex;
-                                    Navigator.of(sheetCtx).pop();
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(
-                                        builder: (_) => BookDetailScreen(
-                                          book: b,
-                                          appState: widget.appState,
-                                          carryChapterIndex: carry,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                ),
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -217,7 +186,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: FutureBuilder<(Book, List<Chapter>)>(
         future: _future,
@@ -263,10 +231,29 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 chapterIndex: idx,
                 chapterCount: chapters.length);
           }
+          final scheme = Theme.of(context).colorScheme;
           final prog = widget.appState.progressFor(widget.book.bookUrl);
           final savedIdx = (prog != null)
               ? chapters.indexWhere((c) => c.url == prog.chapterUrl)
               : -1;
+          final sourceName = _source == null
+              ? null
+              : (_source!.name.trim().isEmpty ? _source!.id : _source!.name);
+          final readLabel = chapters.isEmpty
+              ? null
+              : (savedIdx >= 0 ? '续读 ${savedIdx + 1}' : '开始阅读');
+          void openAt(int index) {
+            if (_source == null) return;
+            openReader(
+              context,
+              SourceService.instance.runtimeFor(_source!),
+              book,
+              chapters,
+              index,
+              widget.appState,
+            );
+          }
+
           return Scaffold(
             appBar: AppBar(
               title: Text(book.name),
@@ -298,7 +285,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   ),
                 IconButton(
                   icon: Icon(
-                    widget.appState.inShelf(widget.book) ? Icons.favorite : Icons.favorite_border,
+                    widget.appState.inShelf(widget.book)
+                        ? Icons.favorite
+                        : Icons.favorite_border,
                   ),
                   onPressed: () => widget.appState.toggleShelf(widget.book),
                 ),
@@ -307,87 +296,32 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             body: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        BookCover(url: book.coverUrl, width: 110, height: 150),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(book.name,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                  maxLines: 2, overflow: TextOverflow.ellipsis),
-                              if (book.author.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(book.author,
-                                      style: TextStyle(color: scheme.onSurfaceVariant)),
-                                ),
-                              if (book.kind.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Wrap(
-                                    spacing: 6,
-                                    children: book.kind
-                                        .split(RegExp(r'[,，|/\s]+'))
-                                        .where((k) => k.isNotEmpty)
-                                        .take(5)
-                                        .map((k) => Chip(
-                                              label: Text(k),
-                                              labelStyle: const TextStyle(fontSize: 11),
-                                              visualDensity: VisualDensity.compact,
-                                            ))
-                                        .toList(),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: DetailHero(
+                    book: book,
+                    sourceName: sourceName,
+                    switchCount: _switchCount,
+                    onSwitchSource:
+                        _source == null ? null : _showSwitchSourceSheet,
+                    readLabel: readLabel,
+                    onRead: readLabel == null
+                        ? null
+                        : () => openAt(savedIdx >= 0 ? savedIdx : 0),
                   ),
                 ),
-                if (book.introduce.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(book.introduce,
-                          style: TextStyle(color: scheme.onSurfaceVariant)),
-                    ),
-                  ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
                     child: Row(
                       children: [
                         Text('章节 (${chapters.length})',
                             style: Theme.of(context).textTheme.titleMedium),
                         const Spacer(),
                         if (_fromCache)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Chip(
-                              label: const Text('离线目录', style: TextStyle(fontSize: 11)),
-                              visualDensity: VisualDensity.compact,
-                              backgroundColor: scheme.surfaceContainerHighest,
-                            ),
-                          ),
-                        if (savedIdx >= 0)
-                          FilledButton.tonalIcon(
-                            onPressed: () {
-                              if (_source != null) {
-                                openReader(context,
-                                    SourceService.instance.runtimeFor(_source!),
-                                    book, chapters, savedIdx, widget.appState);
-                              }
-                            },
-                            icon: const Icon(Icons.play_arrow, size: 18),
-                            label: Text('续读 ${savedIdx + 1}',
-                                style: const TextStyle(fontSize: 12)),
+                          Chip(
+                            label: const Text('离线目录',
+                                style: TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: scheme.surfaceContainerHighest,
                           ),
                       ],
                     ),
@@ -396,37 +330,15 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 SliverList.builder(
                   itemCount: chapters.length,
                   itemBuilder: (context, i) {
-                    final ch = chapters[i];
-                    final isCurrent = i == savedIdx;
-                    return ListTile(
-                      dense: true,
-                      leading: Text('${i + 1}',
-                          style: TextStyle(
-                              color: isCurrent
-                                  ? scheme.primary
-                                  : scheme.onSurfaceVariant,
-                              fontWeight: isCurrent
-                                  ? FontWeight.bold
-                                  : null)),
-                      title: Text(ch.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: isCurrent
-                              ? TextStyle(color: scheme.primary)
-                              : null),
-                      trailing: isCurrent
-                          ? Icon(Icons.bookmark, size: 16,
-                              color: scheme.primary)
-                          : null,
-                      onTap: () {
-                        if (_source != null) {
-                          openReader(context,
-                              SourceService.instance.runtimeFor(_source!),
-                              book, chapters, i, widget.appState);
-                        }
-                      },
+                    return ChapterTile(
+                      index: i,
+                      title: chapters[i].title,
+                      isCurrent: i == savedIdx,
+                      onTap: () => openAt(i),
                     );
                   },
                 ),
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
               ],
             ),
           );

@@ -122,7 +122,7 @@ class BookListSkeleton extends StatelessWidget {
   }
 }
 
-/// 书籍详情加载骨架：封面块 + 标题/作者/标签条 + 章节行，结构对齐真实布局。
+/// 书籍详情加载骨架：封面英雄卡 + 标题/作者/标签条 + 紧凑章节行。
 class DetailSkeleton extends StatelessWidget {
   const DetailSkeleton({super.key, this.chapterRows = 6});
 
@@ -130,50 +130,71 @@ class DetailSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SkeletonBox(width: 110, height: 150, radius: 10),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  SkeletonBox(height: 20, radius: 6),
-                  SizedBox(height: 10),
-                  SkeletonBox(width: 90, height: 12, radius: 6),
-                  SizedBox(height: 12),
-                  Row(
-                    children: [
-                      SkeletonBox(width: 48, height: 22, radius: 999),
-                      SizedBox(width: 6),
-                      SkeletonBox(width: 60, height: 22, radius: 999),
-                      SizedBox(width: 6),
-                      SkeletonBox(width: 40, height: 22, radius: 999),
-                    ],
-                  ),
-                ],
-              ),
+        Card(
+          color: scheme.surfaceContainerLow,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
             ),
-          ],
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonBox(width: 120, height: 164, radius: 10),
+                    SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SkeletonBox(height: 22, radius: 6),
+                          SizedBox(height: 10),
+                          SkeletonBox(width: 90, height: 12, radius: 6),
+                          SizedBox(height: 12),
+                          SkeletonBox(width: 96, height: 22, radius: 8),
+                          SizedBox(height: 12),
+                          Row(
+                            children: [
+                              SkeletonBox(width: 48, height: 22, radius: 999),
+                              SizedBox(width: 6),
+                              SkeletonBox(width: 60, height: 22, radius: 999),
+                              SizedBox(width: 6),
+                              SkeletonBox(width: 40, height: 22, radius: 999),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 14),
+                SkeletonBox(height: 40, radius: 12),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
-        const SkeletonBox(height: 14, radius: 6),
-        const SizedBox(height: 24),
-        SkeletonBox(height: 16, width: 90, radius: 6),
+        const SkeletonBox(height: 16, width: 90, radius: 6),
         const SizedBox(height: 12),
         ...List.generate(
           chapterRows,
           (i) => Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
-                SkeletonBox(width: 22, height: 12, radius: 4),
+                const SkeletonBox(width: 22, height: 12, radius: 4),
                 const SizedBox(width: 12),
-                Expanded(child: SkeletonBox(height: 13, radius: 6)),
+                const Expanded(child: SkeletonBox(height: 13, radius: 6)),
               ],
             ),
           ),
