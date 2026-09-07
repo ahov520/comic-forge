@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../state/scroll_restore.dart';
 import 'reader_chrome.dart';
 import 'skeleton.dart';
+import 'widgets.dart' show EmptyStateView;
 
 /// 音量键翻页通道（Android 原生拦截后转发）。
 const _readerChannel = MethodChannel('comic-forge/reader');
@@ -95,12 +96,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _go(delta);
   }
 
-  void _loadChapter(int index, {bool save = false}) {
+  void _loadChapter(int index, {bool save = false, bool refresh = false}) {
     setState(() {
       _index = index;
+      _chromeVisible = true;
       _images = SourceService.instance.imagesFor(
         widget.runtime,
         widget.chapters[index].url,
+        refresh: refresh,
       );
     });
     _nextChapterWarmed = false;
@@ -354,49 +357,43 @@ class _ReaderScreenState extends State<ReaderScreen> {
       body: FutureBuilder<List<String>>(
         future: _images,
         builder: (context, snap) {
+          final pad = MediaQuery.paddingOf(context);
+          Widget status({required bool failed}) => Padding(
+            padding: EdgeInsets.fromLTRB(
+              pad.left,
+              pad.top + 64,
+              pad.right,
+              pad.bottom + 80,
+            ),
+            child: EmptyStateView(
+              icon: failed
+                  ? Icons.cloud_off_outlined
+                  : Icons.image_not_supported_outlined,
+              title: failed ? '暂时无法加载章节' : '本话暂无图片',
+              message: failed ? '检查网络后重试，或从目录选择其它章节。' : '可以重试加载，或从目录选择其它章节。',
+              actionLabel: '重试',
+              onAction: () => _loadChapter(_index, refresh: true),
+            ),
+          );
           final Widget page;
-          var showBottom = false;
-          if (snap.hasError) {
-            page = Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '加载失败：${snap.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.tonal(
-                      onPressed: () => _loadChapter(_index),
-                      child: const Text('重试'),
-                    ),
-                  ],
-                ),
+          if (snap.connectionState != ConnectionState.done) {
+            page = Semantics(
+              label: '正在加载章节',
+              liveRegion: true,
+              child: const Center(
+                child: SkeletonBox(width: 160, height: 220, radius: 12),
               ),
             );
-          } else if (!snap.hasData) {
-            page = const Center(
-              child: SkeletonBox(width: 160, height: 220, radius: 12),
-            );
+          } else if (snap.hasError) {
+            page = status(failed: true);
           } else {
             final urls = snap.data!;
             if (urls.isEmpty) {
-              page = const Center(
-                child: Text(
-                  '本章节解析不到图片（源规则可能不完整）',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70),
-                ),
-              );
+              page = status(failed: false);
             } else {
-              showBottom = true;
               page = _buildReaderBody(context, urls);
             }
           }
-          final pad = MediaQuery.of(context).padding;
           return Stack(
             children: [
               page,
@@ -424,24 +421,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       : () => _showReaderSettingsSheet(context),
                 ),
               ),
-              if (showBottom)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: ReaderBottomChrome(
-                    visible: _chromeVisible,
-                    progressLabel: '${_index + 1}/${widget.chapters.length}',
-                    canPrev: _index > 0,
-                    canNext: _index + 1 < widget.chapters.length,
-                    onPrev: () => _go(-1),
-                    onNext: () => _go(1),
-                    onCatalog: () => _showCatalog(context),
-                    onBrightness: widget.appState == null
-                        ? null
-                        : () => _showReaderSettingsSheet(context),
-                  ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ReaderBottomChrome(
+                  visible: _chromeVisible,
+                  progressLabel: '${_index + 1}/${widget.chapters.length}',
+                  canPrev: _index > 0,
+                  canNext: _index + 1 < widget.chapters.length,
+                  onPrev: () => _go(-1),
+                  onNext: () => _go(1),
+                  onCatalog: () => _showCatalog(context),
+                  onBrightness: widget.appState == null
+                      ? null
+                      : () => _showReaderSettingsSheet(context),
                 ),
+              ),
             ],
           );
         },

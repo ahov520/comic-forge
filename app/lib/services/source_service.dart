@@ -105,11 +105,24 @@ class SourceService {
             source: source, fetcher: fetcher, jsHook: FlutterJsHook.instance.call));
   }
 
-  Future<List<String>> imagesFor(SourceRuntime runtime, String chapterUrl) {
-    return _imgFutures.putIfAbsent(chapterUrl, () async {
-      final urls = await runtime.images(chapterUrl);
-      return adBlock?.filterImages(urls) ?? urls;
-    });
+  Future<List<String>> imagesFor(
+    SourceRuntime runtime,
+    String chapterUrl, {
+    bool refresh = false,
+  }) {
+    final cached = _imgFutures[chapterUrl];
+    if (!refresh && cached != null) return cached;
+    final future = Future<List<String>>.sync(
+      () => runtime.images(chapterUrl),
+    ).then((urls) => adBlock?.filterImages(urls) ?? urls);
+    _imgFutures[chapterUrl] = future;
+    unawaited(future.then<void>((_) {}, onError: (Object _, StackTrace _) {
+      // 失败不缓存；旧请求晚到不能删除重试后的新结果。
+      if (identical(_imgFutures[chapterUrl], future)) {
+        _imgFutures.remove(chapterUrl);
+      }
+    }));
+    return future;
   }
 
   /// 主动预取（失败静默，不阻塞阅读）。
@@ -145,6 +158,6 @@ class SourceService {
           return; // 第一张失败即放弃本轮预热
         }
       }
-    }));
+    }).catchError((_) {}));
   }
 }
