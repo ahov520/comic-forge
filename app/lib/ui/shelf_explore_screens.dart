@@ -363,7 +363,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                           child: Semantics(
                             label: '漫画源',
                             child: Tooltip(
@@ -380,7 +380,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 14,
-                                    vertical: 12,
+                                    vertical: 6,
                                   ),
                                   filled: true,
                                   fillColor: surface,
