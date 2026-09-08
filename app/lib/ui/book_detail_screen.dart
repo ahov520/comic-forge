@@ -7,6 +7,7 @@ import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/source_share.dart';
 import '../state/download_queue.dart';
+import 'comic_reading_stats_screen.dart';
 import 'detail_chrome.dart';
 import 'download_selection_sheet.dart';
 import 'downloads_screen.dart';
@@ -134,6 +135,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       MaterialPageRoute(builder: (_) => SourceScreen(state: widget.appState)),
     );
     if (mounted) setState(_load);
+  }
+
+  void _openReadingStats(Book book) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ComicReadingStatsScreen(
+          stats: widget.appState.readingStats,
+          sources: widget.appState.sources,
+          book: book,
+        ),
+      ),
+    );
   }
 
   Future<void> _showDownloads(Book book, List<Chapter> chapters) async {
@@ -459,21 +472,37 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               body: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(
-                    child: DetailHero(
-                      book: book,
-                      sourceName: sourceName,
-                      switchCount: _switchCount,
-                      onSwitchSource: canRead ? _showSwitchSourceSheet : null,
-                      readLabel: readLabel,
-                      readHint: canRead || hasOffline ? null : recoveryHint,
-                      readIcon: canRead || hasOffline
-                          ? Icons.play_arrow_rounded
-                          : recoveryIcon,
-                      onRead: readLabel == null
-                          ? null
-                          : (canRead || hasOffline
-                                ? () => openAt(readIndex)
-                                : recoverSource),
+                    child: Column(
+                      children: [
+                        DetailHero(
+                          book: book,
+                          sourceName: sourceName,
+                          switchCount: _switchCount,
+                          onSwitchSource: canRead
+                              ? _showSwitchSourceSheet
+                              : null,
+                          readLabel: readLabel,
+                          readHint: canRead || hasOffline ? null : recoveryHint,
+                          readIcon: canRead || hasOffline
+                              ? Icons.play_arrow_rounded
+                              : recoveryIcon,
+                          onRead: readLabel == null
+                              ? null
+                              : (canRead || hasOffline
+                                    ? () => openAt(readIndex)
+                                    : recoverSource),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: ListTile(
+                            key: const Key('detail-reading-stats'),
+                            leading: const Icon(Icons.bar_chart_outlined),
+                            title: const Text('阅读统计'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _openReadingStats(book),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   SliverToBoxAdapter(
