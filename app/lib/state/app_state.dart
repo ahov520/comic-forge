@@ -16,6 +16,7 @@ import 'download_queue.dart';
 import 'reading_history.dart';
 import 'reading_stats.dart';
 import 'shelf_groups.dart';
+import 'shelf_sort.dart';
 import 'search_filters.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
@@ -139,6 +140,7 @@ class AppState extends ChangeNotifier {
   static const _kWebDav = 'cf.webdav';
   static const _kSearchHistory = 'cf.searchHistory';
   static const _kSearchFilters = 'cf.searchFilters';
+  static const _kShelfSort = 'cf.shelfSort';
   static const _kDomainBlocklist = 'cf.domainBlocklist';
   static const _searchHistoryLimit = 10;
   static const _detailCacheCap = 100;
@@ -157,6 +159,8 @@ class AppState extends ChangeNotifier {
   final List<String> _searchHistory = [];
   SearchFilters _searchFilters = SearchFilters();
   SearchFilters get searchFilters => _searchFilters;
+  ShelfSort _shelfSort = ShelfSort.recentlyRead;
+  ShelfSort get shelfSort => _shelfSort;
 
   /// 最近提交的搜索词（新到旧、去重、最多 10 条）。
   List<String> get searchHistory => List.unmodifiable(_searchHistory);
@@ -197,6 +201,7 @@ class AppState extends ChangeNotifier {
     } on FormatException {
       _searchFilters = SearchFilters();
     }
+    _shelfSort = ShelfSort.parse(sp.get(_kShelfSort));
     sources
       ..clear()
       ..addAll((jsonDecode(sp.getString(_kSources) ?? '[]') as List)
@@ -335,6 +340,26 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(_kSearchFilters, jsonEncode(_searchFilters.toJson()));
   }
+
+  Future<void> setShelfSort(ShelfSort sort) async {
+    if (_shelfSort == sort) return;
+    _shelfSort = sort;
+    notifyListeners();
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kShelfSort, _shelfSort.id);
+  }
+
+  /// 分组、连载状态和本地搜索之后，再按当前排序偏好排列。
+  List<Book> shelfBooks({String query = '', int kindFilter = 0}) =>
+      visibleShelfBooks(
+        shelf,
+        matchesGroup: (book) => shelfGroups.matches(book.bookUrl),
+        query: query,
+        kindFilter: kindFilter,
+        sort: _shelfSort,
+        readAt: (book) => progress[book.bookUrl]?.at ?? 0,
+        catalogAt: (book) => detailCacheFor(book.bookUrl)?.at ?? 0,
+      );
 
   Future<void> _persistSearchHistory() async {
     final sp = await SharedPreferences.getInstance();
