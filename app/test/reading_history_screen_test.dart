@@ -141,6 +141,179 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('按漫画名、章节或来源搜索，忽略大小写和首尾空格，清空后恢复日期分组', (tester) async {
+    await state.addSourceManual(
+      ComicSource.fromJson({
+        'id': 'moon',
+        'name': '月亮源',
+        'rules': <String, dynamic>{},
+      }),
+    );
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day - 1, 12);
+    final entries = [
+      ReadingHistoryEntry(
+        book: book,
+        chapter: chapters[1],
+        chapterIndex: 1,
+        chapterCount: 4,
+        at: now.millisecondsSinceEpoch,
+      ),
+      ReadingHistoryEntry(
+        book: Book(name: 'Moon 漫画', sourceId: 'moon', bookUrl: '/moon'),
+        chapter: Chapter(title: '番外篇', url: '/extra'),
+        chapterIndex: 0,
+        chapterCount: 1,
+        at: yesterday.millisecondsSinceEpoch,
+      ),
+      ReadingHistoryEntry(
+        book: Book(name: '山海卷', sourceId: 'removed', bookUrl: '/gone'),
+        chapter: Chapter(url: '/first'),
+        chapterIndex: 0,
+        chapterCount: 1,
+        at: yesterday.millisecondsSinceEpoch,
+      ),
+    ];
+    await (await SharedPreferences.getInstance()).setString(
+      'cf.readingHistory',
+      jsonEncode(entries.map((entry) => entry.toJson()).toList()),
+    );
+    await state.load();
+    await showHistory(tester);
+    final search = find.byType(TextField);
+    for (final query in ['  mOoN  ', '番外', '月亮源']) {
+      await tester.enterText(search, query);
+      await tester.pumpAndSettle();
+      expect(find.text('Moon 漫画'), findsOneWidget);
+      expect(find.text('历史漫画'), findsNothing);
+      expect(find.text('山海卷'), findsNothing);
+      expect(find.text('今天'), findsNothing);
+      expect(find.text('昨天'), findsOneWidget);
+    }
+    await tester.enterText(search, '来源已移除');
+    await tester.pumpAndSettle();
+    expect(find.text('山海卷'), findsOneWidget);
+    expect(find.text('Moon 漫画'), findsNothing);
+    await tester.enterText(search, '第 1 话');
+    await tester.pumpAndSettle();
+    expect(find.text('山海卷'), findsOneWidget);
+    await tester.enterText(search, '没有这本漫画');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的阅读记录'), findsOneWidget);
+    expect(state.readingHistory, hasLength(3));
+    expect(detailCalls, 0, reason: '搜索仅过滤本地历史');
+    await tester.tap(find.byTooltip('清空搜索'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+    expect(find.text('今天'), findsOneWidget);
+    expect(find.text('昨天'), findsOneWidget);
+    expect(find.text('历史漫画'), findsOneWidget);
+    expect(find.text('Moon 漫画'), findsOneWidget);
+    expect(find.text('山海卷'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('长列表滚动后切换搜索词会从匹配结果顶部显示', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final entries = List.generate(
+      20,
+      (index) => ReadingHistoryEntry(
+        book: Book(
+          name: '合辑 $index',
+          sourceId: source.id,
+          bookUrl: '/collection-$index',
+        ),
+        chapter: chapters.first,
+        chapterIndex: 0,
+        chapterCount: 4,
+        at: now - index * 1000,
+      ),
+    );
+    await (await SharedPreferences.getInstance()).setString(
+      'cf.readingHistory',
+      jsonEncode(entries.map((entry) => entry.toJson()).toList()),
+    );
+    await state.load();
+    await showHistory(tester);
+    await tester.scrollUntilVisible(
+      find.text('合辑 19'),
+      400,
+      scrollable: find.descendant(
+        of: find.byType(CustomScrollView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('合辑 0').hitTestable(), findsNothing);
+    await tester.enterText(find.byType(TextField), '合辑');
+    await tester.pumpAndSettle();
+    expect(find.text('合辑 0').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('搜索结果可续读，返回后保留查询，移除命中项不影响其余历史或阅读进度', (tester) async {
+    await record();
+    await state.saveDetailCache(book, chapters);
+    await state.saveProgress(
+      Book(name: '保留漫画', sourceId: source.id, bookUrl: '/other'),
+      chapterUrl: '/other-c1',
+      chapterTitle: '第一话',
+      chapterIndex: 0,
+      chapterCount: 1,
+    );
+    await showHistory(tester);
+    await tester.enterText(find.byType(TextField), '历史漫画');
+    await tester.pumpAndSettle();
+    expect(find.text('保留漫画'), findsNothing);
+    await tester.tap(find.byTooltip('续读 历史漫画'));
+    await tester.pumpAndSettle();
+    expect(find.text('历史漫画 · 第2话'), findsOneWidget);
+    expect(detailCalls, 0);
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '历史漫画',
+    );
+    await tester.tap(find.byTooltip('移除 历史漫画 的阅读记录'));
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的阅读记录'), findsOneWidget);
+    expect(state.readingHistory.single.book.name, '保留漫画');
+    expect(state.progressFor(book.bookUrl)?.chapterIndex, 1);
+    await tester.tap(find.byTooltip('清空搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('保留漫画'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('续读加载期间切换搜索词，晚到结果不会打开阅读器或写入目录缓存', (tester) async {
+    final response = Completer<(Book, List<Chapter>)>();
+    service.debugRuntimeOverride = (s) =>
+        _HistoryRuntime(s, (_) => response.future);
+    await record();
+    await showHistory(tester);
+    await tester.tap(find.byTooltip('续读 历史漫画'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '其他漫画');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的阅读记录'), findsOneWidget);
+    response.complete((book, chapters));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReaderScreen), findsNothing);
+    expect(state.detailCacheFor(book.bookUrl), isNull);
+    expect(state.readingHistory, hasLength(1));
+    await tester.tap(find.byTooltip('清空搜索'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byTooltip('续读 历史漫画').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('从缓存续读按章节链接定位，早期插入章节不回退旧序号', (tester) async {
     await record();
     await state.saveDetailCache(book, [
@@ -215,7 +388,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄屏大字号长书名仍可续读和移除，移除后保留书架', (tester) async {
+  testWidgets('窄屏大字号和键盘下可搜索、续读和移除，移除后保留书架', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -224,6 +397,12 @@ void main() {
     await state.toggleShelf(book);
     await record();
     await showHistory(tester, textScale: 2);
+    await tester.enterText(find.byType(TextField), '番外篇');
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('续读 ${book.name}'));
+    await tester.pumpAndSettle();
     expect(find.byTooltip('续读 ${book.name}').hitTestable(), findsOneWidget);
     await tester.tap(find.byTooltip('移除 ${book.name} 的阅读记录'));
     await tester.pumpAndSettle();
