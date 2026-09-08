@@ -9,6 +9,7 @@ import 'package:engine/engine.dart';
 import '../services/source_service.dart';
 import '../state/app_state.dart';
 import '../state/chapter_bookmarks.dart';
+import '../state/reader_page_progress.dart';
 import '../state/reading_session.dart';
 import '../state/scroll_restore.dart';
 import '../state/download_queue.dart';
@@ -23,7 +24,7 @@ import 'widgets.dart' show EmptyStateView;
 const _readerChannel = MethodChannel('comic-forge/reader');
 
 /// 章节阅读器：连续滚动 / 左右翻页两种模式，点击切换工具栏；
-/// 支持上一话/下一话、阅读进度记忆、预加载下一话、亮度调节、音量键翻页。
+/// 支持上一话/下一话、章内页进度与跳页、阅读进度记忆、预加载下一话、亮度调节、音量键翻页。
 class ReaderScreen extends StatefulWidget {
   const ReaderScreen({
     super.key,
@@ -293,6 +294,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// 滚动模式接近底部时同样触发（由 ScrollController 调用）。
   void _warmNextChapterOnScroll() {
     _saveOffsetDebounced();
+    _syncScrollPageIndex();
     if (_nextChapterWarmed) return;
     final c = _scrollController;
     if (!c.hasClients) return;
@@ -311,6 +313,61 @@ class _ReaderScreenState extends State<ReaderScreen>
         widget.chapters[next].url,
       );
     }
+  }
+
+  /// 滚动模式根据偏移更新章内页码（仅页变化时 rebuild）。
+  void _syncScrollPageIndex() {
+    if (_isPaged || !_scrollController.hasClients || _pageCount <= 0) return;
+    final index = pageIndexFromScroll(
+      offset: _scrollController.offset,
+      maxExtent: _scrollController.position.maxScrollExtent,
+      pageCount: _pageCount,
+    );
+    if (index == _pageIndex) return;
+    setState(() => _pageIndex = index);
+  }
+
+  /// 章内跳页：翻页模式直接落页，滚动模式按等分页高近似偏移。
+  void _jumpToPage(int page) {
+    if (_pageCount <= 0) return;
+    final target = page.clamp(0, _pageCount - 1);
+    _cancelScrollRestore();
+    if (_isPaged) {
+      if (target != _pageIndex) setState(() => _pageIndex = target);
+      widget.appState?.saveReaderPage(_chapter.url, target);
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(target);
+      }
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      setState(() => _pageIndex = target);
+      return;
+    }
+    final offset = scrollOffsetForPage(
+      pageIndex: target,
+      maxExtent: _scrollController.position.maxScrollExtent,
+      pageCount: _pageCount,
+    );
+    _scrollController.jumpTo(offset);
+    if (target != _pageIndex) setState(() => _pageIndex = target);
+  }
+
+  Future<void> _showPageJump(BuildContext context) async {
+    if (_pageCount <= 0) return;
+    final index = await showDialog<int>(
+      context: context,
+      builder: (context) => ReaderIndexJumpDialog(
+        currentIndex: _pageIndex.clamp(0, _pageCount - 1),
+        count: _pageCount,
+        title: '跳转页码',
+        fieldLabel: '页码',
+        helperText: '共 $_pageCount 页',
+        errorText: '请输入 1–$_pageCount 之间的页码',
+      ),
+    );
+    if (!mounted || index == null) return;
+    _jumpToPage(index);
   }
 
   /// 滚动位置节流保存（停顿 600ms 落盘一次）。
@@ -430,13 +487,17 @@ class _ReaderScreenState extends State<ReaderScreen>
         saved: saved,
         maxExtent: _scrollController.position.maxScrollExtent,
       );
-      if ((_scrollController.offset - target).abs() < 0.5) return;
+      if ((_scrollController.offset - target).abs() < 0.5) {
+        _syncScrollPageIndex();
+        return;
+      }
       _applyingScrollRestore = true;
       try {
         _scrollController.jumpTo(target);
       } finally {
         _applyingScrollRestore = false;
       }
+      _syncScrollPageIndex();
     });
     // 尺寸通知可能在帧结束后到达，主动安排下一帧执行恢复。
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -667,6 +728,11 @@ class _ReaderScreenState extends State<ReaderScreen>
               page = _buildReaderBody(context, urls);
             }
           }
+          final loadedPages =
+              !showStatus &&
+              snap.connectionState == ConnectionState.done &&
+              (snap.data?.isNotEmpty ?? false);
+          final pageCount = loadedPages ? _pageCount : 0;
           final bottomChrome = ReaderBottomChrome(
             visible: _chromeVisible,
             progressLabel: '${_index + 1}/${widget.chapters.length}',
@@ -678,6 +744,10 @@ class _ReaderScreenState extends State<ReaderScreen>
             onBrightness: widget.appState == null
                 ? null
                 : () => _showReaderSettingsSheet(context),
+            pageIndex: _pageIndex,
+            pageCount: pageCount,
+            onPageChanged: pageCount > 1 ? _jumpToPage : null,
+            onPickPage: pageCount > 0 ? () => _showPageJump(context) : null,
           );
           final body = Stack(
             children: [
@@ -687,6 +757,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   visible: _chromeVisible,
                   topInset: pad.top,
                   bottomInset: pad.bottom,
+                  bottomHeight: readerChromeBottomHeight(pageCount: pageCount),
                 ),
               if (brightness < 1.0)
                 IgnorePointer(
@@ -732,6 +803,18 @@ class _ReaderScreenState extends State<ReaderScreen>
               ),
               if (!showStatus)
                 Positioned(left: 0, right: 0, bottom: 0, child: bottomChrome),
+              if (pageCount > 0)
+                Positioned(
+                  left: pad.left + 16,
+                  right: pad.right + 16,
+                  bottom: pad.bottom + 8,
+                  child: ReaderPageBadge(
+                    visible: !_chromeVisible,
+                    label: pageProgressLabel(_pageIndex, pageCount),
+                    progress: pageProgressFraction(_pageIndex, pageCount),
+                    onTap: () => _showPageJump(context),
+                  ),
+                ),
             ],
           );
         },

@@ -135,6 +135,84 @@ void main() {
     expect(next, 1);
   });
 
+  testWidgets('底栏章内进度条可拖、点页码跳转，单页不显示滑杆', (tester) async {
+    var page = 0;
+    var picks = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: ReaderBottomChrome(
+            visible: true,
+            progressLabel: '1/12',
+            canPrev: false,
+            canNext: true,
+            pageIndex: 2,
+            pageCount: 20,
+            onPageChanged: (value) => page = value,
+            onPickPage: () => picks++,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('reader-page-label')), findsOneWidget);
+    expect(find.text('3/20'), findsOneWidget);
+    expect(find.text('1/12'), findsOneWidget);
+    await tester.tap(find.byTooltip('跳转页码'));
+    expect(picks, 1);
+    final slider = tester.getRect(find.byKey(const Key('reader-page-slider')));
+    await tester.tapAt(Offset(slider.right - 2, slider.center.dy));
+    expect(page, 19);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: ReaderBottomChrome(
+            visible: true,
+            progressLabel: '1/1',
+            canPrev: false,
+            canNext: false,
+            pageIndex: 0,
+            pageCount: 1,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('1/1'), findsWidgets);
+    expect(find.byKey(const Key('reader-page-slider')), findsNothing);
+  });
+
+  testWidgets('沉浸页码徽章可见时可点，隐藏时收起', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: ReaderPageBadge(
+            visible: true,
+            label: '3/20',
+            progress: 0.5,
+            onTap: () => taps++,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('reader-page-badge')), findsOneWidget);
+    expect(find.byKey(const Key('reader-page-bar')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reader-page-badge')));
+    expect(taps, 1);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ReaderPageBadge(visible: false, label: '3/20', progress: 0.5),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('reader-page-badge')), findsNothing);
+  });
+
   testWidgets('目录表点选当前之外的话', (tester) async {
     var picked = -1;
     await tester.pumpWidget(
