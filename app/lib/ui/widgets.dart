@@ -20,8 +20,9 @@ class ScreenTitle extends StatelessWidget {
     header: true,
     child: Text(
       title,
-      style: Theme.of(context).textTheme.headlineSmall
-          ?.copyWith(fontWeight: FontWeight.w700),
+      style: Theme.of(
+        context,
+      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
     ),
   );
 }
@@ -312,15 +313,11 @@ class BookTile extends StatelessWidget {
                 ),
               ),
               if (showShelfAction)
-                IconButtonTheme(
-                  data: IconButtonThemeData(
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(48, 48),
-                      padding: EdgeInsets.zero,
-                      alignment: AlignmentDirectional.centerEnd,
-                    ),
-                  ),
-                  child: ShelfButton(book: book, state: state, iconSize: 16),
+                ShelfButton(
+                  book: book,
+                  state: state,
+                  iconSize: BookTileTypography.shelfActionIconSize,
+                  labeled: true,
                 ),
             ],
           ),
@@ -330,6 +327,8 @@ class BookTile extends StatelessWidget {
   }
 }
 
+enum _ShelfCardMenu { open, remove }
+
 /// 列表与详情共用的收藏操作，外部书架变更也会即时同步。
 class ShelfButton extends StatelessWidget {
   const ShelfButton({
@@ -337,11 +336,15 @@ class ShelfButton extends StatelessWidget {
     required this.book,
     required this.state,
     this.iconSize = 20,
+    this.labeled = false,
   });
 
   final Book book;
   final AppState state;
   final double iconSize;
+
+  /// 探索/搜索书卡显示「加入 / 已在」短标签；详情顶栏仍用图标。
+  final bool labeled;
 
   @override
   Widget build(BuildContext context) {
@@ -350,6 +353,14 @@ class ShelfButton extends StatelessWidget {
       listenable: state,
       builder: (context, _) {
         final saved = state.inShelf(book);
+        if (labeled) {
+          return _ShelfCardAction(
+            book: book,
+            state: state,
+            saved: saved,
+            iconSize: iconSize,
+          );
+        }
         return IconButton(
           tooltip: saved ? '移出书架' : '加入书架',
           isSelected: saved,
@@ -367,6 +378,102 @@ class ShelfButton extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// 探索/搜索书卡：未收藏一键加入；已在书架显示状态，菜单可移出或打开该书。
+class _ShelfCardAction extends StatelessWidget {
+  const _ShelfCardAction({
+    required this.book,
+    required this.state,
+    required this.saved,
+    required this.iconSize,
+  });
+
+  final Book book;
+  final AppState state;
+  final bool saved;
+  final double iconSize;
+
+  Book _shelfEntry() =>
+      state.shelfBookFor(
+        bookUrl: book.bookUrl,
+        sourceId: book.sourceId ?? '',
+      ) ??
+      book;
+
+  void _openEntry(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BookDetailScreen(book: _shelfEntry(), appState: state),
+      ),
+    );
+  }
+
+  void _onMenu(BuildContext context, _ShelfCardMenu value) {
+    switch (value) {
+      case _ShelfCardMenu.open:
+        _openEntry(context);
+      case _ShelfCardMenu.remove:
+        state.toggleShelf(book);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = _ShelfCardActionVisual(saved: saved, iconSize: iconSize);
+    if (saved) {
+      return PopupMenuButton<_ShelfCardMenu>(
+        tooltip: '已在书架',
+        position: PopupMenuPosition.under,
+        offset: const Offset(0, 4),
+        padding: EdgeInsets.zero,
+        onSelected: (value) => _onMenu(context, value),
+        itemBuilder: (context) => const [
+          PopupMenuItem(value: _ShelfCardMenu.open, child: Text('打开详情')),
+          PopupMenuItem(value: _ShelfCardMenu.remove, child: Text('移出书架')),
+        ],
+        child: visual,
+      );
+    }
+    return Tooltip(
+      message: '加入书架',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => state.toggleShelf(book),
+          borderRadius: BorderRadius.circular(12),
+          child: visual,
+        ),
+      ),
+    );
+  }
+}
+
+class _ShelfCardActionVisual extends StatelessWidget {
+  const _ShelfCardActionVisual({required this.saved, required this.iconSize});
+
+  final bool saved;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return BookTileTypography.shelfActionColumn(
+      icon: Icon(
+        saved ? Icons.favorite : Icons.favorite_border,
+        size: iconSize,
+        color: scheme.primary,
+      ),
+      label: Text(
+        saved ? '已在' : '加入',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: BookTileTypography.shelfActionLabel(
+          context,
+        ).copyWith(color: scheme.primary),
+      ),
     );
   }
 }

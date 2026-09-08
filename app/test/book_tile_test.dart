@@ -24,7 +24,7 @@ void main() {
 
   tearDown(() => state.dispose());
 
-  testWidgets('手机宽度下信息按标题、作者标签、更新分层，收藏与封面居中', (tester) async {
+  testWidgets('手机宽度下信息按标题、作者标签、更新分层，加入操作与封面居中', (tester) async {
     tester.view.physicalSize = const Size(340, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -39,25 +39,26 @@ void main() {
       ),
     );
     final cover = tester.getRect(find.byType(BookCover));
-    final favorite = tester.getRect(find.byType(IconButton));
+    final action = tester.getRect(find.byTooltip('加入书架'));
     final title = tester.getRect(find.text(book.name));
     final metadata = tester.getRect(find.text('尾田荣一郎 · 冒险'));
     final chapter = tester.getRect(find.text('更新至 第 1080 话'));
-    expect(favorite.center.dy, cover.center.dy);
-    expect(favorite.width, greaterThanOrEqualTo(48));
-    expect(favorite.height, greaterThanOrEqualTo(48));
+    expect(action.center.dy, cover.center.dy);
+    expect(action.width, greaterThanOrEqualTo(48));
+    expect(action.height, greaterThanOrEqualTo(48));
+    expect(find.text('加入'), findsOneWidget);
     expect(
       tester.getRect(find.byIcon(Icons.favorite_border)).right,
-      favorite.right,
+      lessThanOrEqualTo(action.right),
     );
     expect(title.bottom, lessThan(metadata.top));
     expect(metadata.bottom, lessThan(chapter.top));
-    expect(title.right, lessThanOrEqualTo(favorite.left));
+    expect(title.right, lessThanOrEqualTo(action.left));
     expect(find.textContaining('源:'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('卡片分别展示元信息；收藏可即时切换且不会打开详情', (tester) async {
+  testWidgets('卡片分别展示元信息；一键加入，已在书架可移出且不会打开详情', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -77,14 +78,52 @@ void main() {
     await tester.tap(find.byTooltip('加入书架'));
     await tester.pumpAndSettle();
     expect(state.inShelf(book), isTrue);
-    expect(find.byTooltip('移出书架'), findsOneWidget);
+    expect(find.byTooltip('已在书架'), findsOneWidget);
+    expect(find.text('已在'), findsOneWidget);
     expect(find.byType(BookDetailScreen), findsNothing);
 
-    await tester.tap(find.byTooltip('移出书架'));
+    await tester.tap(find.byTooltip('已在书架'));
+    await tester.pumpAndSettle();
+    expect(find.text('打开详情'), findsOneWidget);
+    await tester.tap(find.text('移出书架'));
     await tester.pumpAndSettle();
     expect(state.inShelf(book), isFalse);
     expect(find.byTooltip('加入书架'), findsOneWidget);
     expect(find.byType(BookDetailScreen), findsNothing);
+  });
+
+  testWidgets('已在书架时打开详情使用书架上的条目', (tester) async {
+    final listed = Book(
+      name: '搜索里的标题',
+      bookUrl: book.bookUrl,
+      sourceId: 'src-a',
+    );
+    final shelved = Book(
+      name: '书架上的标题',
+      bookUrl: book.bookUrl,
+      sourceId: 'src-a',
+    );
+    await state.toggleShelf(shelved);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BookTile(book: listed, state: state),
+        ),
+      ),
+    );
+    expect(find.text('加入'), findsNothing);
+    expect(find.text('已在'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('已在书架'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('打开详情'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookDetailScreen), findsOneWidget);
+    expect(
+      tester.widget<BookDetailScreen>(find.byType(BookDetailScreen)).book,
+      same(shelved),
+    );
+    expect(state.shelfGroups.groupsFor(shelved.bookUrl), isEmpty);
   });
 
   testWidgets('点击卡片仍可进入该书详情', (tester) async {
@@ -121,13 +160,15 @@ void main() {
 
     await state.toggleShelf(book);
     await tester.pump();
-    expect(find.byTooltip('移出书架'), findsOneWidget);
+    expect(find.byTooltip('已在书架'), findsOneWidget);
+    expect(find.text('已在'), findsOneWidget);
     expect(find.byIcon(Icons.favorite), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsNothing);
 
     await state.toggleShelf(book);
     await tester.pump();
     expect(find.byTooltip('加入书架'), findsOneWidget);
+    expect(find.text('加入'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     expect(find.byIcon(Icons.favorite), findsNothing);
   });
