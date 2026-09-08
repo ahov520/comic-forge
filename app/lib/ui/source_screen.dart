@@ -13,8 +13,17 @@ import 'source_editor_screen.dart';
 import 'source_subscription_dialog.dart';
 import 'widgets.dart';
 
-/// 仓库 URL → 设计稿短名（`user/repo`）。
+/// 仓库 URL → 设计稿短名（`user/repo`）；源列表 URL → `host/文件名`。
 String repoDisplayName(String url) {
+  final ref = RepoRef.parse(url);
+  if (ref != null && ref.isListUrl) {
+    final uri = Uri.tryParse(ref.listUrl!);
+    if (uri != null) {
+      final file = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+      return file.isEmpty ? uri.host : '${uri.host}/$file';
+    }
+    return ref.canonical;
+  }
   var s = url.trim();
   s = s.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
   s = s.replaceFirst(RegExp(r'^www\.'), '');
@@ -25,13 +34,31 @@ String repoDisplayName(String url) {
   return url;
 }
 
-/// 上次同步文案（对齐 six-screens「上次同步 09-06」）。
+/// 上次成功刷新文案。
 String repoSyncLabel(int? epochMs) {
-  if (epochMs == null || epochMs <= 0) return '尚未检查更新';
+  if (epochMs == null || epochMs <= 0) return '尚未成功更新';
   final d = DateTime.fromMillisecondsSinceEpoch(epochMs);
   final mm = d.month.toString().padLeft(2, '0');
   final dd = d.day.toString().padLeft(2, '0');
-  return '上次同步 $mm-$dd';
+  final hh = d.hour.toString().padLeft(2, '0');
+  final min = d.minute.toString().padLeft(2, '0');
+  return '上次成功 $mm-$dd $hh:$min';
+}
+
+/// 订阅失败摘要（空字符串表示没有失败）。
+String repoFailureLabel(String? error) {
+  final msg = error?.trim() ?? '';
+  if (msg.isEmpty) return '';
+  return '上次失败：$msg';
+}
+
+/// 设置页「源订阅」副标题。
+String sourceSubscriptionSubtitle(AppState state) {
+  if (state.repos.isEmpty) return '订阅远程源列表并检查更新';
+  final n = state.repos.length;
+  final failed = state.repoFailureCount;
+  if (failed > 0) return '$n 个订阅 · $failed 个上次失败';
+  return '$n 个订阅 · ${repoSyncLabel(state.latestRepoSuccessAt)}';
 }
 
 /// 源管理：订阅仓库 / 手动导入 / 启停。
@@ -204,7 +231,12 @@ class _SourceScreenState extends State<SourceScreen> {
       final bundle =
           await (widget.repoClient ?? SourceService.instance.repoClient)
               .subscribe(url);
-      await state.addRepoSubscribed(url, bundle.sources);
+      await state.addRepoSubscribed(
+        bundle.ref.canonical,
+        bundle.sources,
+        meta: bundle.meta,
+        markFetched: true,
+      );
       if (!mounted) return;
       setState(
         () => _feedback.value =
@@ -502,6 +534,29 @@ class _SourceScreenState extends State<SourceScreen> {
     );
   }
 
+  void _showRepoActions(String repo) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.link_off, color: scheme.error),
+              title: Text('取消订阅', style: TextStyle(color: scheme.error)),
+              subtitle: const Text('已导入的源会保留，可稍后重新订阅'),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                widget.state.removeRepo(repo);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _repoCard(String repo, ColorScheme scheme, {required bool isLast}) {
     final lastAt = widget.state.repoLastRefresh[repo];
     final u = widget.state.repoUpdates[repo];
@@ -511,6 +566,7 @@ class _SourceScreenState extends State<SourceScreen> {
               ? ' · 有新版本 v${u.lastRuleVersion}→v${u.pendingVersion}'
               : ' · 有新版本 v${u.pendingVersion}')
         : '';
+    final failure = repoFailureLabel(u?.lastError);
     final refreshing = _refreshingRepo == repo || _refreshingRepo == '*';
     return Card(
       // 稿中相邻外边距会合并；末卡到分组只保留分组的 14px 上边距。
@@ -523,30 +579,46 @@ class _SourceScreenState extends State<SourceScreen> {
         child: Row(
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    repoDisplayName(repo),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPress: () => _showRepoActions(repo),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      repoDisplayName(repo),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${repoSyncLabel(lastAt)}$pendingText',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: hasPending
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
+                    const SizedBox(height: 4),
+                    Text(
+                      '${repoSyncLabel(lastAt)}$pendingText',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: hasPending
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                    if (failure.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          failure,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: scheme.error),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             refreshing

@@ -4,16 +4,34 @@ import '../models/comic_source.dart';
 import '../net/fetcher.dart';
 import 'ppcat_store.dart';
 
-/// 源仓库引用：host 为 github / gitee。
+/// 源仓库或远程源列表引用。
+///
+/// - GitHub / Gitee 仓库：`host` 为 github / gitee，按 Track A/B 拉 meta + store
+/// - 直接源列表 URL：`listUrl` 非空，GET 该地址并按明文 store.json 解析
 class RepoRef {
-  RepoRef({required this.host, required this.user, required this.repo, this.branch = 'master'});
+  RepoRef({
+    required this.host,
+    required this.user,
+    required this.repo,
+    this.branch = 'master',
+    this.listUrl,
+  });
+
+  /// 远程源列表（明文 store.json / 源数组 JSON）。
+  factory RepoRef.list(String url) =>
+      RepoRef(host: 'url', user: '', repo: '', listUrl: url);
 
   final String host;
   final String user;
   final String repo;
   final String branch;
 
-  /// 解析用户输入：完整 URL / `user/repo` 简写。
+  /// 非空时表示直接订阅该 URL，而不是 GitHub/Gitee 仓库根。
+  final String? listUrl;
+
+  bool get isListUrl => listUrl != null && listUrl!.isNotEmpty;
+
+  /// 解析用户输入：GitHub/Gitee 仓库，或 http(s) 源列表 URL。
   /// 兼容 ppcat 的正则语义：`(gitee|github).com/user/repo`。
   static RepoRef? parse(String input) {
     var s = input.trim();
@@ -31,23 +49,37 @@ class RepoRef {
     final uri = Uri.tryParse(s);
     if (uri == null ||
         (uri.scheme != 'http' && uri.scheme != 'https') ||
-        uri.userInfo.isNotEmpty) {
+        uri.userInfo.isNotEmpty ||
+        uri.host.isEmpty) {
       return null;
     }
     final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
-    if (host != 'github.com' && host != 'gitee.com') return null;
-    final List<String> segments;
-    try {
-      segments = uri.pathSegments;
-    } on FormatException {
-      return null;
+    if (host == 'github.com' || host == 'gitee.com') {
+      final List<String> segments;
+      try {
+        segments = uri.pathSegments;
+      } on FormatException {
+        return null;
+      }
+      if (segments.length < 2) return null;
+      final user = segments[0];
+      final repo = segments[1].replaceFirst(RegExp(r'\.git$'), '');
+      final validName = RegExp(r'^[\w.\-]+$');
+      if (!validName.hasMatch(user) || !validName.hasMatch(repo)) return null;
+      return RepoRef(host: host.split('.').first, user: user, repo: repo);
     }
-    if (segments.length < 2) return null;
-    final user = segments[0];
-    final repo = segments[1].replaceFirst(RegExp(r'\.git$'), '');
-    final validName = RegExp(r'^[\w.\-]+$');
-    if (!validName.hasMatch(user) || !validName.hasMatch(repo)) return null;
-    return RepoRef(host: host.split('.').first, user: user, repo: repo);
+    return RepoRef.list(_canonicalListUrl(uri));
+  }
+
+  /// 去掉 fragment，保留 query；host 小写，便于去重。
+  static String _canonicalListUrl(Uri uri) {
+    return uri
+        .replace(
+          scheme: uri.scheme.toLowerCase(),
+          host: uri.host.toLowerCase(),
+          fragment: '',
+        )
+        .toString();
   }
 
   /// 一个仓库的多个 raw 候选地址（按优先级）。
@@ -70,7 +102,7 @@ class RepoRef {
     }
   }
 
-  String get canonical => '$host.com/$user/$repo';
+  String get canonical => isListUrl ? listUrl! : '$host.com/$user/$repo';
 }
 
 /// 仓库 meta（键名与 ppcat 保持一致）。
@@ -88,25 +120,30 @@ class StoreMeta {
   final bool ruleAuto;
 
   factory StoreMeta.fromJson(Map<String, dynamic> j) => StoreMeta(
-        ruleId: (j['ruleId'] ?? '0') as String,
-        ruleVersion: (j['ruleVersion'] is int)
-            ? j['ruleVersion'] as int
-            : int.tryParse('${j['ruleVersion']}') ?? 0,
-        ruleContent: (j['ruleContent'] ?? '') as String,
-        ruleAuto: (j['ruleAuto'] ?? true) as bool,
-      );
+    ruleId: (j['ruleId'] ?? '0') as String,
+    ruleVersion: (j['ruleVersion'] is int)
+        ? j['ruleVersion'] as int
+        : int.tryParse('${j['ruleVersion']}') ?? 0,
+    ruleContent: (j['ruleContent'] ?? '') as String,
+    ruleAuto: (j['ruleAuto'] ?? true) as bool,
+  );
 
   Map<String, dynamic> toJson() => {
-        'ruleId': ruleId,
-        'ruleVersion': ruleVersion,
-        'ruleContent': ruleContent,
-        'ruleAuto': ruleAuto,
-      };
+    'ruleId': ruleId,
+    'ruleVersion': ruleVersion,
+    'ruleContent': ruleContent,
+    'ruleAuto': ruleAuto,
+  };
 }
 
 /// 拉取结果：meta + 源列表。
 class StoreBundle {
-  StoreBundle({required this.ref, required this.meta, required this.sources, this.track});
+  StoreBundle({
+    required this.ref,
+    required this.meta,
+    required this.sources,
+    this.track,
+  });
 
   final RepoRef ref;
   final StoreMeta meta;
@@ -125,28 +162,64 @@ class RepoClient {
   /// Track B：ppcat 加密 store 解密器（Phase 0 取证后注入；null 时跳过加密仓库）。
   final StoreDecryptor? storeDecryptor;
 
-  /// 订阅仓库：自动识别明文（Track A）与加密（Track B）。
+  static const _unrecognized =
+      '无法识别的订阅地址（支持 github.com/user/repo、gitee.com/user/repo，或 http(s) 源列表 URL）';
+
+  /// 订阅仓库或远程源列表：自动识别明文（Track A）与加密（Track B）。
+  /// 直接 URL 只走明文 store.json / 源数组，不尝试解密 .mh_rules。
   Future<StoreBundle> subscribe(String repoInput) async {
     final ref = RepoRef.parse(repoInput);
     if (ref == null) {
-      throw const FormatException('无法识别的仓库地址（支持 github.com/user/repo 或 gitee.com/user/repo）');
+      throw const FormatException(_unrecognized);
+    }
+    if (ref.isListUrl) {
+      return _subscribeList(ref);
     }
     final meta = await _fetchMeta(ref);
     final sources = await _fetchStore(ref, meta);
-    return StoreBundle(ref: ref, meta: meta, sources: sources, track: _lastTrack);
+    return StoreBundle(
+      ref: ref,
+      meta: meta,
+      sources: sources,
+      track: _lastTrack,
+    );
   }
 
   /// 轻量版本检查：只拉 meta（不拉全量 store）。
-  /// 仓库无 meta 时返回 ruleVersion=0 的默认值（与 subscribe 行为一致）。
+  /// 仓库无 meta、或订阅的是源列表 URL 时返回 ruleVersion=0（与 subscribe 行为一致）。
   Future<StoreMeta> fetchMeta(String repoInput) async {
     final ref = RepoRef.parse(repoInput);
     if (ref == null) {
-      throw const FormatException('无法识别的仓库地址（支持 github.com/user/repo 或 gitee.com/user/repo）');
+      throw const FormatException(_unrecognized);
     }
+    if (ref.isListUrl) return StoreMeta();
     return _fetchMeta(ref);
   }
 
   String? _lastTrack;
+
+  Future<StoreBundle> _subscribeList(RepoRef ref) async {
+    final url = ref.listUrl!;
+    final String text;
+    try {
+      text = await fetcher.getString(url);
+    } on FetchException {
+      rethrow;
+    } on Exception catch (e) {
+      throw FetchException('拉取源列表失败：$e');
+    }
+    final sources = parsePlainStore(text);
+    if (sources == null) {
+      throw FetchException('源列表 $url 不是可识别的明文 store.json / 源数组 JSON');
+    }
+    _lastTrack = 'A';
+    return StoreBundle(
+      ref: ref,
+      meta: StoreMeta(),
+      sources: sources,
+      track: 'A',
+    );
+  }
 
   Future<StoreMeta> _fetchMeta(RepoRef ref) async {
     // Track A 优先 meta.json（明文仓库约定），回落 ppcat 的 meta。
@@ -168,7 +241,7 @@ class RepoClient {
     for (final url in ref.rawCandidates('store.json')) {
       try {
         final text = await fetcher.getString(url);
-        final sources = _parsePlainStore(text);
+        final sources = parsePlainStore(text);
         if (sources != null) {
           _lastTrack = 'A';
           return sources;
@@ -202,7 +275,9 @@ class RepoClient {
         // 试下一个候选
       }
     }
-    throw FetchException('仓库 ${ref.canonical} 未找到可识别的 store（需要明文 store.json 或注入加密解码器）');
+    throw FetchException(
+      '仓库 ${ref.canonical} 未找到可识别的 store（需要明文 store.json 或注入加密解码器）',
+    );
   }
 
   /// 从截断的 JSON 数组前缀里抽出完整条目（字符串感知的花括号扫描）。
@@ -230,8 +305,14 @@ class RepoClient {
         depth--;
         if (depth == 0 && start >= 0) {
           try {
-            final obj = jsonDecode(text.substring(start, i + 1)) as Map<String, dynamic>;
-            out.add(_looksPpcatFlat(obj) ? ComicSource.fromPpcatFlat(obj) : ComicSource.fromJson(obj));
+            final obj =
+                jsonDecode(text.substring(start, i + 1))
+                    as Map<String, dynamic>;
+            out.add(
+              _looksPpcatFlat(obj)
+                  ? ComicSource.fromPpcatFlat(obj)
+                  : ComicSource.fromJson(obj),
+            );
           } on FormatException {
             // 跳过坏条目
           }
@@ -244,24 +325,43 @@ class RepoClient {
   }
 
   /// 明文 store.json → 源列表。结构宽松：顶层数组、{sources:[...]}、
-  /// {data:[...]} 都认；源条目兼容嵌套与 ppcat 平铺两种形态。
-  List<ComicSource>? _parsePlainStore(String text) {
+  /// {data:[...]}、单条源对象都认；源条目兼容嵌套与 ppcat 平铺两种形态。
+  static List<ComicSource>? parsePlainStore(String text) {
     try {
       final j = jsonDecode(text);
       List<dynamic>? list;
       if (j is List) {
         list = j;
       } else if (j is Map) {
-        list = (j['sources'] ?? j['data']) as List<dynamic>?;
+        final map = <String, dynamic>{
+          for (final e in j.entries)
+            if (e.key is String) e.key as String: e.value,
+        };
+        list = (map['sources'] ?? map['data']) as List<dynamic>?;
+        if (list == null && _looksLikeSource(map)) {
+          list = [map];
+        }
       }
       if (list == null) return null;
       return list
           .whereType<Map<String, dynamic>>()
-          .map((m) => _looksPpcatFlat(m) ? ComicSource.fromPpcatFlat(m) : ComicSource.fromJson(m))
+          .map(
+            (m) => _looksPpcatFlat(m)
+                ? ComicSource.fromPpcatFlat(m)
+                : ComicSource.fromJson(m),
+          )
           .toList();
     } on FormatException {
       return null;
     }
+  }
+
+  static bool _looksLikeSource(Map<String, dynamic> m) {
+    final name = (m['name'] ?? m['bookSourceName'] ?? '').toString().trim();
+    final id = (m['id'] ?? m['url'] ?? m['bookSourceUrl'] ?? '')
+        .toString()
+        .trim();
+    return name.isNotEmpty && id.isNotEmpty;
   }
 
   static bool _looksPpcatFlat(Map<String, dynamic> m) =>
@@ -293,7 +393,11 @@ class RepoClient {
       if (list == null) return null;
       return list
           .whereType<Map<String, dynamic>>()
-          .map((m) => _looksPpcatFlat(m) ? ComicSource.fromPpcatFlat(m) : ComicSource.fromJson(m))
+          .map(
+            (m) => _looksPpcatFlat(m)
+                ? ComicSource.fromPpcatFlat(m)
+                : ComicSource.fromJson(m),
+          )
           .toList();
     } on Exception {
       return null;

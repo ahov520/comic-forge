@@ -1086,6 +1086,9 @@ class AppState extends ChangeNotifier {
       );
     } catch (e) {
       final msg = e.toString().split('\n').first;
+      _recordRepoFailure(repoUrl, msg);
+      await _persistRepoMeta();
+      notifyListeners();
       return RepoRefreshResult(
         repo: repoUrl,
         added: 0,
@@ -1112,6 +1115,19 @@ class AppState extends ChangeNotifier {
       pendingVersion: -1,
       checkedAt: DateTime.now().millisecondsSinceEpoch,
       auto: metaAuto ?? st.auto,
+    );
+  }
+
+  void _recordRepoFailure(String repoUrl, String error) {
+    final st = repoUpdates[repoUrl] ?? RepoUpdateState();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    repoUpdates[repoUrl] = RepoUpdateState(
+      lastRuleVersion: st.lastRuleVersion,
+      pendingVersion: st.pendingVersion,
+      checkedAt: now,
+      auto: st.auto,
+      lastError: error,
+      lastFailedAt: now,
     );
   }
 
@@ -1166,8 +1182,7 @@ class AppState extends ChangeNotifier {
           );
         }
       } catch (e) {
-        // 检查失败不打断其他仓库
-        continue;
+        _recordRepoFailure(repoUrl, e.toString().split('\n').first);
       }
     }
     if (repoUpdates.isNotEmpty || repoLastRefresh.isNotEmpty) {
@@ -1535,6 +1550,19 @@ class AppState extends ChangeNotifier {
   int get pendingUpdateCount =>
       repoUpdates.values.where((s) => s.hasPending).length;
 
+  /// 最近一次订阅刷新成功的时间（epoch ms；没有成功记录则为 null）。
+  int? get latestRepoSuccessAt {
+    var latest = 0;
+    for (final at in repoLastRefresh.values) {
+      if (at > latest) latest = at;
+    }
+    return latest > 0 ? latest : null;
+  }
+
+  /// 最近一次刷新失败的订阅数。
+  int get repoFailureCount =>
+      repos.where((url) => repoUpdates[url]?.hasError ?? false).length;
+
   /// 轻量自动体检：只在距上次超过 [interval] 时跑，最多探 [maxSources] 个
   /// 启用源——优先从未探测过的开始（lastOkAt=0），其次上次探测最早的。
   /// 静默执行（结果写入健康记录，源页可看标红）。
@@ -1775,16 +1803,41 @@ class AppState extends ChangeNotifier {
 
   Future<void> addRepoSubscribed(
     String repoUrl,
-    List<ComicSource> imported,
-  ) async {
+    List<ComicSource> imported, {
+    StoreMeta? meta,
+    bool markFetched = false,
+  }) async {
     if (!repos.contains(repoUrl)) repos.add(repoUrl);
-    for (final s in imported) {
-      sources.removeWhere((e) => e.id == s.id);
-      sources.add(s);
+    if (imported.isNotEmpty) {
+      final merged = SourceUpdate.merge(sources, imported);
+      sources
+        ..clear()
+        ..addAll(merged.sources);
+    }
+    if (markFetched) {
+      repoLastRefresh[repoUrl] = DateTime.now().millisecondsSinceEpoch;
+      _recordRepoVersion(
+        repoUrl,
+        meta?.ruleVersion ?? 0,
+        metaAuto: meta?.ruleAuto,
+      );
+      await _persistRepoMeta();
     }
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(_kRepos, jsonEncode(repos));
     await _persistSources();
+    notifyListeners();
+  }
+
+  /// 取消订阅：只去掉订阅地址与检查状态，已导入的源保留。
+  Future<void> removeRepo(String repoUrl) async {
+    final hadRepo = repos.remove(repoUrl);
+    final hadRefresh = repoLastRefresh.remove(repoUrl) != null;
+    final hadUpdate = repoUpdates.remove(repoUrl) != null;
+    if (!hadRepo && !hadRefresh && !hadUpdate) return;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(_kRepos, jsonEncode(repos));
+    await _persistRepoMeta();
     notifyListeners();
   }
 

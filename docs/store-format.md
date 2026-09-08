@@ -1,7 +1,7 @@
 # 源仓库订阅协议（Store Format）
 
-Comic Forge 的源仓库订阅兼容两种格式：**Track A（自有明文格式，推荐）** 与
-**Track B（皮皮喵/ppcat 加密格式，互操作）**。
+Comic Forge 的源仓库订阅兼容三种入口：**GitHub/Gitee 仓库 Track A（自有明文格式，推荐）**、
+**远程明文源列表 URL**，以及 **Track B（皮皮喵/ppcat 加密格式，互操作）**。
 
 ## 仓库地址解析
 
@@ -12,7 +12,11 @@ github.com/<user>/<repo>
 https://github.com/<user>/<repo>
 https://gitee.com/<user>/<repo>
 <user>/<repo>            # 简写，默认 github
+https://example.com/store.json   # 远程明文源列表
 ```
+
+直接源列表 URL 必须是 `http(s)`、无用户名密码，且主机不是 GitHub/Gitee 仓库根。
+客户端只 GET 该地址，按明文 `store.json` / 源数组 / 单条源对象解析，**不会**尝试解密 `.mh_rules`。
 
 ## 拉取顺序
 

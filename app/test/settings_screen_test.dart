@@ -2,8 +2,10 @@ import 'package:comic_forge/backup_service.dart';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/shelf_update_notifications.dart';
+import 'package:comic_forge/state/source_update.dart';
 import 'package:comic_forge/state/shelf_update_schedule.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
+import 'package:comic_forge/ui/source_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -60,6 +62,44 @@ void main() {
     SourceService.instance.debugResetNetworkPolicy();
   });
 
+  testWidgets('源订阅入口显示状态并打开源管理', (tester) async {
+    await _showSettings(
+      tester,
+      state,
+      size: const Size(340, 1200),
+      textScale: 1,
+    );
+    expect(find.text('源订阅'), findsOneWidget);
+    expect(find.text('订阅远程源列表并检查更新'), findsOneWidget);
+    const repo = 'https://cdn.example.com/store.json';
+    await state.addRepoSubscribed(repo, const []);
+    state.repoLastRefresh[repo] = DateTime(
+      2026,
+      9,
+      8,
+      11,
+      20,
+    ).millisecondsSinceEpoch;
+    state.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('1 个订阅 · 上次成功 09-08 11:20'), findsOneWidget);
+    state.repoUpdates[repo] = RepoUpdateState(
+      lastError: 'HTTP 404 for $repo',
+      lastFailedAt: DateTime(2026, 9, 8, 12).millisecondsSinceEpoch,
+    );
+    state.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('1 个订阅 · 1 个上次失败'), findsOneWidget);
+    await tester.tap(find.text('源订阅'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceScreen), findsOneWidget);
+    expect(find.text('已订阅仓库'), findsOneWidget);
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('设置行保留 14px 标题，操作图标与箭头对齐且整块区域可点击', (tester) async {
     await _showSettings(
       tester,
@@ -70,6 +110,7 @@ void main() {
     final firstTitle = tester.getRect(find.text('深色模式'));
     for (final label in [
       '深色模式',
+      '源订阅',
       'WebDAV 备份 / 恢复',
       '广告拦截规则',
       '域名黑名单',

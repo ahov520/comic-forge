@@ -13,20 +13,27 @@ class FakeFetcher implements Fetcher {
   final Map<String, String> routes;
 
   @override
-  Future<String> getString(String url,
-      {Map<String, String>? headers, String? charset}) async {
+  Future<String> getString(
+    String url, {
+    Map<String, String>? headers,
+    String? charset,
+  }) async {
     final hit = routes[url];
     if (hit == null) throw FetchException('no route for $url');
     return hit;
   }
 
   @override
-  Future<List<int>> getBytes(String url, {Map<String, String>? headers}) async =>
-      utf8.encode(await getString(url, headers: headers));
+  Future<List<int>> getBytes(
+    String url, {
+    Map<String, String>? headers,
+  }) async => utf8.encode(await getString(url, headers: headers));
 
   @override
-  Future<List<int>> send(SourceRequest request,
-      {Map<String, String>? headers}) async {
+  Future<List<int>> send(
+    SourceRequest request, {
+    Map<String, String>? headers,
+  }) async {
     return utf8.encode(await getString(request.url, headers: request.headers));
   }
 }
@@ -85,9 +92,17 @@ void main() {
       final meta = jsonEncode({'ruleId': '1', 'ruleVersion': 2});
       final store = jsonEncode({
         'sources': [
-          {'bookSourceName': '甲', 'bookSourceUrl': 'https://x.example.com/a', 'ruleSearchUrl': '/s?q=searchKey'},
-          {'bookSourceName': '乙', 'bookSourceUrl': 'https://x.example.com/b', 'ruleSearchUrl': '/s?q=searchKey'},
-        ]
+          {
+            'bookSourceName': '甲',
+            'bookSourceUrl': 'https://x.example.com/a',
+            'ruleSearchUrl': '/s?q=searchKey',
+          },
+          {
+            'bookSourceName': '乙',
+            'bookSourceUrl': 'https://x.example.com/b',
+            'ruleSearchUrl': '/s?q=searchKey',
+          },
+        ],
       });
       final client = RepoClient(
         fetcher: FakeFetcher({
@@ -115,6 +130,89 @@ void main() {
       final r3 = await st.refreshRepo(repo, client: badClient);
       expect(r3.ok, isFalse);
       expect(r3.error, isNotNull);
+      expect(st.repoUpdates[repo]!.hasError, isTrue);
+      expect(st.repoUpdates[repo]!.lastError, contains('未找到可识别的 store'));
+      expect(st.repoLastRefresh[repo], greaterThan(0), reason: '失败不应抹掉上次成功时间');
+
+      final restored = AppState();
+      addTearDown(restored.dispose);
+      await restored.load();
+      expect(
+        restored.repoUpdates[repo]!.lastError,
+        st.repoUpdates[repo]!.lastError,
+      );
+      expect(restored.repoLastRefresh[repo], st.repoLastRefresh[repo]);
+
+      final r4 = await st.refreshRepo(repo, client: client);
+      expect(r4.ok, isTrue);
+      expect(st.repoUpdates[repo]!.hasError, isFalse);
+    });
+
+    test('远程源列表 URL：订阅、合并变更、失败落盘', () async {
+      const listUrl = 'https://cdn.example.com/rules/store.json';
+      var store = jsonEncode({
+        'sources': [
+          {
+            'id': 'list-a',
+            'name': '列表甲',
+            'url': 'https://x.example.com/a',
+            'rules': {'searchUrl': '/s?q=1'},
+          },
+        ],
+      });
+      RepoClient mkClient() =>
+          RepoClient(fetcher: FakeFetcher({listUrl: store}));
+
+      final st = AppState();
+      addTearDown(st.dispose);
+      final first = await mkClient().subscribe(listUrl);
+      await st.addRepoSubscribed(
+        first.ref.canonical,
+        first.sources,
+        meta: first.meta,
+        markFetched: true,
+      );
+      expect(st.repos, [listUrl]);
+      expect(st.sources.single.id, 'list-a');
+      expect(st.repoLastRefresh[listUrl], greaterThan(0));
+      expect(st.latestRepoSuccessAt, st.repoLastRefresh[listUrl]);
+
+      st.sources.single.enabled = false;
+      store = jsonEncode({
+        'sources': [
+          {
+            'id': 'list-a',
+            'name': '列表甲',
+            'url': 'https://x.example.com/a',
+            'rules': {'searchUrl': '/s?q=2'},
+          },
+          {
+            'id': 'list-b',
+            'name': '列表乙',
+            'url': 'https://x.example.com/b',
+            'rules': {'searchUrl': '/s?q=1'},
+          },
+        ],
+      });
+      final r = await st.refreshRepo(listUrl, client: mkClient());
+      expect(r.ok, isTrue);
+      expect(r.added, 1);
+      expect(r.updated, 1);
+      expect(st.sources.firstWhere((s) => s.id == 'list-a').enabled, isFalse);
+      expect(st.sources.any((s) => s.id == 'list-b'), isTrue);
+
+      final failed = await st.refreshRepo(
+        listUrl,
+        client: RepoClient(fetcher: FakeFetcher({})),
+      );
+      expect(failed.ok, isFalse);
+      expect(st.repoUpdates[listUrl]!.hasError, isTrue);
+      expect(st.repoFailureCount, 1);
+
+      await st.removeRepo(listUrl);
+      expect(st.repos, isEmpty);
+      expect(st.repoUpdates.containsKey(listUrl), isFalse);
+      expect(st.sources.length, 2, reason: '取消订阅保留已导入的源');
     });
   });
 
@@ -149,16 +247,17 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       st = AppState();
       meta = '{"ruleId":"1","ruleVersion":2,"ruleAuto":false}';
-      store = '{"sources":[{"bookSourceName":"甲","bookSourceUrl":"https://x.example.com/a","ruleSearchUrl":"/s?q=1"}]}';
+      store =
+          '{"sources":[{"bookSourceName":"甲","bookSourceUrl":"https://x.example.com/a","ruleSearchUrl":"/s?q=1"}]}';
     });
 
     /// 每次构造新 client：路由取当前 meta/store 值（模拟仓库内容随时间变化）
     RepoClient mkClient() => RepoClient(
-          fetcher: FakeFetcher({
-            'https://raw.githubusercontent.com/u/r/master/meta.json': meta,
-            'https://raw.githubusercontent.com/u/r/master/store.json': store,
-          }),
-        );
+      fetcher: FakeFetcher({
+        'https://raw.githubusercontent.com/u/r/master/meta.json': meta,
+        'https://raw.githubusercontent.com/u/r/master/store.json': store,
+      }),
+    );
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
@@ -195,6 +294,18 @@ void main() {
       expect(st.repoUpdates[repo]!.hasPending, isFalse, reason: 'auto 仓库直接应用');
       expect(st.repoUpdates[repo]!.lastRuleVersion, 5);
       expect(st.repoUpdates[repo]!.auto, isTrue);
+    });
+
+    test('检查失败写入 lastError，不打断其它仓库', () async {
+      await st.addRepoSubscribed(repo, const []);
+      await st.refreshRepo(repo, client: mkClient());
+      const dead = 'https://cdn.example.com/missing.json';
+      await st.addRepoSubscribed(dead, const []);
+      final notices = await st.checkRepoUpdates(client: mkClient());
+      expect(notices, isEmpty);
+      expect(st.repoUpdates[dead]!.hasError, isTrue);
+      expect(st.repoUpdates[dead]!.lastError, isNotEmpty);
+      expect(st.repoUpdates[repo]!.hasError, isFalse);
     });
 
     test('版本未变时无通知；启动节流（6h 内不重复检查）', () async {

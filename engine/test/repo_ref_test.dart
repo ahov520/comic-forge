@@ -28,13 +28,36 @@ void main() {
     'gitee.com/team',
     'example.com/team/comics',
     'team/comics extra',
-    'https://example.com/?repo=https://github.com/team/comics',
+    'ftp://example.com/store.json',
     '仓库 https://github.com/team/comics',
     'https://github.com/team/.git',
     'https://github.com/team/%FF',
+    'https://user:secret@example.com/store.json',
   ]) {
     test('不完整或错误的仓库地址不被识别为其它仓库：$input', () {
       expect(RepoRef.parse(input), isNull);
+    });
+  }
+
+  for (final (input, canonical) in [
+    (
+      'https://cdn.example.com/rules/store.json',
+      'https://cdn.example.com/rules/store.json',
+    ),
+    (
+      '  HTTP://CDN.EXAMPLE.COM/store.json#frag  ',
+      'http://cdn.example.com/store.json',
+    ),
+    (
+      'https://raw.githubusercontent.com/u/r/master/store.json',
+      'https://raw.githubusercontent.com/u/r/master/store.json',
+    ),
+  ]) {
+    test('远程源列表 URL 归一：$input', () {
+      final ref = RepoRef.parse(input);
+      expect(ref, isNotNull);
+      expect(ref!.isListUrl, isTrue);
+      expect(ref.canonical, canonical);
     });
   }
 
@@ -78,4 +101,48 @@ void main() {
       expect(requests, ['$root/meta.json', '$root/store.json']);
     });
   }
+
+  test('按源列表 URL 订阅只拉取该地址，解析明文 store', () async {
+    const listUrl = 'https://cdn.example.com/rules/store.json';
+    final requests = <String>[];
+    final client = MockClient((request) async {
+      requests.add(request.url.toString());
+      expect(request.url.toString(), listUrl);
+      return http.Response(
+        jsonEncode({
+          'sources': [
+            {
+              'id': 'list-source',
+              'name': '列表源',
+              'url': 'https://comic.example',
+            },
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    addTearDown(client.close);
+    final bundle = await RepoClient(
+      fetcher: HttpFetcher(client: client),
+    ).subscribe(listUrl);
+    expect(bundle.ref.isListUrl, isTrue);
+    expect(bundle.ref.canonical, listUrl);
+    expect(bundle.track, 'A');
+    expect(bundle.sources.single.id, 'list-source');
+    expect(requests, [listUrl]);
+  });
+
+  test('源列表 URL 不是明文 JSON 时给出明确错误', () async {
+    final client = MockClient(
+      (request) async => http.Response('<html></html>', 200),
+    );
+    addTearDown(client.close);
+    expect(
+      () => RepoClient(
+        fetcher: HttpFetcher(client: client),
+      ).subscribe('https://cdn.example.com/rules/store.json'),
+      throwsA(isA<FetchException>()),
+    );
+  });
 }

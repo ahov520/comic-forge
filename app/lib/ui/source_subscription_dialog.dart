@@ -75,11 +75,11 @@ class _SourceSubscriptionDialogState extends State<SourceSubscriptionDialog> {
                   keyboardType: TextInputType.url,
                   textInputAction: TextInputAction.go,
                   decoration: InputDecoration(
-                    labelText: compact ? '订阅源仓库' : '仓库地址',
-                    hintText: 'github.com/user/repo',
+                    labelText: compact ? '订阅源仓库' : '仓库或源列表地址',
+                    hintText: 'github.com/user/repo 或 https://…/store.json',
                     helperText: compact
                         ? null
-                        : '支持 GitHub、Gitee，或 GitHub 的 user/repo 简写',
+                        : '支持 GitHub、Gitee 仓库，或远程明文源列表 URL',
                     helperMaxLines: 3,
                     errorMaxLines: 2,
                     isDense: compact,
@@ -87,7 +87,7 @@ class _SourceSubscriptionDialogState extends State<SourceSubscriptionDialog> {
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) return '请输入仓库地址';
                     if (RepoRef.parse(value) == null) {
-                      return '请输入 GitHub 或 Gitee 仓库地址';
+                      return '请输入仓库地址或 http(s) 源列表 URL';
                     }
                     return null;
                   },

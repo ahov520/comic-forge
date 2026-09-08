@@ -76,21 +76,21 @@ void main() {
     for (final input in [
       '',
       'github.com/team',
-      'https://example.com/team/comics',
+      'ftp://example.com/store.json',
     ]) {
       await tester.enterText(find.byType(TextField), input);
       await tester.tap(find.widgetWithText(FilledButton, '订阅'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(
-        find.text(input.isEmpty ? '请输入仓库地址' : '请输入 GitHub 或 Gitee 仓库地址'),
+        find.text(input.isEmpty ? '请输入仓库地址' : '请输入仓库地址或 http(s) 源列表 URL'),
         findsOneWidget,
       );
       expect(client.requests, isEmpty);
     }
     await tester.enterText(find.byType(TextField), 'gitee.com/team/comics');
     await tester.pumpAndSettle();
-    expect(find.text('请输入 GitHub 或 Gitee 仓库地址'), findsNothing);
+    expect(find.text('请输入仓库地址或 http(s) 源列表 URL'), findsNothing);
     await tester.tap(find.widgetWithText(FilledButton, '订阅'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
@@ -99,6 +99,23 @@ void main() {
     expect(state.repos, ['gitee.com/team/comics']);
     expect(find.textContaining('订阅成功'), findsOneWidget);
     expect(find.textContaining('Track'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('远程源列表 URL 可订阅并写入规范化地址', (tester) async {
+    await openDialog(tester);
+    await tester.enterText(
+      find.byType(TextField),
+      '  HTTPS://CDN.EXAMPLE.COM/store.json#frag  ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '订阅'));
+    await tester.pumpAndSettle();
+    expect(client.requests, ['HTTPS://CDN.EXAMPLE.COM/store.json#frag']);
+    expect(state.repos, ['https://cdn.example.com/store.json']);
+    expect(state.sources.single.id, 'subscribed-source');
+    expect(state.repoLastRefresh[state.repos.single], greaterThan(0));
+    expect(find.textContaining('订阅成功'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
