@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 
+import '../services/source_service.dart';
 import 'skeleton.dart';
 
 /// 单张漫画图片可独立重试，保留同话中其它图片和阅读位置。
@@ -13,12 +15,14 @@ class ReaderNetworkImage extends StatefulWidget {
     required this.pageNumber,
     required this.headers,
     this.fit = BoxFit.fitWidth,
+    this.policy,
   });
 
   final String imageUrl;
   final int pageNumber;
   final Map<String, String> headers;
   final BoxFit fit;
+  final NetworkPolicy? policy;
 
   @override
   State<ReaderNetworkImage> createState() => _ReaderNetworkImageState();
@@ -32,6 +36,11 @@ class _ReaderNetworkImageState extends State<ReaderNetworkImage> {
     final uri = Uri.tryParse(widget.imageUrl);
     return uri?.scheme == 'file' ? File.fromUri(uri!) : null;
   }
+
+  NetworkPolicy get _policy =>
+      widget.policy ?? SourceService.instance.networkPolicy;
+
+  bool get _blocked => _localFile == null && _policy.isBlocked(widget.imageUrl);
 
   @override
   void didUpdateWidget(covariant ReaderNetworkImage oldWidget) {
@@ -71,7 +80,7 @@ class _ReaderNetworkImageState extends State<ReaderNetworkImage> {
     final scheme = Theme.of(context).colorScheme;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
     final safe = MediaQuery.paddingOf(context);
-    Widget failure(BuildContext context) => Padding(
+    Widget failure(BuildContext context, {required bool blocked}) => Padding(
       // 翻页模式的重试操作避开工具栏，横屏/大字号下仍可滚动到按钮。
       padding: widget.fit == BoxFit.contain
           ? EdgeInsets.fromLTRB(
@@ -96,12 +105,22 @@ class _ReaderNetworkImageState extends State<ReaderNetworkImage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '第 ${widget.pageNumber} 张图片加载失败',
+                  blocked
+                      ? '第 ${widget.pageNumber} 张图片域名已被屏蔽'
+                      : '第 ${widget.pageNumber} 张图片加载失败',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
+                if (blocked) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '可在设置中移出 ${_policy.blockedHost(widget.imageUrl) ?? '该域名'} 后重试',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _retrying ? null : _retry,
@@ -120,8 +139,11 @@ class _ReaderNetworkImageState extends State<ReaderNetworkImage> {
         local,
         key: ValueKey((widget.imageUrl, _attempt)),
         fit: widget.fit,
-        errorBuilder: (context, _, _) => failure(context),
+        errorBuilder: (context, _, _) => failure(context, blocked: false),
       );
+    }
+    if (_blocked) {
+      return failure(context, blocked: true);
     }
     return CachedNetworkImage(
       key: ValueKey((widget.imageUrl, _attempt)),
@@ -138,7 +160,7 @@ class _ReaderNetworkImageState extends State<ReaderNetworkImage> {
         height: widget.fit == BoxFit.contain ? double.infinity : 240,
         child: const Center(child: SkeletonBox(height: 220)),
       ),
-      errorWidget: (context, _, _) => failure(context),
+      errorWidget: (context, _, _) => failure(context, blocked: false),
     );
   }
 }

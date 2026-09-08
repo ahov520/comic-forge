@@ -66,8 +66,20 @@ class SearchFailurePanel extends StatelessWidget {
                         Divider(height: 1, color: scheme.outlineVariant),
                     itemBuilder: (context, i) {
                       final failure = failures[i];
-                      final timedOut =
-                          failure.kind == SearchSourceFailKind.timeout;
+                      final (icon, reason) = switch (failure.kind) {
+                        SearchSourceFailKind.timeout => (
+                          Icons.timer_outlined,
+                          '连接超时',
+                        ),
+                        SearchSourceFailKind.blocked => (
+                          Icons.block_outlined,
+                          '域名已屏蔽',
+                        ),
+                        SearchSourceFailKind.error => (
+                          Icons.cloud_off_outlined,
+                          '连接失败',
+                        ),
+                      };
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 4,
@@ -77,15 +89,13 @@ class SearchFailurePanel extends StatelessWidget {
                         minLeadingWidth: 18,
                         horizontalTitleGap: 12,
                         leading: Icon(
-                          timedOut
-                              ? Icons.timer_outlined
-                              : Icons.cloud_off_outlined,
+                          icon,
                           size: 18,
                           color: scheme.onSurfaceVariant,
                         ),
                         title: Text(failure.name, style: textTheme.bodyMedium),
                         subtitle: Text(
-                          timedOut ? '连接超时' : '连接失败',
+                          reason,
                           style: textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),

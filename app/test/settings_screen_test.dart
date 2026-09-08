@@ -21,9 +21,8 @@ Future<void> _showSettings(
     MaterialApp(
       theme: ThemeData(brightness: brightness),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
       home: Scaffold(body: SettingsScreen(state: state)),
@@ -41,6 +40,7 @@ void main() {
   tearDown(() {
     state.dispose();
     SourceService.instance.adBlock = null;
+    SourceService.instance.debugResetNetworkPolicy();
   });
 
   testWidgets('设置行保留 14px 标题，操作图标与箭头对齐且整块区域可点击', (tester) async {
@@ -55,6 +55,7 @@ void main() {
       '深色模式',
       'WebDAV 备份 / 恢复',
       '广告拦截规则',
+      '域名黑名单',
       'Comic Forge v0.1.0',
     ]) {
       final title = find.text(label);

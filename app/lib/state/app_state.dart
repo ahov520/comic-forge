@@ -123,6 +123,7 @@ class AppState extends ChangeNotifier {
   static const _kWebDav = 'cf.webdav';
   static const _kSearchHistory = 'cf.searchHistory';
   static const _kSearchFilters = 'cf.searchFilters';
+  static const _kDomainBlocklist = 'cf.domainBlocklist';
   static const _searchHistoryLimit = 10;
   static const _detailCacheCap = 100;
 
@@ -152,6 +153,8 @@ class AppState extends ChangeNotifier {
   final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
   /// 广告拦截规则（null = 未启用）。
   AdBlockRules? adBlock;
+  /// 当前生效的域名黑名单（规范化主机，与 [SourceService.networkPolicy] 同步）。
+  List<String> get blockedDomains => SourceService.instance.networkPolicy.hosts;
   /// WebDAV 配置（url/user/pass/path；明文存本地，仅本机使用）。
   Map<String, String>? webDavConfig;
   bool darkMode = true;
@@ -213,6 +216,7 @@ class AppState extends ChangeNotifier {
     final adText = sp.getString(_kAdBlock);
     adBlock = adText == null ? null : AdBlockRules.tryParse(adText);
     SourceService.instance.adBlock = adBlock;
+    _restoreDomainBlocklist(sp.get(_kDomainBlocklist));
     final wd = sp.getString(_kWebDav);
     webDavConfig = wd == null
         ? null
@@ -1270,6 +1274,51 @@ class AppState extends ChangeNotifier {
     } else {
       await sp.setStringSafe(_kWebDav, jsonEncode(cfg));
     }
+    notifyListeners();
+  }
+
+  void _restoreDomainBlocklist(Object? saved) {
+    var hosts = const <String>[];
+    if (saved is String && saved.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(saved);
+        if (decoded is List) {
+          hosts = decoded.whereType<String>().toList();
+        }
+      } on FormatException {
+        hosts = const [];
+      }
+    }
+    SourceService.instance.networkPolicy.replaceAll(hosts);
+  }
+
+  Future<void> _persistDomainBlocklist() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setStringSafe(
+      _kDomainBlocklist,
+      jsonEncode(SourceService.instance.networkPolicy.hosts),
+    );
+  }
+
+  /// 加入一条域名/URL；非法或重复返回 false。
+  Future<bool> addBlockedDomain(String raw) async {
+    if (!SourceService.instance.networkPolicy.add(raw)) return false;
+    await _persistDomainBlocklist();
+    notifyListeners();
+    return true;
+  }
+
+  /// 移除一条；未命中返回 false。
+  Future<bool> removeBlockedDomain(String raw) async {
+    if (!SourceService.instance.networkPolicy.remove(raw)) return false;
+    await _persistDomainBlocklist();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> setBlockedDomains(Iterable<String> domains) async {
+    SourceService.instance.networkPolicy.replaceAll(domains);
+    await _persistDomainBlocklist();
     notifyListeners();
   }
 

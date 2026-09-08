@@ -222,7 +222,9 @@ class _SearchScreenState extends State<SearchScreen> {
               };
             });
           }
-          errors[s.id] = e.toString();
+          if (classifySearchFailure(e) != SearchSourceFailKind.blocked) {
+            errors[s.id] = e.toString();
+          }
         }
       }),
     );
@@ -244,11 +246,15 @@ class _SearchScreenState extends State<SearchScreen> {
     final timeouts = _failed.value.values
         .where((f) => f.kind == SearchSourceFailKind.timeout)
         .length;
+    final blocked = _failed.value.values
+        .where((f) => f.kind == SearchSourceFailKind.blocked)
+        .length;
     return searchAggregateStatus(
       sourceCount: _sourceCount,
       successCount: _raw.length,
       timeoutCount: timeouts,
-      errorCount: _failed.value.length - timeouts,
+      errorCount: _failed.value.length - timeouts - blocked,
+      blockedCount: blocked,
       searching: _searching,
     );
   }
@@ -469,9 +475,8 @@ class _SearchScreenState extends State<SearchScreen> {
             liveRegion: true,
             child: Text(
               _statusLine(),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
           if (tip != null) ...[

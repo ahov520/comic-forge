@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../backup_service.dart';
 import '../state/app_state.dart';
+import 'domain_blacklist_screen.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
 import 'widgets.dart';
@@ -308,9 +309,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               row(
                 SwitchTheme(
                   // 去掉轨道两侧内边距，让可见右缘与其它行尾控件对齐。
-                  data: SwitchTheme.of(
-                    context,
-                  ).copyWith(padding: EdgeInsets.zero),
+                  data: SwitchTheme.of(context)
+                      .copyWith(padding: EdgeInsets.zero),
                   child: SwitchListTile(
                     materialTapTargetSize: MaterialTapTargetSize.padded,
                     secondary: const Icon(Icons.dark_mode_outlined),
@@ -395,6 +395,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _importAdBlock,
                 ),
               ),
+              row(
+                ListTile(
+                  leading: Icon(
+                    Icons.domain_disabled_outlined,
+                    color: widget.state.blockedDomains.isNotEmpty
+                        ? scheme.primary
+                        : null,
+                  ),
+                  title: const Text('域名黑名单'),
+                  subtitle: Text(
+                    widget.state.blockedDomains.isEmpty
+                        ? '未拦截任何域名'
+                        : '已拦截 ${widget.state.blockedDomains.length} 个域名',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          DomainBlacklistScreen(state: widget.state),
+                    ),
+                  ),
+                ),
+              ),
               const _Header('关于'),
               row(
                 const ListTile(
@@ -406,10 +431,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 6, 24, 24),
                 child: Text(
                   '本地规则工具 · 不提供漫画内容',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: 11,
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ),
             ],
