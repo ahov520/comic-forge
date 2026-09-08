@@ -1,8 +1,10 @@
+import 'package:comic_forge/backup_service.dart';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/shelf_update_notifications.dart';
 import 'package:comic_forge/state/shelf_update_schedule.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
+import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +18,9 @@ Future<void> _showSettings(
   Brightness brightness = Brightness.light,
   Size size = const Size(320, 640),
   double textScale = 2,
+  Future<bool> Function(String fileName, String text)? saveLocalBackup,
+  Future<void> Function(String fileName, String text)? shareLocalBackup,
+  Future<String?> Function()? pickLocalBackup,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -30,7 +35,14 @@ Future<void> _showSettings(
         ).copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
-      home: Scaffold(body: SettingsScreen(state: state)),
+      home: Scaffold(
+        body: SettingsScreen(
+          state: state,
+          saveLocalBackup: saveLocalBackup,
+          shareLocalBackup: shareLocalBackup,
+          pickLocalBackup: pickLocalBackup,
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -249,4 +261,101 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    '非 Android 不显示本地备份入口',
+    (tester) async {
+      await _showSettings(tester, state);
+      expect(find.text('导出本地备份'), findsNothing);
+      expect(find.text('导入本地备份'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.linux,
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+    }),
+  );
+
+  testWidgets(
+    'Android 显示本地备份入口',
+    (tester) async {
+      await _showSettings(
+        tester,
+        state,
+        size: const Size(340, 1400),
+        textScale: 1,
+      );
+      await tester.scrollUntilVisible(find.text('导出本地备份'), 200);
+      expect(find.text('导出本地备份'), findsOneWidget);
+      expect(find.text('导入本地备份'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
+
+  testWidgets(
+    'Android 导出可分享或保存，导入可选择合并或覆盖',
+    (tester) async {
+      String? sharedName;
+      String? savedName;
+      var imported = false;
+      state.sources.add(
+        ComicSource.fromPpcatFlat({
+          'bookSourceName': '源A',
+          'bookSourceUrl': 'https://m.example.com/a',
+          'ruleSearchUrl': '/s',
+        }),
+      );
+      final backup = BackupService.exportJson(state);
+      await _showSettings(
+        tester,
+        state,
+        size: const Size(340, 1400),
+        textScale: 1,
+        shareLocalBackup: (name, text) async {
+          sharedName = name;
+          expect(text, contains('"app":"comic-forge"'));
+        },
+        saveLocalBackup: (name, text) async {
+          savedName = name;
+          expect(text, contains('"bookmarks"'));
+          return true;
+        },
+        pickLocalBackup: () async => backup,
+      );
+      await tester.scrollUntilVisible(find.text('导出本地备份'), 200);
+      await tester.tap(find.text('导出本地备份'));
+      await tester.pumpAndSettle();
+      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('保存到文件'), findsOneWidget);
+      await tester.tap(find.text('分享'));
+      await tester.pumpAndSettle();
+      expect(sharedName, startsWith('comic-forge-backup-'));
+      expect(find.textContaining('已分享备份'), findsWidgets);
+
+      await tester.tap(find.text('导出本地备份'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存到文件'));
+      await tester.pumpAndSettle();
+      expect(savedName, startsWith('comic-forge-backup-'));
+
+      await tester.scrollUntilVisible(find.text('导入本地备份'), 80);
+      await tester.tap(find.text('导入本地备份'));
+      await tester.pumpAndSettle();
+      expect(find.text('合并导入'), findsOneWidget);
+      expect(find.text('覆盖导入'), findsOneWidget);
+      await tester.tap(find.text('合并导入'));
+      await tester.pumpAndSettle();
+      imported = true;
+      expect(imported, isTrue);
+      expect(find.textContaining('合并完成'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
 }
