@@ -62,7 +62,10 @@ void main() {
   }
 
   Future<void> openStats(WidgetTester tester) async {
-    final entry = find.byKey(const Key('detail-reading-stats'));
+    final entry = find.byKey(
+      const Key('detail-reading-stats'),
+      skipOffstage: false,
+    );
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
     await tester.tap(entry);
@@ -78,9 +81,7 @@ void main() {
     expect(screen.sources, state.sources);
   }
 
-  testWidgets('详情页入口直达该书统计，区分同名漫画的来源和链接，返回后仍在详情', (
-    tester,
-  ) async {
+  testWidgets('详情页入口直达该书统计，区分同名漫画的来源和链接，返回后仍在详情', (tester) async {
     await record(book, 3);
     await record(otherSource, 20);
     await record(otherUrl, 40);
@@ -109,9 +110,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('该书无记录时显示专属空态，新增或更新记录后实时刷新且始终只显示该书', (
-    tester,
-  ) async {
+  testWidgets('该书无记录时显示专属空态，新增或更新记录后实时刷新且始终只显示该书', (tester) async {
     await record(otherSource, 20);
     await record(otherUrl, 40);
     await showDetail(tester);
@@ -147,20 +146,27 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('空目录与源停用仍可进入统计，窄屏大字号入口和数据可滚动', (
-    tester,
-  ) async {
+  testWidgets('空目录仍显示阅读统计入口并可打开该书空态', (tester) async {
+    await showDetail(tester, chapters: const []);
+    expect(find.text('暂无章节'), findsOneWidget);
+    expect(find.text('开始阅读'), findsNothing);
+    await openStats(tester);
+    expect(find.text('这本漫画还没有阅读统计'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('源停用时仍可从离线详情进入统计，窄屏大字号入口和数据可滚动', (tester) async {
     tester.view.physicalSize = const Size(320, 480);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await record(book, 20);
-    await state.saveDetailCache(book, const []);
+    await state.saveDetailCache(book, [chapter]);
     await state.toggleSource('stats');
-    await showDetail(tester, chapters: const [], textScale: 2);
+    await showDetail(tester, textScale: 2);
 
-    expect(find.text('暂无章节'), findsOneWidget);
-    expect(find.byKey(const Key('detail-reading-stats')), findsOneWidget);
+    expect(find.text('启用漫画源'), findsOneWidget);
     await openStats(tester);
 
     await tester.scrollUntilVisible(find.text('统计源'), 160);

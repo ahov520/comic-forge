@@ -472,33 +472,37 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               body: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(
-                    child: DetailHero(
-                      book: book,
-                      sourceName: sourceName,
-                      switchCount: _switchCount,
-                      onSwitchSource: canRead ? _showSwitchSourceSheet : null,
-                      readLabel: readLabel,
-                      readHint: canRead || hasOffline ? null : recoveryHint,
-                      readIcon: canRead || hasOffline
-                          ? Icons.play_arrow_rounded
-                          : recoveryIcon,
-                      onRead: readLabel == null
-                          ? null
-                          : (canRead || hasOffline
-                                ? () => openAt(readIndex)
-                                : recoverSource),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: ListTile(
-                        key: const Key('detail-reading-stats'),
-                        leading: const Icon(Icons.bar_chart_outlined),
-                        title: const Text('阅读统计'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _openReadingStats(book),
-                      ),
+                    child: Column(
+                      children: [
+                        DetailHero(
+                          book: book,
+                          sourceName: sourceName,
+                          switchCount: _switchCount,
+                          onSwitchSource: canRead
+                              ? _showSwitchSourceSheet
+                              : null,
+                          readLabel: readLabel,
+                          readHint: canRead || hasOffline ? null : recoveryHint,
+                          readIcon: canRead || hasOffline
+                              ? Icons.play_arrow_rounded
+                              : recoveryIcon,
+                          onRead: readLabel == null
+                              ? null
+                              : (canRead || hasOffline
+                                    ? () => openAt(readIndex)
+                                    : recoverSource),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: ListTile(
+                            key: const Key('detail-reading-stats'),
+                            leading: const Icon(Icons.bar_chart_outlined),
+                            title: const Text('阅读统计'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _openReadingStats(book),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   SliverToBoxAdapter(
