@@ -38,7 +38,9 @@ class _ShelfScreenState extends State<ShelfScreen> {
   int _filter = 0;
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
+  final _selected = <String>{};
   String _query = '';
+  bool _selecting = false;
 
   @override
   void dispose() {
@@ -82,61 +84,87 @@ class _ShelfScreenState extends State<ShelfScreen> {
     );
   }
 
-  void _showBookActions(Book book) {
+  List<Book> _selectedBooks() => [
+    for (final book in widget.state.shelf)
+      if (_selected.contains(book.bookUrl)) book,
+  ];
+
+  void _enterSelection([Book? book]) {
     FocusScope.of(context).unfocus();
-    showModalBottomSheet<void>(
+    setState(() {
+      _selecting = true;
+      if (book != null) _selected.add(book.bookUrl);
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+    });
+  }
+
+  void _toggleSelected(Book book) {
+    setState(() {
+      if (!_selected.remove(book.bookUrl)) _selected.add(book.bookUrl);
+    });
+  }
+
+  void _toggleSelectVisible(List<Book> books) {
+    setState(() {
+      final urls = books.map((book) => book.bookUrl).toSet();
+      if (urls.isNotEmpty && urls.every(_selected.contains)) {
+        _selected.removeAll(urls);
+      } else {
+        _selected.addAll(urls);
+      }
+    });
+  }
+
+  Future<void> _batchGroups() async {
+    final books = _selectedBooks();
+    if (books.isEmpty) return;
+    await showShelfGroupPickerFor(context, widget.state, books);
+  }
+
+  Future<void> _batchClearUpdates() async {
+    final books = _selectedBooks();
+    if (books.isEmpty) return;
+    await widget.state.clearShelfUpdatesFor(books);
+  }
+
+  Future<void> _batchRemove() async {
+    final books = _selectedBooks();
+    if (books.isEmpty) return;
+    final confirmed = await showDialog<bool>(
       context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: ListView(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Text(
-                book.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_outlined),
-              title: const Text('设置分组'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                showShelfGroupPicker(context, widget.state, book);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart_outlined),
-              title: const Text('阅读统计'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                Navigator.of(context).push<void>(
-                  MaterialPageRoute(
-                    builder: (_) => ComicReadingStatsScreen(
-                      stats: widget.state.readingStats,
-                      sources: widget.state.sources,
-                      book: book,
-                    ),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.done_all),
-              title: const Text('清除更新角标'),
-              subtitle: const Text('保留阅读进度，新章节更新后再次提醒'),
-              enabled: widget.state.shelfUpdateFor(book) != null,
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                widget.state.clearShelfUpdate(book);
-              },
-            ),
-          ],
+      builder: (context) => AlertDialog(
+        title: const Text('移出书架'),
+        content: Text('将选中的 ${books.length} 本漫画移出书架？阅读进度、历史和统计会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移出'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await widget.state.removeShelfBooks(books);
+    if (mounted) _exitSelection();
+  }
+
+  void _openStats(Book book) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ComicReadingStatsScreen(
+          stats: widget.state.readingStats,
+          sources: widget.state.sources,
+          book: book,
         ),
       ),
     );
@@ -153,355 +181,500 @@ class _ShelfScreenState extends State<ShelfScreen> {
           query: _query,
           kindFilter: _filter,
         );
-        return SafeArea(
-          bottom: false,
-          child: RefreshIndicator(
-            onRefresh: _refreshUpdates,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                    child: Row(
-                      children: [
-                        const Expanded(child: ScreenTitle('书架')),
-                        IconButton(
-                          tooltip: '检查书架更新',
-                          onPressed:
-                              widget.state.checkingShelfUpdates ||
-                                  widget.state.shelf.isEmpty
-                              ? null
-                              : _refreshUpdates,
-                          icon: widget.state.checkingShelfUpdates
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+        final selectedBooks = _selectedBooks();
+        final visibleUrls = books.map((book) => book.bookUrl).toSet();
+        final allVisibleSelected =
+            visibleUrls.isNotEmpty && visibleUrls.every(_selected.contains);
+        final canClearUpdates = selectedBooks.any(
+          (book) => widget.state.shelfUpdateFor(book) != null,
+        );
+        return PopScope(
+          canPop: !_selecting,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && _selecting) _exitSelection();
+          },
+          child: SafeArea(
+            bottom: false,
+            child: RefreshIndicator(
+              notificationPredicate: (_) => !_selecting,
+              onRefresh: _refreshUpdates,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                      child: _selecting
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      tooltip: '退出多选',
+                                      onPressed: _exitSelection,
+                                      icon: const Icon(Icons.close),
+                                    ),
+                                    Expanded(
+                                      child: ScreenTitle(
+                                        '已选 ${selectedBooks.length}',
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: allVisibleSelected
+                                          ? '取消全选'
+                                          : '全选',
+                                      onPressed: books.isEmpty
+                                          ? null
+                                          : () => _toggleSelectVisible(books),
+                                      icon: Icon(
+                                        allVisibleSelected
+                                            ? Icons.deselect
+                                            : Icons.select_all,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      TextButton(
+                                        onPressed: selectedBooks.isEmpty
+                                            ? null
+                                            : _batchGroups,
+                                        child: const Text('设置分组'),
+                                      ),
+                                      TextButton(
+                                        onPressed: canClearUpdates
+                                            ? _batchClearUpdates
+                                            : null,
+                                        child: const Text('清除更新角标'),
+                                      ),
+                                      TextButton(
+                                        onPressed: selectedBooks.length == 1
+                                            ? () => _openStats(
+                                                selectedBooks.single,
+                                              )
+                                            : null,
+                                        child: const Text('阅读统计'),
+                                      ),
+                                      TextButton(
+                                        onPressed: selectedBooks.isEmpty
+                                            ? null
+                                            : _batchRemove,
+                                        child: const Text('移出书架'),
+                                      ),
+                                    ],
                                   ),
-                                )
-                              : const Icon(Icons.refresh),
-                        ),
-                        PopupMenuButton<ShelfSort>(
-                          tooltip: '排序：${widget.state.shelfSort.label}',
-                          initialValue: widget.state.shelfSort,
-                          onSelected: _setSort,
-                          itemBuilder: (_) => [
-                            for (final sort in ShelfSort.values)
-                              PopupMenuItem(
-                                value: sort,
-                                child: Text(sort.label),
-                              ),
-                          ],
-                          icon: const Icon(Icons.sort),
-                        ),
-                        PopupMenuButton<String>(
-                          tooltip: '书架操作',
-                          onSelected: (action) {
-                            if (action == 'groups') {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ShelfGroupsScreen(state: widget.state),
                                 ),
-                              );
-                            } else if (action == 'history') {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ReadingHistoryScreen(state: widget.state),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                const Expanded(child: ScreenTitle('书架')),
+                                IconButton(
+                                  tooltip: '检查书架更新',
+                                  onPressed:
+                                      widget.state.checkingShelfUpdates ||
+                                          widget.state.shelf.isEmpty
+                                      ? null
+                                      : _refreshUpdates,
+                                  icon: widget.state.checkingShelfUpdates
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.refresh),
                                 ),
-                              );
-                            } else if (action == 'downloads') {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      DownloadsScreen(state: widget.state),
+                                PopupMenuButton<ShelfSort>(
+                                  tooltip: '排序：${widget.state.shelfSort.label}',
+                                  initialValue: widget.state.shelfSort,
+                                  onSelected: _setSort,
+                                  itemBuilder: (_) => [
+                                    for (final sort in ShelfSort.values)
+                                      PopupMenuItem(
+                                        value: sort,
+                                        child: Text(sort.label),
+                                      ),
+                                  ],
+                                  icon: const Icon(Icons.sort),
                                 ),
-                              );
-                            } else {
-                              widget.state.clearShelfUpdates();
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(
-                              value: 'groups',
-                              child: Text('分组管理'),
+                                if (widget.state.shelf.isNotEmpty)
+                                  IconButton(
+                                    tooltip: '批量管理',
+                                    onPressed: books.isEmpty
+                                        ? null
+                                        : _enterSelection,
+                                    icon: const Icon(Icons.checklist),
+                                  ),
+                                PopupMenuButton<String>(
+                                  tooltip: '书架操作',
+                                  onSelected: (action) {
+                                    if (action == 'select') {
+                                      _enterSelection();
+                                    } else if (action == 'groups') {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => ShelfGroupsScreen(
+                                            state: widget.state,
+                                          ),
+                                        ),
+                                      );
+                                    } else if (action == 'history') {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => ReadingHistoryScreen(
+                                            state: widget.state,
+                                          ),
+                                        ),
+                                      );
+                                    } else if (action == 'downloads') {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => DownloadsScreen(
+                                            state: widget.state,
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      widget.state.clearShelfUpdates();
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem(
+                                      value: 'select',
+                                      enabled: books.isNotEmpty,
+                                      child: const Text('批量管理'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'groups',
+                                      child: Text('分组管理'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'history',
+                                      child: Text('阅读历史'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'downloads',
+                                      child: Text('下载管理'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'clear',
+                                      enabled: widget.state.shelf.any(
+                                        (b) =>
+                                            widget.state.shelfUpdateFor(b) !=
+                                            null,
+                                      ),
+                                      child: const Text('清除全部更新角标'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            const PopupMenuItem(
-                              value: 'history',
-                              child: Text('阅读历史'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'downloads',
-                              child: Text('下载管理'),
-                            ),
-                            PopupMenuItem(
-                              value: 'clear',
-                              enabled: widget.state.shelf.any(
-                                (b) => widget.state.shelfUpdateFor(b) != null,
-                              ),
-                              child: const Text('清除全部更新角标'),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        labelText: '搜索书架',
-                        hintText: '漫画名或作者',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: '清空搜索',
-                                icon: const Icon(Icons.clear),
-                                onPressed: _clearSearch,
-                              ),
-                      ),
-                      textInputAction: TextInputAction.search,
-                      onChanged: _search,
-                    ),
-                  ),
-                ),
-                if (widget.state.shelfGroups.groups.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      child: DropdownButtonFormField<String>(
-                        key: ValueKey(widget.state.shelfGroups.filter),
-                        initialValue: widget.state.shelfGroups.filter ?? 'all',
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: '书架分组',
-                          isDense: true,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          labelText: '搜索书架',
+                          hintText: '漫画名或作者',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: '清空搜索',
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: _clearSearch,
+                                ),
                         ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('全部分组'),
-                          ),
-                          const DropdownMenuItem(value: '', child: Text('未分组')),
-                          for (final group in widget.state.shelfGroups.groups)
-                            DropdownMenuItem(
-                              value: group.id,
-                              child: Text(
-                                group.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (id) => widget.state.shelfGroups
-                            .selectFilter(id == 'all' ? null : id),
+                        textInputAction: TextInputAction.search,
+                        onChanged: _search,
                       ),
                     ),
                   ),
-                SliverToBoxAdapter(
-                  child: FilterChipRow(
-                    children: ['全部', '连载中', '已完结']
-                        .asMap()
-                        .entries
-                        .map(
-                          (e) => FilterChoiceChip(
-                            label: Text(
-                              e.value,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                  if (widget.state.shelfGroups.groups.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(widget.state.shelfGroups.filter),
+                          initialValue:
+                              widget.state.shelfGroups.filter ?? 'all',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '书架分组',
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'all',
+                              child: Text('全部分组'),
                             ),
-                            selected: _filter == e.key,
-                            onSelected: (_) => setState(() => _filter = e.key),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-                if (books.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: widget.state.shelf.isEmpty
-                        ? EmptyStateView(
-                            icon: Icons.collections_bookmark_outlined,
-                            title: '书架还没有漫画',
-                            message: '收藏喜欢的漫画，在这里继续上次的阅读。',
-                            actionLabel: '去探索',
-                            onAction: widget.onExplore,
-                          )
-                        : EmptyStateView(
-                            icon: Icons.filter_list_outlined,
-                            title: _query.isEmpty ? '这个分类还没有漫画' : '没有匹配的漫画',
-                            message: _query.isEmpty
-                                ? '试试其他分类，或查看书架中的全部漫画。'
-                                : '当前分组与分类下未找到匹配漫画，试试其他漫画名或作者，或清空搜索。',
-                            actionLabel: _query.isEmpty ? '查看全部' : '清空搜索',
-                            onAction: () {
-                              if (_query.isNotEmpty) {
-                                _clearSearch();
-                                return;
-                              }
-                              setState(() => _filter = 0);
-                              widget.state.shelfGroups.selectFilter(null);
-                            },
-                          ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    sliver: SliverLayoutBuilder(
-                      builder: (context, constraints) {
-                        final columns = math.max(
-                          1,
-                          (constraints.crossAxisExtent / (120 + 12)).ceil(),
-                        );
-                        final coverWidth =
-                            (constraints.crossAxisExtent - 12 * (columns - 1)) /
-                            columns;
-                        return SliverGrid(
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                mainAxisExtent:
-                                    coverWidth / _coverAspectRatio +
-                                    6 +
-                                    titleHeight,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text('未分组'),
+                            ),
+                            for (final group in widget.state.shelfGroups.groups)
+                              DropdownMenuItem(
+                                value: group.id,
+                                child: Text(
+                                  group.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                          delegate: SliverChildBuilderDelegate((context, i) {
-                            final b = books[i];
-                            final update = widget.state.shelfUpdateFor(b);
-                            final prog = widget.state.progress[b.bookUrl];
-                            final progLabel =
-                                prog == null || prog.chapterTitle.isEmpty
-                                ? ''
-                                : prog.chapterTitle;
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onLongPress: () => _showBookActions(b),
-                              onTap: () {
-                                FocusScope.of(context).unfocus();
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => BookDetailScreen(
-                                      book: b,
-                                      appState: widget.state,
-                                    ),
-                                  ),
-                                );
+                          ],
+                          onChanged: (id) => widget.state.shelfGroups
+                              .selectFilter(id == 'all' ? null : id),
+                        ),
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: FilterChipRow(
+                      children: ['全部', '连载中', '已完结']
+                          .asMap()
+                          .entries
+                          .map(
+                            (e) => FilterChoiceChip(
+                              label: Text(
+                                e.value,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              selected: _filter == e.key,
+                              onSelected: (_) =>
+                                  setState(() => _filter = e.key),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  if (books.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: widget.state.shelf.isEmpty
+                          ? EmptyStateView(
+                              icon: Icons.collections_bookmark_outlined,
+                              title: '书架还没有漫画',
+                              message: '收藏喜欢的漫画，在这里继续上次的阅读。',
+                              actionLabel: '去探索',
+                              onAction: widget.onExplore,
+                            )
+                          : EmptyStateView(
+                              icon: Icons.filter_list_outlined,
+                              title: _query.isEmpty ? '这个分类还没有漫画' : '没有匹配的漫画',
+                              message: _query.isEmpty
+                                  ? '试试其他分类，或查看书架中的全部漫画。'
+                                  : '当前分组与分类下未找到匹配漫画，试试其他漫画名或作者，或清空搜索。',
+                              actionLabel: _query.isEmpty ? '查看全部' : '清空搜索',
+                              onAction: () {
+                                if (_query.isNotEmpty) {
+                                  _clearSearch();
+                                  return;
+                                }
+                                setState(() => _filter = 0);
+                                widget.state.shelfGroups.selectFilter(null);
                               },
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  AspectRatio(
-                                    aspectRatio: _coverAspectRatio,
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Stack(
-                                        children: [
-                                          Positioned.fill(
-                                            child: BookCover(url: b.coverUrl),
-                                          ),
-                                          if (update != null)
-                                            Positioned(
-                                              top: 6,
-                                              left: 6,
-                                              right: 6,
-                                              child: Align(
-                                                alignment: Alignment.topLeft,
-                                                child: Tooltip(
-                                                  message:
-                                                      '${update.latestTitle}\n长按封面可清除角标',
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 3,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.primary,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
+                            ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      sliver: SliverLayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = math.max(
+                            1,
+                            (constraints.crossAxisExtent / (120 + 12)).ceil(),
+                          );
+                          final coverWidth =
+                              (constraints.crossAxisExtent -
+                                  12 * (columns - 1)) /
+                              columns;
+                          return SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  mainAxisExtent:
+                                      coverWidth / _coverAspectRatio +
+                                      6 +
+                                      titleHeight,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                ),
+                            delegate: SliverChildBuilderDelegate((context, i) {
+                              final b = books[i];
+                              final update = widget.state.shelfUpdateFor(b);
+                              final prog = widget.state.progress[b.bookUrl];
+                              final progLabel =
+                                  prog == null || prog.chapterTitle.isEmpty
+                                  ? ''
+                                  : prog.chapterTitle;
+                              return InkWell(
+                                key: ValueKey('shelf-book-${b.bookUrl}'),
+                                borderRadius: BorderRadius.circular(12),
+                                onLongPress: () {
+                                  if (_selecting) {
+                                    setState(() => _selected.add(b.bookUrl));
+                                  } else {
+                                    _enterSelection(b);
+                                  }
+                                },
+                                onTap: () {
+                                  FocusScope.of(context).unfocus();
+                                  if (_selecting) {
+                                    _toggleSelected(b);
+                                    return;
+                                  }
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => BookDetailScreen(
+                                        book: b,
+                                        appState: widget.state,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    AspectRatio(
+                                      aspectRatio: _coverAspectRatio,
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Stack(
+                                          children: [
+                                            Positioned.fill(
+                                              child: BookCover(url: b.coverUrl),
+                                            ),
+                                            if (update != null)
+                                              Positioned(
+                                                top: 6,
+                                                left: 6,
+                                                right: 6,
+                                                child: Align(
+                                                  alignment: Alignment.topLeft,
+                                                  child: Tooltip(
+                                                    message:
+                                                        '${update.latestTitle}\n长按封面可批量管理',
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 3,
                                                           ),
-                                                    ),
-                                                    child: FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      child: Text(
-                                                        update.label,
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .onPrimary,
+                                                      decoration: BoxDecoration(
+                                                        color: Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              6,
+                                                            ),
+                                                      ),
+                                                      child: FittedBox(
+                                                        fit: BoxFit.scaleDown,
+                                                        child: Text(
+                                                          update.label,
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color:
+                                                                Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .colorScheme
+                                                                    .onPrimary,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                          if (progLabel.isNotEmpty)
-                                            Positioned(
-                                              left: 0,
-                                              right: 0,
-                                              bottom: 0,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 2,
+                                            if (progLabel.isNotEmpty)
+                                              Positioned(
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 2,
+                                                      ),
+                                                  color: Colors.black54,
+                                                  child: Text(
+                                                    progLabel,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.white,
                                                     ),
-                                                color: Colors.black54,
-                                                child: Text(
-                                                  progLabel,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                        ],
+                                            if (_selecting)
+                                              Positioned(
+                                                top: 6,
+                                                right: 6,
+                                                child: Icon(
+                                                  _selected.contains(b.bookUrl)
+                                                      ? Icons.check_circle
+                                                      : Icons.circle_outlined,
+                                                  color:
+                                                      _selected.contains(
+                                                        b.bookUrl,
+                                                      )
+                                                      ? Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary
+                                                      : Colors.white,
+                                                  shadows: const [
+                                                    Shadow(
+                                                      color: Colors.black54,
+                                                      blurRadius: 4,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Tooltip(
-                                    message: b.name,
-                                    child: Text(
-                                      b.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: titleStyle,
+                                    const SizedBox(height: 6),
+                                    Tooltip(
+                                      message: b.name,
+                                      child: Text(
+                                        b.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: titleStyle,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }, childCount: books.length),
-                        );
-                      },
+                                  ],
+                                ),
+                              );
+                            }, childCount: books.length),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         );

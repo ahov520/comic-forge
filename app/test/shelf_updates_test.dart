@@ -146,6 +146,25 @@ void main() {
     expect(restored.shelfUpdateFor(b), isNull);
   });
 
+  test('按选中漫画清除角标，其它书与阅读进度不变', () async {
+    final a = book('a');
+    final b = book('b');
+    for (final item in [a, b]) {
+      await state.toggleShelf(item);
+      await state.saveDetailCache(item, chapters(3));
+      await read(item, chapters(3), 0);
+    }
+    await state.clearShelfUpdatesFor([a, a]);
+    expect(state.shelfUpdateFor(a), isNull);
+    expect(state.shelfUpdateFor(b)?.unreadCount, 2);
+    expect(state.progressFor(a.bookUrl)?.chapterIndex, 0);
+    final restored = AppState();
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.shelfUpdateFor(a), isNull);
+    expect(restored.shelfUpdateFor(b)?.unreadCount, 2);
+  });
+
   test('部分刷新失败保留旧目录，重复检查共用请求，移除的书不复活', () async {
     final a = book('ok');
     final b = book('fail');
@@ -199,6 +218,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('未读 2'), findsNothing);
     expect(state.progressFor(b.bookUrl)?.chapterIndex, 0);
+    await tester.tap(find.byTooltip('退出多选'));
+    await tester.pumpAndSettle();
 
     await state.saveDetailCache(b, chapters(4));
     await tester.pumpAndSettle();
