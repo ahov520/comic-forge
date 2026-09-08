@@ -41,24 +41,24 @@ class ReadingProgress {
   final int at;
 
   Map<String, dynamic> toJson() => {
-        'bookUrl': bookUrl,
-        'sourceId': sourceId,
-        'chapterUrl': chapterUrl,
-        'chapterTitle': chapterTitle,
-        'chapterIndex': chapterIndex,
-        'chapterCount': chapterCount,
-        'at': at,
-      };
+    'bookUrl': bookUrl,
+    'sourceId': sourceId,
+    'chapterUrl': chapterUrl,
+    'chapterTitle': chapterTitle,
+    'chapterIndex': chapterIndex,
+    'chapterCount': chapterCount,
+    'at': at,
+  };
 
   static ReadingProgress fromJson(Map<String, dynamic> j) => ReadingProgress(
-        bookUrl: j['bookUrl'] as String? ?? '',
-        sourceId: j['sourceId'] as String? ?? '',
-        chapterUrl: j['chapterUrl'] as String? ?? '',
-        chapterTitle: j['chapterTitle'] as String? ?? '',
-        chapterIndex: j['chapterIndex'] as int? ?? 0,
-        chapterCount: j['chapterCount'] as int? ?? 0,
-        at: j['at'] as int? ?? 0,
-      );
+    bookUrl: j['bookUrl'] as String? ?? '',
+    sourceId: j['sourceId'] as String? ?? '',
+    chapterUrl: j['chapterUrl'] as String? ?? '',
+    chapterTitle: j['chapterTitle'] as String? ?? '',
+    chapterIndex: j['chapterIndex'] as int? ?? 0,
+    chapterCount: j['chapterCount'] as int? ?? 0,
+    at: j['at'] as int? ?? 0,
+  );
 }
 
 /// 书籍详情离线缓存（章节目录 stale-while-revalidate）。
@@ -70,19 +70,19 @@ class CachedDetail {
   final int at;
 
   Map<String, dynamic> toJson() => {
-        'book': book.toJson(),
-        'chapters': chapters.map((c) => c.toJson()).toList(),
-        'at': at,
-      };
+    'book': book.toJson(),
+    'chapters': chapters.map((c) => c.toJson()).toList(),
+    'at': at,
+  };
 
   static CachedDetail fromJson(Map<String, dynamic> j) => CachedDetail(
-        book: Book.fromJson(j['book'] as Map<String, dynamic>),
-        chapters: (j['chapters'] as List? ?? [])
-            .whereType<Map<String, dynamic>>()
-            .map(Chapter.fromJson)
-            .toList(),
-        at: j['at'] as int? ?? 0,
-      );
+    book: Book.fromJson(j['book'] as Map<String, dynamic>),
+    chapters: (j['chapters'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(Chapter.fromJson)
+        .toList(),
+    at: j['at'] as int? ?? 0,
+  );
 }
 
 /// 全局应用状态：源库、书架、订阅仓库。
@@ -169,7 +169,8 @@ class AppState extends ChangeNotifier {
 
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final List<ReadingHistoryEntry> _readingHistory = [];
-  List<ReadingHistoryEntry> get readingHistory => List.unmodifiable(_readingHistory);
+  List<ReadingHistoryEntry> get readingHistory =>
+      List.unmodifiable(_readingHistory);
   final List<ChapterBookmark> _chapterBookmarks = [];
   int _bookmarkWrite = 0;
   List<ChapterBookmark> get chapterBookmarks =>
@@ -179,20 +180,26 @@ class AppState extends ChangeNotifier {
   final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
   /// 广告拦截规则（null = 未启用）。
   AdBlockRules? adBlock;
+
   /// 当前生效的域名黑名单（规范化主机，与 [SourceService.networkPolicy] 同步）。
   List<String> get blockedDomains => SourceService.instance.networkPolicy.hosts;
+
   /// WebDAV 配置（url/user/pass/path；明文存本地，仅本机使用）。
   Map<String, String>? webDavConfig;
   bool darkMode = true;
+
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
+
   /// 章内滚动位置（key=章节 url；LRU 上限 200 条，跨重启记忆）。
   final Map<String, SavedScrollPosition> scrollOffsets = {};
   // 按最近保存顺序记住至多 200 话的翻页位置，与滚动偏移分别保留。
   final Map<String, int> _readerPages = {};
   int _lastAutoProbeAt = 0;
+
   /// 阅读模式：scroll = 连续滚动；paged = 左右翻页。
   String readerMode = 'scroll';
+
   /// 音量键翻页（Android，翻页模式/滚动模式都可用）。
   bool readerVolumeKeys = false;
 
@@ -203,45 +210,74 @@ class AppState extends ChangeNotifier {
     _restoreSearchHistory(sp.get(_kSearchHistory));
     final filterData = sp.get(_kSearchFilters);
     try {
-      _searchFilters = SearchFilters.fromJson(filterData is String ? jsonDecode(filterData) : null);
+      _searchFilters = SearchFilters.fromJson(
+        filterData is String ? jsonDecode(filterData) : null,
+      );
     } on FormatException {
       _searchFilters = SearchFilters();
     }
     _shelfSort = ShelfSort.parse(sp.get(_kShelfSort));
     sources
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kSources) ?? '[]') as List)
-          .whereType<Map<String, dynamic>>()
-          .map(ComicSource.fromJson));
+      ..addAll(
+        (jsonDecode(sp.getString(_kSources) ?? '[]') as List)
+            .whereType<Map<String, dynamic>>()
+            .map(ComicSource.fromJson),
+      );
     repos
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kRepos) ?? '[]') as List).cast<String>());
+      ..addAll(
+        (jsonDecode(sp.getString(_kRepos) ?? '[]') as List).cast<String>(),
+      );
     shelf
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kShelf) ?? '[]') as List)
-          .whereType<Map<String, dynamic>>()
-          .map(Book.fromJson));
+      ..addAll(
+        (jsonDecode(sp.getString(_kShelf) ?? '[]') as List)
+            .whereType<Map<String, dynamic>>()
+            .map(Book.fromJson),
+      );
     await shelfGroups.load(shelf.map((book) => book.bookUrl));
     progress
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kProgress) ?? '{}') as Map<String, dynamic>)
-          .map((k, v) => MapEntry(
-              k, ReadingProgress.fromJson(v as Map<String, dynamic>))));
+      ..addAll(
+        (jsonDecode(sp.getString(_kProgress) ?? '{}') as Map<String, dynamic>)
+            .map(
+              (k, v) => MapEntry(
+                k,
+                ReadingProgress.fromJson(v as Map<String, dynamic>),
+              ),
+            ),
+      );
     detailCache
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kDetailCache) ?? '{}') as Map<String, dynamic>)
-          .map((k, v) =>
-              MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>))));
+      ..addAll(
+        (jsonDecode(sp.getString(_kDetailCache) ?? '{}')
+                as Map<String, dynamic>)
+            .map(
+              (k, v) =>
+                  MapEntry(k, CachedDetail.fromJson(v as Map<String, dynamic>)),
+            ),
+      );
     _restoreShelfUpdates(sp);
     repoLastRefresh
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kRepoRefresh) ?? '{}') as Map<String, dynamic>)
-          .map((k, v) => MapEntry(k, v as int)));
+      ..addAll(
+        (jsonDecode(sp.getString(_kRepoRefresh) ?? '{}')
+                as Map<String, dynamic>)
+            .map((k, v) => MapEntry(k, v as int)),
+      );
     repoUpdates
       ..clear()
-      ..addAll((jsonDecode(sp.getString(_kRepoUpdates) ?? '{}') as Map<String, dynamic>)
-          .map((k, v) =>
-              MapEntry(k, RepoUpdateState.fromJson(v as Map<String, dynamic>))));
+      ..addAll(
+        (jsonDecode(sp.getString(_kRepoUpdates) ?? '{}')
+                as Map<String, dynamic>)
+            .map(
+              (k, v) => MapEntry(
+                k,
+                RepoUpdateState.fromJson(v as Map<String, dynamic>),
+              ),
+            ),
+      );
     final adText = sp.getString(_kAdBlock);
     adBlock = adText == null ? null : AdBlockRules.tryParse(adText);
     SourceService.instance.adBlock = adBlock;
@@ -249,8 +285,9 @@ class AppState extends ChangeNotifier {
     final wd = sp.getString(_kWebDav);
     webDavConfig = wd == null
         ? null
-        : (jsonDecode(wd) as Map<String, dynamic>)
-            .map((k, v) => MapEntry(k, v.toString()));
+        : (jsonDecode(wd) as Map<String, dynamic>).map(
+            (k, v) => MapEntry(k, v.toString()),
+          );
     darkMode = sp.getBool(_kDark) ?? true;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     scrollOffsets.clear();
@@ -292,9 +329,11 @@ class AppState extends ChangeNotifier {
     // 首次启动自动导入内置源快照
     if (sources.isEmpty) {
       await importBuiltinSources();
-    } else if (sources.any((s) =>
-        (s.rules.searchUrl.isEmpty && s.rules.searchList.isNotEmpty) ||
-        s.rules.chapterUrl.isNotEmpty)) {
+    } else if (sources.any(
+      (s) =>
+          (s.rules.searchUrl.isEmpty && s.rules.searchList.isNotEmpty) ||
+          s.rules.chapterUrl.isNotEmpty,
+    )) {
       // 旧版曾漏映射 ruleSearchUrl、错误覆盖 chapterUrl；搜索正常也需检查目录。
       // 升级只修复已有内置源，不重新添加用户删掉的源。
       await _importBuiltinSources(addMissing: false);
@@ -311,12 +350,14 @@ class AppState extends ChangeNotifier {
     try {
       final decoded = jsonDecode(saved);
       if (decoded is! List) return;
-      _searchHistory.addAll(decoded
-          .whereType<String>()
-          .map((query) => query.trim())
-          .where((query) => query.isNotEmpty)
-          .toSet()
-          .take(_searchHistoryLimit));
+      _searchHistory.addAll(
+        decoded
+            .whereType<String>()
+            .map((query) => query.trim())
+            .where((query) => query.isNotEmpty)
+            .toSet()
+            .take(_searchHistoryLimit),
+      );
     } on FormatException {
       // 历史损坏时从空列表恢复，不影响启动。
     }
@@ -345,7 +386,10 @@ class AppState extends ChangeNotifier {
     _searchFilters = filters;
     notifyListeners();
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kSearchFilters, jsonEncode(_searchFilters.toJson()));
+    await sp.setStringSafe(
+      _kSearchFilters,
+      jsonEncode(_searchFilters.toJson()),
+    );
   }
 
   Future<void> setShelfSort(ShelfSort sort) async {
@@ -375,11 +419,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// 记录阅读进度（打开章节时调用；同一本书只保留最新）。
-  Future<void> saveProgress(Book book,
-      {required String chapterUrl,
-      required String chapterTitle,
-      required int chapterIndex,
-      required int chapterCount}) async {
+  Future<void> saveProgress(
+    Book book, {
+    required String chapterUrl,
+    required String chapterTitle,
+    required int chapterIndex,
+    required int chapterCount,
+  }) async {
     final reading = ReadingProgress(
       bookUrl: book.bookUrl,
       sourceId: book.sourceId ?? '',
@@ -393,9 +439,9 @@ class AppState extends ChangeNotifier {
     _rememberReading(book, reading);
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(
-        _kProgress,
-        jsonEncode(progress
-            .map((k, v) => MapEntry(k, v.toJson()))));
+      _kProgress,
+      jsonEncode(progress.map((k, v) => MapEntry(k, v.toJson()))),
+    );
     await _persistReadingHistory();
     notifyListeners();
   }
@@ -405,13 +451,22 @@ class AppState extends ChangeNotifier {
   Book _historyBook(ReadingProgress reading, {Book? preferred}) {
     final sourceId = reading.sourceId;
     final url = reading.bookUrl;
-    final old = _readingHistory.where((entry) => entry.book.bookUrl == url &&
-        (entry.book.sourceId ?? '') == sourceId).firstOrNull?.book;
+    final old = _readingHistory
+        .where(
+          (entry) =>
+              entry.book.bookUrl == url &&
+              (entry.book.sourceId ?? '') == sourceId,
+        )
+        .firstOrNull
+        ?.book;
     final cached = detailCacheFor(url)?.book;
-    final saved = shelf.where((book) => book.bookUrl == url &&
-        (book.sourceId ?? '') == sourceId).firstOrNull;
-    final base = old ?? saved ??
-        ((cached?.sourceId ?? '') == sourceId ? cached : null);
+    final saved = shelf
+        .where(
+          (book) => book.bookUrl == url && (book.sourceId ?? '') == sourceId,
+        )
+        .firstOrNull;
+    final base =
+        old ?? saved ?? ((cached?.sourceId ?? '') == sourceId ? cached : null);
     final fresh = preferred ?? base ?? Book();
     return Book.fromJson({
       ...?base?.toJson(),
@@ -440,7 +495,8 @@ class AppState extends ChangeNotifier {
     _readingHistory.clear();
     if (saved == null) {
       // 首次升级只迁移一次；已移除的记录不会在下次启动时重新出现。
-      final readings = progress.values.toList()..sort((a, b) => a.at.compareTo(b.at));
+      final readings = progress.values.toList()
+        ..sort((a, b) => a.at.compareTo(b.at));
       for (final reading in readings) {
         _rememberReading(_historyBook(reading), reading);
       }
@@ -455,8 +511,10 @@ class AppState extends ChangeNotifier {
         try {
           if (value is! Map<String, dynamic>) continue;
           final entry = ReadingHistoryEntry.fromJson(value);
-          if (entry.book.bookUrl.isEmpty || entry.chapterIndex < 0 ||
-              entry.chapterCount < 0 || entry.at < 0) {
+          if (entry.book.bookUrl.isEmpty ||
+              entry.chapterIndex < 0 ||
+              entry.chapterCount < 0 ||
+              entry.at < 0) {
             continue;
           }
           entries.add((index, entry));
@@ -469,8 +527,9 @@ class AppState extends ChangeNotifier {
         return byTime == 0 ? a.$1.compareTo(b.$1) : byTime;
       });
       final seen = <String>{};
-      _readingHistory.addAll(entries.map((entry) => entry.$2)
-          .where((entry) => seen.add(entry.key)));
+      _readingHistory.addAll(
+        entries.map((entry) => entry.$2).where((entry) => seen.add(entry.key)),
+      );
     } on FormatException {
       // 历史损坏不影响书架、阅读进度或应用启动。
     }
@@ -478,8 +537,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> _persistReadingHistory() async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kReadingHistory,
-        jsonEncode(_readingHistory.map((entry) => entry.toJson()).toList()));
+    await sp.setStringSafe(
+      _kReadingHistory,
+      jsonEncode(_readingHistory.map((entry) => entry.toJson()).toList()),
+    );
   }
 
   /// 仅从时间线移除，保留书架、章节进度和章内位置以便再次续读。
@@ -565,9 +626,9 @@ class AppState extends ChangeNotifier {
         return byTime == 0 ? a.$1.compareTo(b.$1) : byTime;
       });
       final seen = <String>{};
-      _chapterBookmarks.addAll(entries
-          .map((entry) => entry.$2)
-          .where((entry) => seen.add(entry.key)));
+      _chapterBookmarks.addAll(
+        entries.map((entry) => entry.$2).where((entry) => seen.add(entry.key)),
+      );
     } on FormatException {
       // 书签损坏不影响书架、阅读进度或应用启动。
     }
@@ -733,7 +794,8 @@ class AppState extends ChangeNotifier {
             .runtimeFor(source)
             .detail(book.bookUrl)
             .timeout(const Duration(seconds: 20));
-        if (_disposed || !inShelf(book) ||
+        if (_disposed ||
+            !inShelf(book) ||
             !sources.any((s) => identical(s, source) && s.enabled)) {
           skipped++;
           return;
@@ -763,7 +825,8 @@ class AppState extends ChangeNotifier {
     scrollOffsets[chapterUrl] = (
       offset: offset < 0 ? 0 : offset,
       at: DateTime.now().millisecondsSinceEpoch,
-      width: viewportWidth != null && viewportWidth.isFinite && viewportWidth > 0
+      width:
+          viewportWidth != null && viewportWidth.isFinite && viewportWidth > 0
           ? viewportWidth
           : null,
       topInset: topInset.isFinite && topInset >= 0 ? topInset : 0,
@@ -783,12 +846,16 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(
       _kScrollOffsets,
-      jsonEncode(scrollOffsets.map((k, v) => MapEntry(k, {
-        'v': v.offset,
-        'at': v.at,
-        if (v.width != null) 'w': v.width,
-        if (v.width != null && v.topInset != 0) 'top': v.topInset,
-      }))),
+      jsonEncode(
+        scrollOffsets.map(
+          (k, v) => MapEntry(k, {
+            'v': v.offset,
+            'at': v.at,
+            if (v.width != null) 'w': v.width,
+            if (v.width != null && v.topInset != 0) 'top': v.topInset,
+          }),
+        ),
+      ),
     );
   }
 
@@ -896,14 +963,21 @@ class AppState extends ChangeNotifier {
     final cached = detailCache[bookUrl];
     if (cached != null) return cached;
     final offline = downloads.offlineCatalogFor(bookUrl);
-    return offline == null ? null : CachedDetail(
-      book: offline.book, chapters: offline.chapters, at: offline.at,
-    );
+    return offline == null
+        ? null
+        : CachedDetail(
+            book: offline.book,
+            chapters: offline.chapters,
+            at: offline.at,
+          );
   }
 
   /// 检查一个订阅仓库的更新：重新拉取 store，规则有变则就地更新（保留
   /// 启用/权重/健康），新增源直接追加。[client] 可注入（测试用）。
-  Future<RepoRefreshResult> refreshRepo(String repoUrl, {RepoClient? client}) async {
+  Future<RepoRefreshResult> refreshRepo(
+    String repoUrl, {
+    RepoClient? client,
+  }) async {
     final c = client ?? SourceService.instance.repoClient;
     try {
       final bundle = await c.subscribe(repoUrl);
@@ -912,8 +986,11 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll(r.sources);
       repoLastRefresh[repoUrl] = DateTime.now().millisecondsSinceEpoch;
-      _recordRepoVersion(repoUrl, bundle.meta.ruleVersion,
-          metaAuto: bundle.meta.ruleAuto);
+      _recordRepoVersion(
+        repoUrl,
+        bundle.meta.ruleVersion,
+        metaAuto: bundle.meta.ruleAuto,
+      );
       await _persistRepoMeta();
       await _persistSources();
       notifyListeners();
@@ -926,7 +1003,13 @@ class AppState extends ChangeNotifier {
       );
     } catch (e) {
       final msg = e.toString().split('\n').first;
-      return RepoRefreshResult(repo: repoUrl, added: 0, updated: 0, total: 0, error: msg);
+      return RepoRefreshResult(
+        repo: repoUrl,
+        added: 0,
+        updated: 0,
+        total: 0,
+        error: msg,
+      );
     }
   }
 
@@ -953,8 +1036,9 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(_kRepoRefresh, jsonEncode(repoLastRefresh));
     await sp.setStringSafe(
-        _kRepoUpdates,
-        jsonEncode(repoUpdates.map((k, v) => MapEntry(k, v.toJson()))));
+      _kRepoUpdates,
+      jsonEncode(repoUpdates.map((k, v) => MapEntry(k, v.toJson()))),
+    );
   }
 
   /// 轻量版本检查：只拉各仓库 meta（不拉全量 store），比对 ruleVersion。
@@ -1023,8 +1107,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// 应用一个仓库的待更新版本（等价全量刷新）。
-  Future<RepoRefreshResult> applyRepoUpdate(String repoUrl, {RepoClient? client}) =>
-      refreshRepo(repoUrl, client: client);
+  Future<RepoRefreshResult> applyRepoUpdate(
+    String repoUrl, {
+    RepoClient? client,
+  }) => refreshRepo(repoUrl, client: client);
 
   /// 合并备份载荷：源按 id 替换（备份优先）、书架并集、进度取较新、
   /// 订阅仓库并集。单次持久化 + 单次通知。
@@ -1075,10 +1161,18 @@ class AppState extends ChangeNotifier {
       }
     }
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kSources, jsonEncode(this.sources.map((s) => s.toJson()).toList()));
-    await sp.setStringSafe(_kShelf, jsonEncode(this.shelf.map((e) => e.toJson()).toList()));
-    await sp.setStringSafe(_kProgress,
-        jsonEncode(this.progress.map((k, v) => MapEntry(k, v.toJson()))));
+    await sp.setStringSafe(
+      _kSources,
+      jsonEncode(this.sources.map((s) => s.toJson()).toList()),
+    );
+    await sp.setStringSafe(
+      _kShelf,
+      jsonEncode(this.shelf.map((e) => e.toJson()).toList()),
+    );
+    await sp.setStringSafe(
+      _kProgress,
+      jsonEncode(this.progress.map((k, v) => MapEntry(k, v.toJson()))),
+    );
     await sp.setStringSafe(_kRepos, jsonEncode(this.repos));
     await _persistReadingHistory();
     notifyListeners();
@@ -1106,10 +1200,9 @@ class AppState extends ChangeNotifier {
     // 排序：从未探测（无成败记录）最优先，其次上次成功最早
     int rank(ComicSource s) =>
         (s.lastOkAt == 0 && s.lastFailedAt == 0) ? -1 : s.lastOkAt;
-    final candidates = sources
-        .where((s) => s.enabled && s.rules.searchUrl.isNotEmpty)
-        .toList()
-      ..sort((a, b) => rank(a).compareTo(rank(b)));
+    final candidates =
+        sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty).toList()
+          ..sort((a, b) => rank(a).compareTo(rank(b)));
     final targets = candidates.take(maxSources).toList();
     if (targets.isEmpty) return;
 
@@ -1118,14 +1211,18 @@ class AppState extends ChangeNotifier {
     final okIds = <String>[];
     final errors = <String, String>{};
     for (var i = 0; i < targets.length; i += 8) {
-      await Future.wait(targets.skip(i).take(8).map((s) async {
-        try {
-          await builder(s).search('斗罗大陆').timeout(const Duration(seconds: 10));
-          okIds.add(s.id);
-        } catch (e) {
-          errors[s.id] = e.toString();
-        }
-      }));
+      await Future.wait(
+        targets.skip(i).take(8).map((s) async {
+          try {
+            await builder(
+              s,
+            ).search('斗罗大陆').timeout(const Duration(seconds: 10));
+            okIds.add(s.id);
+          } catch (e) {
+            errors[s.id] = e.toString();
+          }
+        }),
+      );
     }
     await reportSourceHealth(okIds, errors, observedSources: targets);
   }
@@ -1140,8 +1237,9 @@ class AppState extends ChangeNotifier {
     SourceRuntime Function(ComicSource source)? runtimeBuilder,
     void Function(int done, int total)? onProgress,
   }) async {
-    final targets =
-        sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty).toList();
+    final targets = sources
+        .where((s) => s.enabled && s.rules.searchUrl.isNotEmpty)
+        .toList();
     final builder =
         runtimeBuilder ?? (s) => SourceService.instance.runtimeFor(s);
     var done = 0;
@@ -1199,7 +1297,8 @@ class AppState extends ChangeNotifier {
       final needsHeaders = existing.headers.isEmpty && s.headers.isNotEmpty;
       // 仅替换与旧版错误映射完全相同的值，用户自行编辑的章节链接保持原样。
       final legacyChapterUrl = s.raw['ruleChapterUrl'];
-      final needsChapterUrl = legacyChapterUrl is String &&
+      final needsChapterUrl =
+          legacyChapterUrl is String &&
           legacyChapterUrl.isNotEmpty &&
           s.rules.chapterUrl.isNotEmpty &&
           legacyChapterUrl != s.rules.chapterUrl &&
@@ -1240,8 +1339,11 @@ class AppState extends ChangeNotifier {
         : {for (final source in observedSources) source.id: source};
     ComicSource? current(String id) {
       final source = _find(id);
-      return observed == null || identical(source, observed[id]) ? source : null;
+      return observed == null || identical(source, observed[id])
+          ? source
+          : null;
     }
+
     final now = DateTime.now().millisecondsSinceEpoch;
     var changed = false;
     for (final id in okIds) {
@@ -1313,10 +1415,16 @@ class AppState extends ChangeNotifier {
 
   Future<void> _persistSources() async {
     final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kSources, jsonEncode(sources.map((s) => s.toJson()).toList()));
+    await sp.setStringSafe(
+      _kSources,
+      jsonEncode(sources.map((s) => s.toJson()).toList()),
+    );
   }
 
-  Future<void> addRepoSubscribed(String repoUrl, List<ComicSource> imported) async {
+  Future<void> addRepoSubscribed(
+    String repoUrl,
+    List<ComicSource> imported,
+  ) async {
     if (!repos.contains(repoUrl)) repos.add(repoUrl);
     for (final s in imported) {
       sources.removeWhere((e) => e.id == s.id);

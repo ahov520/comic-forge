@@ -23,9 +23,7 @@ void main() {
   late List<Chapter> chapters;
 
   Future<void> openReader(WidgetTester tester) async {
-    final urls = [
-      for (final chapter in chapters) '${chapter.url}/page-1.png',
-    ];
+    final urls = [for (final chapter in chapters) '${chapter.url}/page-1.png'];
     await cacheReaderTestImages(tester, urls);
     await tester.pumpWidget(
       MaterialApp(

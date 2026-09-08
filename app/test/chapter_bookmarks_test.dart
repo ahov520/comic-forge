@@ -17,10 +17,8 @@ void main() {
     sourceId: sourceId ?? source.id,
   );
 
-  Chapter chapter(Book target, int index) => Chapter(
-    title: '第${index + 1}话',
-    url: '${target.bookUrl}/$index',
-  );
+  Chapter chapter(Book target, int index) =>
+      Chapter(title: '第${index + 1}话', url: '${target.bookUrl}/$index');
 
   Future<bool> pin(Book target, int index) => state.toggleChapterBookmark(
     target,

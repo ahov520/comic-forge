@@ -93,22 +93,27 @@ void main() {
     );
     expect(marked.isBookmarked, isTrue);
     expect(
-      tester.widget<ChapterTile>(find.widgetWithText(ChapterTile, '第一话'))
+      tester
+          .widget<ChapterTile>(find.widgetWithText(ChapterTile, '第一话'))
           .isBookmarked,
       isFalse,
     );
 
-    await tester.ensureVisible(find.byKey(const Key('detail-chapter-bookmarks')));
+    await tester.ensureVisible(
+      find.byKey(const Key('detail-chapter-bookmarks')),
+    );
     await tester.tap(find.byKey(const Key('detail-chapter-bookmarks')));
     await tester.pumpAndSettle();
     expect(find.byType(ChapterBookmarkSheet), findsOneWidget);
     expect(find.text('第二话'), findsWidgets);
     expect(find.text('第三话'), findsNothing);
 
-    await tester.tap(find.descendant(
-      of: find.byType(ChapterBookmarkSheet),
-      matching: find.text('第二话'),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ChapterBookmarkSheet),
+        matching: find.text('第二话'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ReaderScreen), findsOneWidget);
     expect(find.text('同名漫画 · 第二话'), findsOneWidget);
@@ -119,7 +124,9 @@ void main() {
   testWidgets('空目录仍显示书签入口，无记录时为空态', (tester) async {
     await showDetail(tester, shownChapters: const []);
     expect(find.text('暂无章节'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('detail-chapter-bookmarks')));
+    await tester.ensureVisible(
+      find.byKey(const Key('detail-chapter-bookmarks')),
+    );
     await tester.tap(find.byKey(const Key('detail-chapter-bookmarks')));
     await tester.pumpAndSettle();
     expect(find.text('还没有书签'), findsOneWidget);

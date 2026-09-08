@@ -171,9 +171,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             final index = bookmark.indexIn(chapters);
             Navigator.of(sheetCtx).pop();
             if (index == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('目录中找不到该书签对应的章节')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('目录中找不到该书签对应的章节')));
               return;
             }
             openAt(index);

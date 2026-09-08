@@ -29,7 +29,8 @@ class ChapterBookmarkSheet extends StatelessWidget {
       builder: (context, _) {
         final bookmarks = state.bookmarksFor(book);
         return Material(
-          color: Theme.of(context).bottomSheetTheme.backgroundColor ??
+          color:
+              Theme.of(context).bottomSheetTheme.backgroundColor ??
               scheme.surface,
           child: SafeArea(
             top: false,
@@ -43,9 +44,7 @@ class ChapterBookmarkSheet extends StatelessWidget {
                     child: Semantics(
                       header: true,
                       child: Text(
-                        bookmarks.isEmpty
-                            ? '书签'
-                            : '书签 · ${bookmarks.length} 话',
+                        bookmarks.isEmpty ? '书签' : '书签 · ${bookmarks.length} 话',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium,
@@ -76,9 +75,7 @@ class ChapterBookmarkSheet extends StatelessWidget {
                         return ListTile(
                           selected: current,
                           leading: Icon(
-                            current
-                                ? Icons.bookmark
-                                : Icons.bookmark_outline,
+                            current ? Icons.bookmark : Icons.bookmark_outline,
                           ),
                           title: Text(
                             bookmark.displayTitle,

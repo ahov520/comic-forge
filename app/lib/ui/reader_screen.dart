@@ -716,7 +716,8 @@ class _ReaderScreenState extends State<ReaderScreen>
                 child: ReaderTopChrome(
                   visible: _chromeVisible,
                   title: _chromeTitle,
-                  bookmarked: widget.appState?.isChapterBookmarked(
+                  bookmarked:
+                      widget.appState?.isChapterBookmarked(
                         widget.book,
                         _chapter,
                       ) ??
@@ -747,17 +748,17 @@ class _ReaderScreenState extends State<ReaderScreen>
       chapterIndex: _index,
     );
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(added ? '已添加书签' : '已移除书签')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(added ? '已添加书签' : '已移除书签')));
   }
 
   void _jumpToBookmark(ChapterBookmark bookmark) {
     final index = bookmark.indexIn(widget.chapters);
     if (index == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('目录中找不到该书签对应的章节')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('目录中找不到该书签对应的章节')));
       return;
     }
     if (index != _index) _loadChapter(index, save: true);
@@ -831,8 +832,10 @@ class _ReaderScreenState extends State<ReaderScreen>
       builder: (sheetCtx) => AnimatedBuilder(
         animation: appState,
         builder: (context, _) {
-          final bookmarked =
-              appState.isChapterBookmarked(widget.book, _chapter);
+          final bookmarked = appState.isChapterBookmarked(
+            widget.book,
+            _chapter,
+          );
           final bookmarkCount = appState.bookmarksFor(widget.book).length;
           return SafeArea(
             top: false,
@@ -842,110 +845,110 @@ class _ReaderScreenState extends State<ReaderScreen>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.brightness_low,
-                      color: Colors.white54,
-                      size: 18,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.brightness_low,
+                        color: Colors.white54,
+                        size: 18,
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: appState.readerBrightness,
+                          min: 0.15,
+                          max: 1.0,
+                          semanticFormatterCallback: (value) =>
+                              '亮度 ${(value * 100).round()}%',
+                          onChanged: appState.setReaderBrightness,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.brightness_high,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '亮度 ${(appState.readerBrightness * 100).round()}%',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const Divider(color: Colors.white24),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'scroll',
+                        icon: Icon(Icons.swap_vert, size: 18),
+                        label: Text('滚动'),
+                      ),
+                      ButtonSegment(
+                        value: 'paged',
+                        icon: Icon(Icons.swap_horiz, size: 18),
+                        label: Text('翻页'),
+                      ),
+                    ],
+                    selected: {appState.readerMode},
+                    onSelectionChanged: (s) => appState.setReaderMode(s.first),
+                  ),
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    activeThumbColor: Colors.white70,
+                    title: const Text(
+                      '音量键翻页',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    Expanded(
-                      child: Slider(
-                        value: appState.readerBrightness,
-                        min: 0.15,
-                        max: 1.0,
-                        semanticFormatterCallback: (value) =>
-                            '亮度 ${(value * 100).round()}%',
-                        onChanged: appState.setReaderBrightness,
+                    subtitle: const Text(
+                      '音量+ 上一页 · 音量- 下一页（Android）',
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                    value: appState.readerVolumeKeys,
+                    onChanged: appState.setReaderVolumeKeys,
+                  ),
+                  const Divider(color: Colors.white24),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      bookmarked ? Icons.bookmark : Icons.bookmark_border,
+                      color: Colors.white70,
+                    ),
+                    title: Text(
+                      bookmarked ? '移除本章书签' : '添加本章书签',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
                       ),
                     ),
-                    const Icon(
-                      Icons.brightness_high,
+                    onTap: () => _toggleBookmark(context),
+                  ),
+                  ListTile(
+                    key: const Key('reader-chapter-bookmarks'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.bookmarks_outlined,
                       color: Colors.white70,
-                      size: 20,
                     ),
-                  ],
-                ),
-                Text(
-                  '亮度 ${(appState.readerBrightness * 100).round()}%',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const Divider(color: Colors.white24),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'scroll',
-                      icon: Icon(Icons.swap_vert, size: 18),
-                      label: Text('滚动'),
+                    title: const Text(
+                      '本书书签',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    ButtonSegment(
-                      value: 'paged',
-                      icon: Icon(Icons.swap_horiz, size: 18),
-                      label: Text('翻页'),
+                    subtitle: Text(
+                      bookmarkCount == 0 ? '暂无书签' : '$bookmarkCount 话',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
                     ),
-                  ],
-                  selected: {appState.readerMode},
-                  onSelectionChanged: (s) => appState.setReaderMode(s.first),
-                ),
-                const SizedBox(height: 4),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  activeThumbColor: Colors.white70,
-                  title: const Text(
-                    '音量键翻页',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      _showBookmarkSheet(context);
+                    },
                   ),
-                  subtitle: const Text(
-                    '音量+ 上一页 · 音量- 下一页（Android）',
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
-                  value: appState.readerVolumeKeys,
-                  onChanged: appState.setReaderVolumeKeys,
-                ),
-                const Divider(color: Colors.white24),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    bookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: Colors.white70,
-                  ),
-                  title: Text(
-                    bookmarked ? '移除本章书签' : '添加本章书签',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                  onTap: () => _toggleBookmark(context),
-                ),
-                ListTile(
-                  key: const Key('reader-chapter-bookmarks'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
-                    Icons.bookmarks_outlined,
-                    color: Colors.white70,
-                  ),
-                  title: const Text(
-                    '本书书签',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  subtitle: Text(
-                    bookmarkCount == 0 ? '暂无书签' : '$bookmarkCount 话',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 11,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.of(sheetCtx).pop();
-                    _showBookmarkSheet(context);
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
+          );
         },
       ),
     );
