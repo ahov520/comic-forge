@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:comic_forge/main.dart';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/shelf_update_notices.dart';
 import 'package:comic_forge/ui/book_detail_screen.dart';
 import 'package:engine/engine.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

@@ -383,10 +383,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('发现新章节时发送系统通知，点按打开漫画'),
                   value: widget.state.updateNotifications.enabled,
                   onChanged: (value) async {
+                    final messenger = ScaffoldMessenger.of(context);
                     final allowed = await widget.state
                         .setUpdateNotificationsEnabled(value);
                     if (!allowed && value && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         const SnackBar(content: Text('未授予通知权限，可在系统设置中开启')),
                       );
                     }
