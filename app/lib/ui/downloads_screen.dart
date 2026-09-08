@@ -2,8 +2,10 @@ import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 
 import '../services/source_service.dart';
+import '../services/storage_bytes.dart';
 import '../state/app_state.dart';
 import '../state/download_queue.dart';
+import 'cleanup_dialogs.dart';
 import 'widgets.dart';
 
 void openDownloadedChapter(
@@ -47,24 +49,150 @@ String downloadStatusLabel(DownloadTask task) => switch (task.status) {
     '下载失败 · ${task.downloadedPages}/${task.imageUrls.length} 张',
 };
 
-class DownloadsScreen extends StatelessWidget {
+class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key, required this.state});
 
   final AppState state;
 
-  Future<void> _action(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
+  @override
+  State<DownloadsScreen> createState() => _DownloadsScreenState();
+}
+
+class _DownloadsScreenState extends State<DownloadsScreen> {
+  int? _downloadBytes;
+  int? _cacheBytes;
+  var _usageReady = false;
+
+  AppState get state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUsage();
+  }
+
+  Future<void> _refreshUsage() async {
+    if (!supportsStorageCleanup) return;
+    final downloads = await state.downloads.usageBytes();
+    final cache = await state.imageCache.usageBytes();
+    if (!mounted) return;
+    setState(() {
+      _downloadBytes = downloads;
+      _cacheBytes = cache;
+      _usageReady = true;
+    });
+  }
+
+  Future<void> _action(Future<void> Function() action) async {
     try {
       await action();
+      await _refreshUsage();
     } catch (_) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('操作失败，请检查可用空间后重试')));
       }
     }
+  }
+
+  Future<void> _clearCompleted() async {
+    final queue = state.downloads;
+    final count = queue.tasks
+        .where((task) => task.status == DownloadStatus.completed)
+        .length;
+    if (count == 0) return;
+    final confirmed = await confirmCleanup(
+      context,
+      title: '清除已完成任务',
+      message: '将删除 $count 话已完成章节的离线文件，并从列表移除。进行中和失败的任务会保留。',
+    );
+    if (!confirmed || !mounted) return;
+    await _action(queue.clearCompleted);
+  }
+
+  Future<void> _clearFailed() async {
+    final queue = state.downloads;
+    final count = queue.tasks
+        .where((task) => task.status == DownloadStatus.failed)
+        .length;
+    if (count == 0) return;
+    final confirmed = await confirmCleanup(
+      context,
+      title: '清除失败任务',
+      message: '将删除 $count 条失败任务及其不完整文件。已完成的离线章节不受影响。',
+    );
+    if (!confirmed || !mounted) return;
+    await _action(queue.clearFailed);
+  }
+
+  Future<void> _clearImageCache() async {
+    final confirmed = await confirmCleanup(
+      context,
+      title: '清除图片缓存',
+      message: '将清除在线阅读的图片缓存以释放空间。已下载的离线章节不受影响。',
+    );
+    if (!confirmed || !mounted) return;
+    await _action(() async {
+      await state.imageCache.clearAll();
+      SourceService.instance.clearChapterImageCache();
+    });
+  }
+
+  Future<void> _clearBook(DownloadCatalog catalog) async {
+    final queue = state.downloads;
+    final count = queue.tasks
+        .where((task) => task.bookKey == catalog.key)
+        .length;
+    if (count == 0) return;
+    final name = catalog.book.name.trim().isEmpty ? '该漫画' : catalog.book.name;
+    final confirmed = await confirmCleanup(
+      context,
+      title: '清除本书离线文件',
+      message: '将删除「$name」的 $count 话离线下载，无法再离线阅读这些章节。进行中的任务也会取消。',
+      confirmLabel: '删除',
+    );
+    if (!confirmed || !mounted) return;
+    final urls = queue.imageUrlsFor(catalog.key).toList();
+    await _action(() async {
+      await queue.removeBook(catalog.key);
+      await state.imageCache.evictUrls(urls);
+      SourceService.instance.clearChapterImageCache(
+        sourceId: catalog.book.sourceId,
+      );
+    });
+  }
+
+  Future<void> _pickBookToClear() async {
+    final queue = state.downloads;
+    final catalogs = queue.catalogs;
+    if (catalogs.isEmpty) return;
+    final selected = await showModalBottomSheet<DownloadCatalog>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('按漫画清理离线文件')),
+            for (final catalog in catalogs)
+              ListTile(
+                title: Text(
+                  catalog.book.name.trim().isEmpty
+                      ? '未命名漫画'
+                      : catalog.book.name,
+                ),
+                subtitle: Text(
+                  '${queue.tasks.where((task) => task.bookKey == catalog.key).length} 话',
+                ),
+                onTap: () => Navigator.pop(sheetCtx, catalog),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await _clearBook(selected);
   }
 
   @override
@@ -88,9 +216,43 @@ class DownloadsScreen extends StatelessWidget {
                 tooltip: '重试全部失败任务',
                 onPressed: failed == 0
                     ? null
-                    : () => _action(context, queue.retryFailed),
+                    : () => _action(queue.retryFailed),
                 icon: const Icon(Icons.refresh),
               ),
+              if (supportsStorageCleanup)
+                PopupMenuButton<String>(
+                  tooltip: '清理存储',
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'completed':
+                        _clearCompleted();
+                      case 'failed':
+                        _clearFailed();
+                      case 'cache':
+                        _clearImageCache();
+                      case 'book':
+                        _pickBookToClear();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'completed',
+                      enabled: completed > 0,
+                      child: const Text('清除已完成任务'),
+                    ),
+                    PopupMenuItem(
+                      value: 'failed',
+                      enabled: failed > 0,
+                      child: const Text('清除失败任务'),
+                    ),
+                    const PopupMenuItem(value: 'cache', child: Text('清除图片缓存')),
+                    if (queue.catalogs.isNotEmpty)
+                      const PopupMenuItem(
+                        value: 'book',
+                        child: Text('按漫画清理离线文件'),
+                      ),
+                  ],
+                ),
             ],
           ),
           body: !queue.supported
@@ -100,10 +262,29 @@ class DownloadsScreen extends StatelessWidget {
                   message: '请在 Android 或桌面应用中使用。',
                 )
               : tasks.isEmpty
-              ? const EmptyStateView(
-                  icon: Icons.download_outlined,
-                  title: '还没有下载任务',
-                  message: '在漫画详情页选择章节，或选中未读章节批量下载。',
+              ? Column(
+                  children: [
+                    if (supportsStorageCleanup && _usageReady)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            storageUsageLabel(
+                              downloads: _downloadBytes,
+                              cache: _cacheBytes,
+                            ),
+                          ),
+                        ),
+                      ),
+                    const Expanded(
+                      child: EmptyStateView(
+                        icon: Icons.download_outlined,
+                        title: '还没有下载任务',
+                        message: '在漫画详情页选择章节，或选中未读章节批量下载。',
+                      ),
+                    ),
+                  ],
                 )
               : Column(
                   children: [
@@ -116,6 +297,15 @@ class DownloadsScreen extends StatelessWidget {
                             '已完成 $completed/${tasks.length} 话'
                             '${failed > 0 ? ' · 失败 $failed 话' : ''}',
                           ),
+                          if (supportsStorageCleanup && _usageReady) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              storageUsageLabel(
+                                downloads: _downloadBytes,
+                                cache: _cacheBytes,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Text(
                             queue.storageError ?? '下载在应用运行时继续，重新打开后恢复未完成任务。',
@@ -162,10 +352,8 @@ class DownloadsScreen extends StatelessWidget {
                                   IconButton(
                                     tooltip: '重试 ${task.chapter.title}',
                                     icon: const Icon(Icons.refresh),
-                                    onPressed: () => _action(
-                                      context,
-                                      () => queue.retry(task.id),
-                                    ),
+                                    onPressed: () =>
+                                        _action(() => queue.retry(task.id)),
                                   ),
                                 IconButton(
                                   tooltip:
@@ -173,10 +361,8 @@ class DownloadsScreen extends StatelessWidget {
                                       ? '删除 ${task.chapter.title} 的下载'
                                       : '取消 ${task.chapter.title} 的下载',
                                   icon: const Icon(Icons.delete_outline),
-                                  onPressed: () => _action(
-                                    context,
-                                    () => queue.remove(task.id),
-                                  ),
+                                  onPressed: () =>
+                                      _action(() => queue.remove(task.id)),
                                 ),
                               ],
                             ),

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'storage_bytes.dart';
+
 String downloadKey(Iterable<String> parts) =>
     sha256.convert(utf8.encode(jsonEncode(parts.toList()))).toString();
 
@@ -55,5 +57,24 @@ class DownloadStore {
     final root = await _rootDirectory();
     final directory = Directory('${root.path}/${downloadKey([taskId])}');
     if (await directory.exists()) await directory.delete(recursive: true);
+  }
+
+  Future<int?> usageBytes() async {
+    try {
+      return await directorySize(await _rootDirectory());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> usageBytesForTask(String taskId) async {
+    try {
+      final root = await _rootDirectory();
+      return await directorySize(
+        Directory('${root.path}/${downloadKey([taskId])}'),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -118,6 +118,15 @@ class SourceService {
     _runtimes.clear();
   }
 
+  /// 丢掉章节图片 URL 的内存缓存，不触及离线下载文件。
+  void clearChapterImageCache({String? sourceId}) {
+    if (sourceId == null) {
+      _imgFutures.clear();
+      return;
+    }
+    _imgFutures.removeWhere((key, _) => key.$1.source.id == sourceId);
+  }
+
   /// 测试接缝：清空域名黑名单，避免用例互相污染。
   void debugResetNetworkPolicy() {
     networkPolicy.replaceAll(const []);
