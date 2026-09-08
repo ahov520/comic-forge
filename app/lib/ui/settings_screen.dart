@@ -9,6 +9,7 @@ import '../state/shelf_update_schedule.dart';
 import 'domain_blacklist_screen.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
+import 'reading_stats_screen.dart';
 import 'widgets.dart';
 
 /// 设置。
@@ -376,6 +377,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const _Header('数据'),
+              row(
+                ListTile(
+                  leading: const Icon(Icons.bar_chart_outlined),
+                  title: const Text('阅读统计'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ReadingStatsScreen(stats: widget.state.readingStats),
+                    ),
+                  ),
+                ),
+              ),
               row(
                 ListTile(
                   leading: const Icon(Icons.history),

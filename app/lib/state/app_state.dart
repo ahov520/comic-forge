@@ -14,6 +14,7 @@ import 'shelf_updates.dart';
 import 'shelf_update_schedule.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
+import 'reading_stats.dart';
 import 'shelf_groups.dart';
 import 'search_filters.dart';
 
@@ -84,15 +85,20 @@ class CachedDetail {
 
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
-  AppState({DownloadQueue? downloadQueue, ShelfUpdateSchedule? shelfUpdateSchedule})
-      : _downloads = downloadQueue,
-        shelfUpdateSchedule = shelfUpdateSchedule ?? ShelfUpdateSchedule() {
+  AppState({
+    DownloadQueue? downloadQueue,
+    ShelfUpdateSchedule? shelfUpdateSchedule,
+    ReadingStats? readingStats,
+  }) : _downloads = downloadQueue,
+       shelfUpdateSchedule = shelfUpdateSchedule ?? ShelfUpdateSchedule(),
+       readingStats = readingStats ?? ReadingStats() {
     shelfGroups.addListener(notifyListeners);
     this.shelfUpdateSchedule.addListener(notifyListeners);
   }
 
   final ShelfGroups shelfGroups = ShelfGroups();
   final ShelfUpdateSchedule shelfUpdateSchedule;
+  final ReadingStats readingStats;
   bool _disposed = false;
 
   DownloadQueue? _downloads;
@@ -103,6 +109,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    readingStats.dispose();
     shelfUpdateSchedule.removeListener(notifyListeners);
     shelfUpdateSchedule.dispose();
     shelfGroups.removeListener(notifyListeners);
@@ -182,6 +189,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
     await shelfUpdateSchedule.load();
+    await readingStats.load();
     _restoreSearchHistory(sp.get(_kSearchHistory));
     final filterData = sp.get(_kSearchFilters);
     try {

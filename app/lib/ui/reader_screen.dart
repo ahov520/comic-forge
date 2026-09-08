@@ -8,6 +8,7 @@ import 'package:engine/engine.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import '../state/reading_session.dart';
 import '../state/scroll_restore.dart';
 import '../state/download_queue.dart';
 import 'reader_chrome.dart';
@@ -41,7 +42,11 @@ class ReaderScreen extends StatefulWidget {
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
+class _ReaderScreenState extends State<ReaderScreen>
+    with WidgetsBindingObserver {
+  ReadingSession? _readingSession;
+  bool _chapterReady = false;
+  bool _foreground = true;
   late int _index;
   late Future<List<String>> _images;
   bool _chromeVisible = true;
@@ -72,6 +77,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    final binding = WidgetsBinding.instance;
+    _foreground =
+        binding.lifecycleState == null ||
+        binding.lifecycleState == AppLifecycleState.resumed;
+    binding.addObserver(this);
+    final stats = widget.appState?.readingStats;
+    if (stats != null) _readingSession = ReadingSession(stats);
     _wasPaged = _isPaged;
     _index = widget.initialIndex.clamp(0, widget.chapters.length - 1);
     _loadChapter(_index, save: true);
@@ -81,6 +93,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _readerChannel.setMethodCallHandler(_onVolumeKey);
     // 滚动模式：接近底部预热下一话（翻页模式由 onPageChanged 触发）
     _scrollController.addListener(_warmNextChapterOnScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncReadingActivity();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncReadingActivity();
+  }
+
+  void _syncReadingActivity() {
+    _readingSession?.setActive(
+      _foreground && ModalRoute.isCurrentOf(context) != false,
+    );
   }
 
   Future<void> _onVolumeKey(MethodCall call) async {
@@ -124,6 +154,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void didUpdateWidget(covariant ReaderScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.appState != widget.appState) {
+      _readingSession?.closeChapter();
+      final stats = widget.appState?.readingStats;
+      _readingSession = stats == null ? null : ReadingSession(stats);
+      _syncReadingActivity();
+      if (_chapterReady) _readingSession?.openChapter(widget.book, _chapter);
       oldWidget.appState?.removeListener(_onReaderSettingsChanged);
       widget.appState?.addListener(_onReaderSettingsChanged);
       _syncVolumeKeys();
@@ -164,6 +199,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _loadChapter(int index, {bool save = false, bool refresh = false}) {
+    _readingSession?.closeChapter();
+    _chapterReady = false;
     _saveCurrentScrollOffset();
     _lastScrollOffset = null;
     _offsetSaveTimer?.cancel();
@@ -179,6 +216,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       // 下一帧才订阅；即时失败或提前切话也要接住异常，界面仍能读取错误。
       _images.ignore();
     });
+    final images = _images;
+    final chapter = _chapter;
+    unawaited(
+      images.then<void>((urls) async {
+        if (!mounted || !identical(_images, images) || urls.isEmpty) return;
+        _chapterReady = true;
+        _syncReadingActivity();
+        await _readingSession?.openChapter(widget.book, chapter);
+      }, onError: (Object _, StackTrace _) {}),
+    );
     _nextChapterWarmed = false;
     _offsetRestored = false;
     // 预加载下一话 URL 列表（失败静默）
@@ -284,6 +331,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _scrollChapterUrl != chapterUrl) {
         return;
       }
+      _readingSession?.checkpoint();
       widget.appState?.saveScrollOffset(
         chapterUrl,
         position.pixels,
@@ -400,6 +448,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _readingSession?.closeChapter();
     widget.appState?.removeListener(_onReaderSettingsChanged);
     // 退出阅读器时立即落盘当前滚动位置
     _saveCurrentScrollOffset();
@@ -510,6 +560,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _pageIndex = i;
           _pageZoomed = false;
         });
+        _readingSession?.checkpoint();
         widget.appState?.saveReaderPage(chapterUrl, i);
         _warmNextChapterIfNeeded(i, urls.length);
       },
@@ -523,8 +574,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
             if (!isLast || _index + 1 < widget.chapters.length) {
               _pageTurn(1);
             } else {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('已是最后一话')));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('已是最后一话')));
             }
           },
           onToggleChrome: () =>
