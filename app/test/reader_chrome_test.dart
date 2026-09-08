@@ -65,6 +65,47 @@ void main() {
     expect(ignore.ignoring, isTrue);
   });
 
+  testWidgets('顶栏书签按钮可切换且保留 48px 点击区域', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: ReaderTopChrome(
+            visible: true,
+            title: '漫画 · 第一话',
+            bookmarked: false,
+            onBookmark: () => taps++,
+          ),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(ReaderTopChrome)).height, 48);
+    final add = tester.getRect(find.byTooltip('添加书签'));
+    expect(add.width, greaterThanOrEqualTo(48));
+    expect(add.height, greaterThanOrEqualTo(48));
+    await tester.tap(find.byTooltip('添加书签'));
+    expect(taps, 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: ReaderTopChrome(
+            visible: true,
+            title: '漫画 · 第一话',
+            bookmarked: true,
+            onBookmark: () => taps++,
+          ),
+        ),
+      ),
+    );
+    expect(find.byTooltip('移除书签'), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark), findsOneWidget);
+    await tester.tap(find.byTooltip('移除书签'));
+    expect(taps, 2);
+  });
+
   testWidgets('底栏话间导航：上一话禁用、下一话可点', (tester) async {
     var next = 0;
     await tester.pumpWidget(
