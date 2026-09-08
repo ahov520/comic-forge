@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../backup_service.dart';
 import '../state/app_state.dart';
@@ -14,8 +18,19 @@ import 'widgets.dart';
 
 /// 设置。
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.state});
+  const SettingsScreen({
+    super.key,
+    required this.state,
+    this.saveLocalBackup,
+    this.shareLocalBackup,
+    this.pickLocalBackup,
+  });
   final AppState state;
+
+  /// 测试可注入；默认走系统保存/分享/选文件。
+  final Future<bool> Function(String fileName, String text)? saveLocalBackup;
+  final Future<void> Function(String fileName, String text)? shareLocalBackup;
+  final Future<String?> Function()? pickLocalBackup;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -23,6 +38,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String? _adMsg;
+  String? _backupMsg;
 
   Future<void> _chooseShelfUpdateInterval() async {
     final selected = await showModalBottomSheet<ShelfUpdateInterval>(
@@ -71,6 +87,179 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {
       if (mounted) setState(() => _adMsg = '无法读取规则文件，请重试');
     }
+  }
+
+  Future<void> _exportLocalBackup() async {
+    final text = BackupService.exportJson(widget.state);
+    final name = BackupService.suggestedFileName();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('导出本地备份', style: Theme.of(sheetCtx).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                '包含书架、源、阅读历史、章节书签和设置。不含离线图片与 WebDAV 密码。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(sheetCtx).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.ios_share, size: 18),
+                      label: const Text('分享'),
+                      onPressed: () async {
+                        Navigator.pop(sheetCtx);
+                        await _shareBackup(name, text);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      icon: const Icon(Icons.save_alt, size: 18),
+                      label: const Text('保存到文件'),
+                      onPressed: () async {
+                        Navigator.pop(sheetCtx);
+                        await _saveBackup(name, text);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareBackup(String name, String text) async {
+    try {
+      if (widget.shareLocalBackup != null) {
+        await widget.shareLocalBackup!(name, text);
+      } else {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/$name');
+        await file.writeAsString(text);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path, mimeType: 'application/json')],
+            subject: 'Comic Forge 备份',
+          ),
+        );
+      }
+      if (mounted) setState(() => _backupMsg = '已分享备份 $name');
+    } catch (e) {
+      if (mounted) setState(() => _backupMsg = '分享失败：$e');
+    }
+  }
+
+  Future<void> _saveBackup(String name, String text) async {
+    try {
+      final saved = widget.saveLocalBackup != null
+          ? await widget.saveLocalBackup!(name, text)
+          : await FilePicker.saveFile(
+                  fileName: name,
+                  bytes: Uint8List.fromList(utf8.encode(text)),
+                  mimeType: 'application/json',
+                  dialogTitle: '保存 Comic Forge 备份',
+                  type: FileType.custom,
+                  allowedExtensions: ['json'],
+                ) !=
+                null;
+      if (!mounted) return;
+      setState(() => _backupMsg = saved ? '已保存备份 $name' : _backupMsg);
+    } catch (e) {
+      if (mounted) setState(() => _backupMsg = '保存失败：$e');
+    }
+  }
+
+  Future<void> _importLocalBackup() async {
+    try {
+      final text = widget.pickLocalBackup != null
+          ? await widget.pickLocalBackup!()
+          : await _pickBackupText();
+      if (text == null || !mounted) return;
+      BackupService.parsePayload(text);
+      final mode = await showModalBottomSheet<BackupImportMode>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetCtx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('导入本地备份', style: Theme.of(sheetCtx).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                  '合并：保留本地，补齐备份中的新增与较新进度、历史和书签。\n'
+                  '覆盖：用备份替换书架、源、进度、历史、书签和已包含的设置。',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(sheetCtx).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(sheetCtx, BackupImportMode.merge),
+                        child: const Text('合并导入'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.tonal(
+                        onPressed: () =>
+                            Navigator.pop(sheetCtx, BackupImportMode.overwrite),
+                        child: const Text('覆盖导入'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (mode == null || !mounted) return;
+      final r = await BackupService.importJson(widget.state, text, mode: mode);
+      if (!mounted) return;
+      final action = mode == BackupImportMode.overwrite ? '覆盖' : '合并';
+      setState(() {
+        _backupMsg =
+            '$action完成：源 ${r.sources} · 书架 ${r.shelf} · 历史 ${r.history} · 书签 ${r.bookmarks}';
+      });
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _backupMsg = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _backupMsg = '导入失败：$e');
+    }
+  }
+
+  Future<String?> _pickBackupText() async {
+    final picked = await FilePicker.pickFile(
+      type: FileType.any,
+      dialogTitle: '选择 Comic Forge 备份文件',
+    );
+    final path = picked?.path;
+    if (path == null) return null;
+    return File(path).readAsString();
   }
 
   /// WebDAV 配置与备份/恢复面板。
@@ -247,7 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     if (!sheetCtx.mounted) return;
                                     setSheet(
                                       () => msg =
-                                          '恢复完成：源 ${r.sources} · 书架 ${r.shelf} · 进度 ${r.progress} · 订阅 ${r.repos}',
+                                          '恢复完成：源 ${r.sources} · 书架 ${r.shelf} · 历史 ${r.history} · 书签 ${r.bookmarks}',
                                     );
                                   } catch (e) {
                                     if (sheetCtx.mounted) {
@@ -270,7 +459,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   const SizedBox(height: 4),
                   Text(
-                    '恢复时合并书架与订阅，保留源的启停设置，阅读进度采用较新的记录。',
+                    '恢复时合并书架、订阅、历史和书签，保留源的启停设置，阅读进度采用较新的记录。',
                     style: TextStyle(
                       fontSize: 11,
                       color: Theme.of(sheetCtx).colorScheme.outline,
@@ -434,6 +623,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              if (BackupService.supportsLocalExchange) ...[
+                row(
+                  ListTile(
+                    leading: const Icon(Icons.ios_share_outlined),
+                    title: const Text('导出本地备份'),
+                    subtitle: Text(
+                      _backupMsg ?? '分享或保存书架、源、设置、历史和书签',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _exportLocalBackup,
+                  ),
+                ),
+                row(
+                  ListTile(
+                    leading: const Icon(Icons.file_open_outlined),
+                    title: const Text('导入本地备份'),
+                    subtitle: Text(
+                      _backupMsg ?? '可选择合并或覆盖现有数据',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _importLocalBackup,
+                  ),
+                ),
+              ],
               row(
                 ListTile(
                   leading: Icon(

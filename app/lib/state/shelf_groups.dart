@@ -24,6 +24,7 @@ class ShelfGroups extends ChangeNotifier {
   String? _filter;
 
   List<ShelfGroup> get groups => List.unmodifiable(_groups);
+  Iterable<String> get assignedBookUrls => _assignments.keys;
 
   /// null = 全部分组，空串 = 未分组，其它值为分组 ID。
   String? get filter => _filter;
@@ -156,14 +157,70 @@ class ShelfGroups extends ChangeNotifier {
     await _persist();
   }
 
+  Map<String, dynamic> toBackupJson() => {
+    'groups': _groups.map((group) => group.toJson()).toList(),
+    'assignments': _assignments.map((url, ids) => MapEntry(url, ids.toList())),
+  };
+
+  /// 备份导入：覆盖替换分组与关联；合并时按 id 并集，名称冲突跳过备份项。
+  Future<int> importBackup(
+    Map<String, dynamic> json, {
+    required Iterable<String> bookUrls,
+    required bool overwrite,
+  }) async {
+    if (overwrite) {
+      _groups.clear();
+      _assignments.clear();
+      if (_filter != null &&
+          _filter!.isNotEmpty &&
+          !_groups.any((group) => group.id == _filter)) {
+        _filter = null;
+      }
+    }
+    final ids = _groups.map((group) => group.id).toSet();
+    var added = 0;
+    final entries = json['groups'];
+    if (entries is List) {
+      for (final entry in entries) {
+        if (entry is! Map<String, dynamic>) continue;
+        final id = entry['id'];
+        final name = entry['name'];
+        if (id is! String ||
+            id == 'all' ||
+            id.trim().isEmpty ||
+            ids.contains(id) ||
+            name is! String ||
+            nameError(name) != null) {
+          continue;
+        }
+        ids.add(id);
+        _groups.add(ShelfGroup(id: id, name: name.trim()));
+        added++;
+      }
+    }
+    final urls = bookUrls.toSet();
+    final assignments = json['assignments'];
+    if (assignments is Map<String, dynamic>) {
+      for (final url in urls) {
+        final values = assignments[url];
+        if (values is! List) continue;
+        final valid = values.whereType<String>().where(ids.contains).toSet();
+        if (valid.isEmpty) continue;
+        final current = _assignments.putIfAbsent(url, () => <String>{});
+        final before = current.length;
+        current.addAll(valid);
+        if (current.length > before) added++;
+      }
+    }
+    if (!overwrite) {
+      _assignments.removeWhere((url, _) => !urls.contains(url));
+    }
+    await _persist();
+    return added;
+  }
+
   Future<void> _persist() {
-    final saved = jsonEncode({
-      'groups': _groups.map((group) => group.toJson()).toList(),
-      'assignments': _assignments.map(
-        (url, ids) => MapEntry(url, ids.toList()),
-      ),
-      'filter': _filter,
-    });
+    final saved = jsonEncode({...toBackupJson(), 'filter': _filter});
     final write = (_write ?? Future<void>.value()).then((_) async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringSafe(prefsKey, saved);

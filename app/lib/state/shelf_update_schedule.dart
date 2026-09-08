@@ -86,6 +86,35 @@ class ShelfUpdateSchedule extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  Map<String, dynamic> toBackupJson() => {
+    'enabled': _enabled,
+    'intervalHours': _interval.hours,
+  };
+
+  Future<bool> importBackup(Map<String, dynamic> json) async {
+    var changed = false;
+    if (json.containsKey('enabled')) {
+      final enabled = json['enabled'] == true;
+      if (_enabled != enabled) {
+        _enabled = enabled;
+        changed = true;
+      }
+    }
+    if (json.containsKey('intervalHours')) {
+      final interval = ShelfUpdateInterval.values
+          .where((value) => value.hours == json['intervalHours'])
+          .firstOrNull;
+      if (interval != null && _interval != interval) {
+        _interval = interval;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    if (!_disposed) notifyListeners();
+    await _persist();
+    return true;
+  }
+
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringSafe(

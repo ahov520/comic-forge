@@ -188,6 +188,11 @@ class ReadingStats extends ChangeNotifier {
     );
   }
 
+  Map<String, dynamic> toBackupJson() => {
+    ..._days.map((key, day) => MapEntry(key, day.toJson())),
+    'comics': _comics.map((key, record) => MapEntry(key, record.toJson())),
+  };
+
   Future<void> load() async {
     _days.clear();
     _comics.clear();
@@ -196,49 +201,100 @@ class ReadingStats extends ChangeNotifier {
     if (raw is! String) return;
     try {
       final saved = jsonDecode(raw);
-      if (saved is! Map<String, dynamic>) return;
-      for (final entry in saved.entries) {
-        final date = DateTime.tryParse(entry.key);
-        final value = entry.value;
-        if (date == null ||
-            _dayKey(date) != entry.key ||
-            value is! Map<String, dynamic>) {
-          continue;
-        }
-        final milliseconds = value['milliseconds'];
-        final books = value['books'];
-        final chapters = value['chapters'];
-        if (milliseconds is! int ||
-            milliseconds < 0 ||
-            books is! List ||
-            chapters is! List) {
-          continue;
-        }
-        final day = _ReadingDay()
-          ..milliseconds = milliseconds
-          ..books.addAll(
-            books.whereType<String>().where((key) => key.isNotEmpty),
-          )
-          ..chapters.addAll(
-            chapters.whereType<String>().where((key) => key.isNotEmpty),
-          );
-        if (day.books.isNotEmpty && day.chapters.isNotEmpty) {
-          _days[entry.key] = day;
-        }
-      }
-      final comics = saved['comics'];
-      if (comics is Map<String, dynamic>) {
-        for (final entry in comics.entries) {
-          final record = _ComicReadingRecord.fromJson(entry.value);
-          if (record != null &&
-              _bookKey(record.sourceId, record.bookUrl) == entry.key) {
-            _comics[entry.key] = record;
-          }
-        }
-      }
+      if (saved is Map<String, dynamic>) _ingest(saved, overwrite: true);
     } on FormatException {
       // 无法恢复统计时从零开始，不从旧阅读进度推测时长或话数。
     }
+  }
+
+  /// 备份导入：覆盖替换；合并时按日/单本取较长时长并并集去重集合。
+  Future<int> importBackup(
+    Map<String, dynamic> json, {
+    required bool overwrite,
+  }) async {
+    final beforeDays = _days.length;
+    final beforeComics = _comics.length;
+    if (overwrite) {
+      _days.clear();
+      _comics.clear();
+    }
+    _ingest(json, overwrite: overwrite);
+    final added =
+        (_days.length - beforeDays).clamp(0, _days.length) +
+        (_comics.length - beforeComics).clamp(0, _comics.length);
+    if (_disposed) return added;
+    notifyListeners();
+    await _persist();
+    return overwrite ? _days.length + _comics.length : added;
+  }
+
+  void _ingest(Map<String, dynamic> saved, {required bool overwrite}) {
+    for (final entry in saved.entries) {
+      if (entry.key == 'comics') continue;
+      final date = DateTime.tryParse(entry.key);
+      final value = entry.value;
+      if (date == null ||
+          _dayKey(date) != entry.key ||
+          value is! Map<String, dynamic>) {
+        continue;
+      }
+      final milliseconds = value['milliseconds'];
+      final books = value['books'];
+      final chapters = value['chapters'];
+      if (milliseconds is! int ||
+          milliseconds < 0 ||
+          books is! List ||
+          chapters is! List) {
+        continue;
+      }
+      final incoming = _ReadingDay()
+        ..milliseconds = milliseconds
+        ..books.addAll(books.whereType<String>().where((key) => key.isNotEmpty))
+        ..chapters.addAll(
+          chapters.whereType<String>().where((key) => key.isNotEmpty),
+        );
+      if (incoming.books.isEmpty || incoming.chapters.isEmpty) continue;
+      if (overwrite || !_days.containsKey(entry.key)) {
+        _days[entry.key] = incoming;
+        continue;
+      }
+      final current = _days[entry.key]!;
+      if (incoming.milliseconds > current.milliseconds) {
+        current.milliseconds = incoming.milliseconds;
+      }
+      current.books.addAll(incoming.books);
+      current.chapters.addAll(incoming.chapters);
+    }
+    final comics = saved['comics'];
+    if (comics is! Map<String, dynamic>) return;
+    for (final entry in comics.entries) {
+      final record = _ComicReadingRecord.fromJson(entry.value);
+      if (record == null ||
+          _bookKey(record.sourceId, record.bookUrl) != entry.key) {
+        continue;
+      }
+      if (overwrite || !_comics.containsKey(entry.key)) {
+        _comics[entry.key] = record;
+        continue;
+      }
+      final current = _comics[entry.key]!;
+      if (record.milliseconds > current.milliseconds) {
+        current.milliseconds = record.milliseconds;
+      }
+      if (record.sessionCount > current.sessionCount) {
+        current.sessionCount = record.sessionCount;
+      }
+      if (record.lastReadAt.isAfter(current.lastReadAt)) {
+        current.lastReadAt = record.lastReadAt;
+      }
+      if (record.name.trim().isNotEmpty) current.name = record.name;
+      current.chapters.addAll(record.chapters);
+    }
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringSafe(_key, jsonEncode(toBackupJson()));
   }
 
   /// [from] 到 [to] 必须是阅读器实际可见的时间段；跨午夜自动拆分。
@@ -305,15 +361,8 @@ class ReadingStats extends ChangeNotifier {
     }
     if (!changed) return;
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
     // 写入前取最新内存态，切话/暂停同时落盘也不会写回旧快照。
-    await prefs.setStringSafe(
-      _key,
-      jsonEncode({
-        ..._days.map((key, day) => MapEntry(key, day.toJson())),
-        'comics': _comics.map((key, record) => MapEntry(key, record.toJson())),
-      }),
-    );
+    await _persist();
   }
 
   @override
