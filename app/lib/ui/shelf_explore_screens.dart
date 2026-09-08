@@ -9,6 +9,7 @@ import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
+import 'comic_reading_stats_screen.dart';
 import 'explore_results.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
@@ -56,8 +57,9 @@ class _ShelfScreenState extends State<ShelfScreen> {
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -73,6 +75,22 @@ class _ShelfScreenState extends State<ShelfScreen> {
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 showShelfGroupPicker(context, widget.state, book);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart_outlined),
+              title: const Text('阅读统计'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => ComicReadingStatsScreen(
+                      stats: widget.state.readingStats,
+                      sources: widget.state.sources,
+                      book: book,
+                    ),
+                  ),
+                );
               },
             ),
             ListTile(

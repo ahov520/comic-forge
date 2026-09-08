@@ -10,19 +10,29 @@ class ComicReadingStatsScreen extends StatelessWidget {
     super.key,
     required this.stats,
     this.sources = const [],
+    this.book,
   });
 
   final ReadingStats stats;
   final List<ComicSource> sources;
 
+  /// 从书架进入时只显示这本漫画，按来源和链接匹配已有统计。
+  final Book? book;
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('按漫画统计')),
+    appBar: AppBar(title: Text(book == null ? '按漫画统计' : '单本阅读统计')),
     body: SafeArea(
       child: AnimatedBuilder(
         animation: stats,
         builder: (context, _) {
-          final comics = stats.comics;
+          final selectedBook = book;
+          final comic = selectedBook == null
+              ? null
+              : stats.forBook(selectedBook);
+          final comics = selectedBook == null
+              ? stats.comics
+              : <ComicReadingStats>[?comic];
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -31,11 +41,13 @@ class ComicReadingStatsScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${comics.length} 本漫画 · 按最近阅读排序',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
+                      if (selectedBook == null) ...[
+                        Text(
+                          '${comics.length} 本漫画 · 按最近阅读排序',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       const Text(
                         '单本统计从本次升级开始记录，之前的阅读仍保留在累计统计中。'
                         '每次进入已加载章节计为一次阅读，暂停后继续不重复计次。',
@@ -45,12 +57,15 @@ class ComicReadingStatsScreen extends StatelessWidget {
                 ),
               ),
               if (comics.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: EmptyStateView(
                     icon: Icons.menu_book_outlined,
-                    title: '还没有单本阅读统计',
-                    message: '开始阅读后，这里会显示每本漫画的阅读时长、话数与最近阅读。',
+                    title: selectedBook == null ? '还没有单本阅读统计' : '这本漫画还没有阅读统计',
+                    message: selectedBook == null
+                        ? '开始阅读后，这里会显示每本漫画的阅读时长、话数与最近阅读。'
+                        : '开始阅读《${selectedBook.name.trim().isEmpty ? '未命名漫画' : selectedBook.name}》后，'
+                              '这里会显示这本漫画的阅读时长、话数与最近阅读。',
                   ),
                 )
               else
