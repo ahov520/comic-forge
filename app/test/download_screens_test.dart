@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:comic_forge/services/download_store.dart';
+import 'package:comic_forge/services/image_cache_store.dart';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/download_queue.dart';
@@ -13,11 +14,27 @@ import 'package:comic_forge/ui/reader_screen.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/download_test_image.dart';
 import 'support/fake_fetcher.dart';
+
+class _FakeCacheManager extends Fake implements BaseCacheManager {
+  var emptied = 0;
+  final removed = <String>[];
+
+  @override
+  Future<void> emptyCache() async {
+    emptied++;
+  }
+
+  @override
+  Future<void> removeFile(String key) async {
+    removed.add(key);
+  }
+}
 
 Future<void> _loadFileImage(String uri) async {
   final stream = FileImage(
@@ -383,4 +400,185 @@ void main() {
     expect(find.byType(DownloadsScreen), findsOneWidget);
     expect(find.text('还没有下载任务'), findsOneWidget);
   });
+
+  testWidgets(
+    '非 Android 不显示占用与清理菜单',
+    (tester) async {
+      state = AppState();
+      await tester.pumpWidget(MaterialApp(home: DownloadsScreen(state: state)));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('清理存储'), findsNothing);
+      expect(find.textContaining('图片缓存约'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.linux,
+    }),
+  );
+
+  testWidgets(
+    'Android 显示占用，确认后清除失败不影响已完成离线文件，清除缓存不删下载',
+    (tester) async {
+      final directory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('comic-forge-cleanup-ui-'),
+      );
+      final cacheDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('comic-forge-image-cache-ui-'),
+      );
+      addTearDown(() async {
+        await directory!.delete(recursive: true);
+        await cacheDir!.delete(recursive: true);
+      });
+      final store = DownloadStore(directory: () async => directory!);
+      final cacheManager = _FakeCacheManager();
+      var failSecond = true;
+      final queue = DownloadQueue(
+        sourceFor: (_) => source,
+        store: store,
+        loadImages: (_, chapter) async =>
+            (urls: ['${chapter.url}/page.png'], headers: <String, String>{}),
+        fetchBytes: (url, _) async {
+          if (failSecond && url.contains('/c2/')) throw StateError('失败');
+          return downloadTestImage();
+        },
+      );
+      state = AppState(
+        downloadQueue: queue,
+        imageCache: ImageCacheStore(
+          manager: cacheManager,
+          directory: () async => cacheDir!,
+        ),
+      );
+      await tester.runAsync(() async {
+        await File(
+          '${cacheDir!.path}/cached.bin',
+        ).writeAsBytes(List.filled(120, 7));
+        await queue.enqueue(book, chapters, [0, 1]);
+        await queue.idle;
+      });
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(home: DownloadsScreen(state: state)),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pumpAndSettle();
+      expect(find.textContaining('离线约'), findsOneWidget);
+      expect(find.textContaining('图片缓存约 120 B'), findsOneWidget);
+      expect(find.text('已下载 1 张 · 点击阅读'), findsOneWidget);
+      expect(find.text('下载失败 · 0/1 张'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('清理存储'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清除失败任务'));
+      await tester.pumpAndSettle();
+      expect(find.text('将删除 1 条失败任务及其不完整文件。已完成的离线章节不受影响。'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('下载失败 · 0/1 张'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('清理存储'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清除失败任务'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.text('清除'));
+        await queue.clearFailed();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('下载失败 · 0/1 张'), findsNothing);
+      expect(find.text('已下载 1 张 · 点击阅读'), findsOneWidget);
+      final kept = await tester.runAsync(
+        () => queue.offlineImages(book, chapters[0]),
+      );
+      expect(kept, isNotNull);
+      expect(
+        await tester.runAsync(
+          () => File.fromUri(Uri.parse(kept!.single)).exists(),
+        ),
+        isTrue,
+      );
+
+      await tester.tap(find.byTooltip('清理存储'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清除图片缓存'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清除'));
+      await tester.pumpAndSettle();
+      expect(cacheManager.emptied, 1);
+      expect(
+        await tester.runAsync(
+          () => File.fromUri(Uri.parse(kept!.single)).exists(),
+        ),
+        isTrue,
+      );
+      expect(
+        await tester.runAsync(() => queue.offlineImages(book, chapters[0])),
+        kept,
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
+
+  testWidgets(
+    'Android 确认后按漫画删除离线文件，其它漫画仍可阅读',
+    (tester) async {
+      final directory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('comic-forge-book-cleanup-'),
+      );
+      addTearDown(() async {
+        await directory!.delete(recursive: true);
+      });
+      final other = Book(
+        sourceId: source.id,
+        name: '另一本',
+        bookUrl: 'https://download.example/other',
+      );
+      final queue = DownloadQueue(
+        sourceFor: (_) => source,
+        store: DownloadStore(directory: () async => directory!),
+        loadImages: (_, chapter) async =>
+            (urls: ['${chapter.url}/page.png'], headers: <String, String>{}),
+        fetchBytes: (_, _) async => downloadTestImage(),
+      );
+      state = AppState(
+        downloadQueue: queue,
+        imageCache: ImageCacheStore(manager: _FakeCacheManager()),
+      );
+      await tester.runAsync(() async {
+        await queue.enqueue(book, chapters, [0]);
+        await queue.enqueue(other, chapters, [0]);
+        await queue.idle;
+      });
+      await tester.pumpWidget(MaterialApp(home: DownloadsScreen(state: state)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('清理存储'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('按漫画清理离线文件'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('漫画'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('将删除「漫画」的 1 话离线下载'), findsOneWidget);
+      final bookKey = queue.taskFor(book, chapters[0])!.bookKey;
+      await tester.runAsync(() async {
+        await tester.tap(find.text('删除'));
+        await queue.removeBook(bookKey);
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('漫画 · 第1话'), findsNothing);
+      expect(find.text('另一本 · 第1话'), findsOneWidget);
+      expect(
+        await tester.runAsync(() => queue.offlineImages(book, chapters[0])),
+        isNull,
+      );
+      expect(
+        await tester.runAsync(() => queue.offlineImages(other, chapters[0])),
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
 }

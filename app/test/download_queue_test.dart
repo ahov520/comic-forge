@@ -335,4 +335,64 @@ void main() {
     expect(downloads.tasks.single.status, DownloadStatus.completed);
     expect(headers.single, source.headers);
   });
+
+  test('清除失败不影响已完成离线阅读，清除已完成不影响失败任务残留', () async {
+    final downloads = queue(
+      fetch: (url, _) async {
+        if (url == '${chapters[1].url}/2.png') throw StateError('offline');
+        return downloadTestImage();
+      },
+    );
+    final other = Book(
+      sourceId: 'other-cleanup',
+      name: '另一本',
+      bookUrl: 'https://download.example/other',
+    );
+    await downloads.enqueue(book, chapters, [0, 1]);
+    await downloads.enqueue(other, chapters, [0]);
+    await downloads.idle;
+    expect(
+      downloads.taskFor(book, chapters[0])?.status,
+      DownloadStatus.completed,
+    );
+    expect(downloads.taskFor(book, chapters[1])?.status, DownloadStatus.failed);
+    expect(
+      downloads.taskFor(other, chapters[0])?.status,
+      DownloadStatus.completed,
+    );
+    final kept = (await downloads.offlineImages(book, chapters[0]))!;
+    final otherKept = (await downloads.offlineImages(other, chapters[0]))!;
+    expect(await downloads.usageBytes(), greaterThan(0));
+
+    expect(await downloads.clearFailed(), 1);
+    expect(downloads.taskFor(book, chapters[1]), isNull);
+    expect(await downloads.offlineImages(book, chapters[0]), kept);
+    expect(await downloads.offlineImages(other, chapters[0]), otherKept);
+    expect(await File.fromUri(Uri.parse(kept.first)).exists(), isTrue);
+
+    expect(await downloads.clearCompleted(), 2);
+    expect(downloads.tasks, isEmpty);
+    expect(await File.fromUri(Uri.parse(kept.first)).exists(), isFalse);
+    expect(await File.fromUri(Uri.parse(otherKept.first)).exists(), isFalse);
+    expect(await downloads.usageBytes(), 0);
+  });
+
+  test('按漫画删除只清该书任务，其它漫画仍可离线阅读', () async {
+    final downloads = queue();
+    final other = Book(
+      sourceId: 'keep',
+      name: '保留',
+      bookUrl: 'https://download.example/keep',
+    );
+    await downloads.enqueue(book, chapters, [0]);
+    await downloads.enqueue(other, chapters, [0]);
+    await downloads.idle;
+    final removedKey = downloads.taskFor(book, chapters[0])!.bookKey;
+    final kept = (await downloads.offlineImages(other, chapters[0]))!;
+    expect(await downloads.removeBook(removedKey), 1);
+    expect(await downloads.usageBytesForBook(removedKey), 0);
+    expect(downloads.offlineCatalogFor(book.bookUrl), isNull);
+    expect(await downloads.offlineImages(other, chapters[0]), kept);
+    expect(await File.fromUri(Uri.parse(kept.first)).exists(), isTrue);
+  });
 }

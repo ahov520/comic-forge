@@ -1,17 +1,25 @@
+import 'dart:io';
+
 import 'package:comic_forge/backup_service.dart';
+import 'package:comic_forge/services/download_store.dart';
+import 'package:comic_forge/services/image_cache_store.dart';
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/download_queue.dart';
 import 'package:comic_forge/state/shelf_update_notifications.dart';
 import 'package:comic_forge/state/source_update.dart';
 import 'package:comic_forge/state/shelf_update_schedule.dart';
+import 'package:comic_forge/ui/downloads_screen.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
 import 'package:comic_forge/ui/source_screen.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/download_test_image.dart';
 import 'support/fake_shelf_update_notifier.dart';
 
 Future<void> _showSettings(
@@ -400,4 +408,79 @@ void main() {
     },
     variant: const TargetPlatformVariant({TargetPlatform.android}),
   );
+
+  testWidgets(
+    'Android 下载管理行显示占用并进入清理页',
+    (tester) async {
+      final directory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('comic-forge-settings-dl-'),
+      );
+      final cacheDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('comic-forge-settings-cache-'),
+      );
+      addTearDown(() async {
+        await directory!.delete(recursive: true);
+        await cacheDir!.delete(recursive: true);
+      });
+      final queue = DownloadQueue(
+        sourceFor: (_) => null,
+        store: DownloadStore(directory: () async => directory!),
+        loadImages: (_, _) async => (
+          urls: ['https://download.example/page.png'],
+          headers: <String, String>{},
+        ),
+        fetchBytes: (_, _) async => downloadTestImage(),
+      );
+      final book = Book(
+        sourceId: 'settings-dl',
+        name: '漫画',
+        bookUrl: 'https://download.example/book',
+      );
+      final chapter = Chapter(title: '第1话', url: 'https://download.example/c1');
+      state.dispose();
+      state = AppState(
+        downloadQueue: queue,
+        imageCache: ImageCacheStore(
+          manager: _SettingsCacheManager(),
+          directory: () async => cacheDir!,
+        ),
+      );
+      await tester.runAsync(() async {
+        await File(
+          '${cacheDir!.path}/cached.bin',
+        ).writeAsBytes(List.filled(64, 1));
+        await queue.enqueue(book, [chapter], [0]);
+        await queue.idle;
+      });
+      await tester.runAsync(() async {
+        await _showSettings(
+          tester,
+          state,
+          size: const Size(340, 1400),
+          textScale: 1,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      });
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('下载管理'), 200);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('离线约'), findsOneWidget);
+      expect(find.textContaining('图片缓存约 64 B'), findsOneWidget);
+      await tester.tap(find.text('下载管理'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      expect(find.byTooltip('清理存储'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
+}
+
+class _SettingsCacheManager extends Fake implements BaseCacheManager {
+  @override
+  Future<void> emptyCache() async {}
+
+  @override
+  Future<void> removeFile(String key) async {}
 }

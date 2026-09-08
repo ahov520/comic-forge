@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../backup_service.dart';
+import '../services/storage_bytes.dart';
 import '../state/app_state.dart';
 import '../state/shelf_update_schedule.dart';
 import 'domain_blacklist_screen.dart';
@@ -41,6 +42,32 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String? _adMsg;
   String? _backupMsg;
+  String? _storageSubtitle;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshStorageUsage();
+  }
+
+  Future<void> _refreshStorageUsage() async {
+    if (!supportsStorageCleanup) return;
+    try {
+      final downloads = await widget.state.downloads.usageBytes();
+      final cache = await widget.state.imageCache.usageBytes();
+      if (!mounted) return;
+      setState(() {
+        _storageSubtitle = storageUsageLabel(
+          downloads: downloads,
+          cache: cache,
+        );
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _storageSubtitle = '查看离线下载并清理缓存');
+      }
+    }
+  }
 
   Future<void> _chooseShelfUpdateInterval() async {
     final selected = await showModalBottomSheet<ShelfUpdateInterval>(
@@ -641,12 +668,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.download_outlined),
                   title: const Text('下载管理'),
+                  subtitle: supportsStorageCleanup
+                      ? Text(
+                          _storageSubtitle ?? '查看离线下载并清理缓存',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : null,
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => DownloadsScreen(state: widget.state),
-                    ),
-                  ),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DownloadsScreen(state: widget.state),
+                      ),
+                    );
+                    if (mounted) await _refreshStorageUsage();
+                  },
                 ),
               ),
               row(

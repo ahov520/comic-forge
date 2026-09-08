@@ -16,6 +16,7 @@ import 'shelf_update_notices.dart';
 import 'shelf_update_notifications.dart';
 import 'shelf_update_schedule.dart';
 import '../services/shelf_update_notifier.dart';
+import '../services/image_cache_store.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
 import 'chapter_bookmarks.dart';
@@ -94,11 +95,13 @@ class CachedDetail {
 class AppState extends ChangeNotifier {
   AppState({
     DownloadQueue? downloadQueue,
+    ImageCacheStore? imageCache,
     ShelfUpdateSchedule? shelfUpdateSchedule,
     ReadingStats? readingStats,
     ShelfUpdateNotifications? updateNotifications,
     ShelfUpdateNotifier? updateNotifier,
   }) : _downloads = downloadQueue,
+       _imageCache = imageCache, // ignore: prefer_initializing_formals
        shelfUpdateSchedule = shelfUpdateSchedule ?? ShelfUpdateSchedule(),
        readingStats = readingStats ?? ReadingStats(),
        updateNotifications = updateNotifications ?? ShelfUpdateNotifications(),
@@ -121,6 +124,9 @@ class AppState extends ChangeNotifier {
   DownloadQueue get downloads => _downloads ??= DownloadQueue(
     sourceFor: (id) => sources.where((source) => source.id == id).firstOrNull,
   );
+
+  ImageCacheStore? _imageCache;
+  ImageCacheStore get imageCache => _imageCache ??= ImageCacheStore();
 
   @override
   void dispose() {

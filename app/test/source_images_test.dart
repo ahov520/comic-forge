@@ -55,6 +55,34 @@ void main() {
     expect(fetcher.requests, hasLength(1));
   });
 
+  test('清除指定源的章节图片缓存后会重新抓取，其它源不受影响', () async {
+    final firstFetcher = FakeFetcher(
+      (_) => '<img class="page" src="/one.png">',
+    );
+    final secondFetcher = FakeFetcher(
+      (_) => '<img class="page" src="/two.png">',
+    );
+    final first = _runtime(firstFetcher);
+    final second = _runtime(secondFetcher, sourceId: 'other-source');
+    const firstChapter = 'https://reader.example/one';
+    const secondChapter = 'https://reader.example/two';
+    expect(await service.imagesFor(first, firstChapter), [
+      'https://reader.example/one.png',
+    ]);
+    expect(await service.imagesFor(second, secondChapter), [
+      'https://reader.example/two.png',
+    ]);
+    service.clearChapterImageCache(sourceId: first.source.id);
+    expect(await service.imagesFor(first, firstChapter), [
+      'https://reader.example/one.png',
+    ]);
+    expect(await service.imagesFor(second, secondChapter), [
+      'https://reader.example/two.png',
+    ]);
+    expect(firstFetcher.requests, hasLength(2));
+    expect(secondFetcher.requests, hasLength(1));
+  });
+
   test('预取和阅读共享在途请求，完成时使用最新规则并保留原始图片', () async {
     final response = Completer<String>();
     final fetcher = FakeFetcher((_) => response.future);

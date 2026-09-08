@@ -110,6 +110,12 @@ class DownloadQueue extends ChangeNotifier {
 
   bool get supported => !kIsWeb;
   List<DownloadTask> get tasks => List.unmodifiable(_tasks.values);
+  List<DownloadCatalog> get catalogs {
+    final list = _catalogs.values.toList();
+    list.sort((a, b) => b.at.compareTo(a.at));
+    return List.unmodifiable(list);
+  }
+
   Future<void> get idle async {
     await _writes;
     while (_worker != null) {
@@ -119,6 +125,13 @@ class DownloadQueue extends ChangeNotifier {
   }
 
   DownloadCatalog? catalogFor(DownloadTask task) => _catalogs[task.bookKey];
+
+  DownloadCatalog? catalogForKey(String bookKey) => _catalogs[bookKey];
+
+  Iterable<String> imageUrlsFor(String bookKey) => _tasks.values
+      .where((task) => task.bookKey == bookKey)
+      .expand((task) => task.imageUrls)
+      .where((url) => url.isNotEmpty);
 
   DownloadTask? taskFor(Book book, Chapter chapter) =>
       _tasks[downloadKey([
@@ -286,6 +299,48 @@ class DownloadQueue extends ChangeNotifier {
       }
     }
     await _startQueuedTasks();
+  }
+
+  Future<int?> usageBytes() async {
+    if (!supported) return 0;
+    try {
+      return await store.usageBytes();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> usageBytesForBook(String bookKey) async {
+    if (!supported) return 0;
+    try {
+      var total = 0;
+      for (final task in _tasks.values.where(
+        (task) => task.bookKey == bookKey,
+      )) {
+        total += await store.usageBytesForTask(task.id) ?? 0;
+      }
+      return total;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int> clearCompleted() =>
+      _removeMatching((task) => task.status == DownloadStatus.completed);
+
+  Future<int> clearFailed() =>
+      _removeMatching((task) => task.status == DownloadStatus.failed);
+
+  Future<int> removeBook(String bookKey) =>
+      _removeMatching((task) => task.bookKey == bookKey);
+
+  Future<int> _removeMatching(bool Function(DownloadTask task) test) async {
+    await load();
+    final ids = _tasks.values.where(test).map((task) => task.id).toList();
+    for (final id in ids) {
+      await remove(id);
+    }
+    return ids.length;
   }
 
   Future<void> _startQueuedTasks() async {
