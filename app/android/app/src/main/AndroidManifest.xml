@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Source requests need network access in release builds as well. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ runtime permission for shelf update notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Community rules include HTTP endpoints and image URLs. -->
     <application
         android:label="comic_forge"

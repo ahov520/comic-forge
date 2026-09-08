@@ -376,6 +376,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : null,
                 ),
               ),
+              row(
+                SwitchListTile(
+                  secondary: const Icon(Icons.notifications_outlined),
+                  title: const Text('更新通知'),
+                  subtitle: const Text('发现新章节时发送系统通知，点按打开漫画'),
+                  value: widget.state.updateNotifications.enabled,
+                  onChanged: (value) async {
+                    final allowed = await widget.state
+                        .setUpdateNotificationsEnabled(value);
+                    if (!allowed && value && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('未授予通知权限，可在系统设置中开启')),
+                      );
+                    }
+                  },
+                ),
+              ),
               const _Header('数据'),
               row(
                 ListTile(
