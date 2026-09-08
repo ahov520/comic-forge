@@ -305,14 +305,6 @@ class _ShelfScreenState extends State<ShelfScreen> {
                                   ],
                                   icon: const Icon(Icons.sort),
                                 ),
-                                if (widget.state.shelf.isNotEmpty)
-                                  IconButton(
-                                    tooltip: '批量管理',
-                                    onPressed: books.isEmpty
-                                        ? null
-                                        : _enterSelection,
-                                    icon: const Icon(Icons.checklist),
-                                  ),
                                 PopupMenuButton<String>(
                                   tooltip: '书架操作',
                                   onSelected: (action) {

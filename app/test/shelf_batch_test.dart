@@ -43,7 +43,9 @@ void main() {
 
   testWidgets('顶栏或长按进入多选，点按切换且不打开详情，全选作用于当前筛选', (tester) async {
     await showShelf(tester);
-    await tester.tap(find.byTooltip('批量管理'));
+    await tester.tap(find.byTooltip('书架操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('批量管理'));
     await tester.pumpAndSettle();
     expect(find.text('已选 0'), findsOneWidget);
     await tester.tap(coverOf(serial.name));
