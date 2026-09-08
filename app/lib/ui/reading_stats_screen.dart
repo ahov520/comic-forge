@@ -1,12 +1,19 @@
+import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 
 import '../state/reading_history.dart';
 import '../state/reading_stats.dart';
+import 'comic_reading_stats_screen.dart';
 
 class ReadingStatsScreen extends StatefulWidget {
-  const ReadingStatsScreen({super.key, required this.stats});
+  const ReadingStatsScreen({
+    super.key,
+    required this.stats,
+    this.sources = const [],
+  });
 
   final ReadingStats stats;
+  final List<ComicSource> sources;
 
   @override
   State<ReadingStatsScreen> createState() => _ReadingStatsScreenState();
@@ -50,6 +57,24 @@ class _ReadingStatsScreenState extends State<ReadingStatsScreen>
             _SummaryCard(title: '今日阅读', summary: stats.today),
             const SizedBox(height: 12),
             _SummaryCard(title: '累计阅读', summary: stats.total, showDays: true),
+            const SizedBox(height: 12),
+            Card(
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.menu_book_outlined),
+                title: const Text('按漫画查看'),
+                subtitle: const Text('时长、话数、次数与最近阅读'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ComicReadingStatsScreen(
+                      stats: stats,
+                      sources: widget.sources,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
             Text('近 7 日', style: textTheme.titleMedium),
             for (final day in days)

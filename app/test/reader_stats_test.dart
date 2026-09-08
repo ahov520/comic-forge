@@ -108,6 +108,7 @@ void main() {
     expect(requests, contains(chapters[1].url), reason: '下一话已预加载');
     now = now.add(const Duration(minutes: 5));
     expect(state.readingStats.total.chapterCount, 0);
+    expect(state.readingStats.comics, isEmpty);
     loading.complete([imageUrls.first]);
     await tester.pumpAndSettle();
     expect(state.readingStats.total.chapterCount, 1);
@@ -130,6 +131,11 @@ void main() {
     expect(restored.total.duration, const Duration(seconds: 50));
     expect(restored.total.bookCount, 1);
     expect(restored.total.chapterCount, 1);
+    final comic = restored.forBook(book)!;
+    expect(comic.duration, const Duration(seconds: 50));
+    expect(comic.chapterCount, 1);
+    expect(comic.sessionCount, 1);
+    expect(comic.lastReadAt, now);
   });
 
   for (final mode in ['scroll', 'paged']) {
@@ -153,6 +159,11 @@ void main() {
       expect(state.readingStats.total.duration, const Duration(seconds: 85));
       expect(state.readingStats.total.chapterCount, 2);
       expect(state.readingStats.total.bookCount, 1);
+      final comic = state.readingStats.forBook(book)!;
+      expect(comic.duration, const Duration(seconds: 85));
+      expect(comic.chapterCount, 2);
+      expect(comic.sessionCount, 3);
+      expect(comic.lastReadAt, now);
     });
   }
 
@@ -165,6 +176,7 @@ void main() {
     loading.complete([imageUrls.first]);
     await tester.pump();
     expect(state.readingStats.total.chapterCount, 0);
+    expect(state.readingStats.comics, isEmpty);
     now = now.add(const Duration(hours: 2));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
@@ -172,6 +184,7 @@ void main() {
     now = now.add(const Duration(seconds: 20));
     await closeReader(tester);
     expect(state.readingStats.total.duration, const Duration(seconds: 20));
+    expect(state.readingStats.forBook(book)!.sessionCount, 1);
   });
 
   testWidgets('空章、失败和晚到的旧请求不计入，成功重试后才记录当前章节', (tester) async {
@@ -192,6 +205,7 @@ void main() {
     expect(find.text('暂时无法加载章节'), findsOneWidget);
     now = now.add(const Duration(minutes: 5));
     expect(state.readingStats.total.chapterCount, 0);
+    expect(state.readingStats.comics, isEmpty);
     loadImages = (_) async => [imageUrls[2]];
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
@@ -199,6 +213,7 @@ void main() {
     await closeReader(tester);
     expect(state.readingStats.total.chapterCount, 1);
     expect(state.readingStats.total.duration, const Duration(seconds: 15));
+    expect(state.readingStats.forBook(book)!.sessionCount, 1);
     expect(tester.takeException(), isNull);
   });
 }

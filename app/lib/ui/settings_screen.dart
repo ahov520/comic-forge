@@ -384,8 +384,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          ReadingStatsScreen(stats: widget.state.readingStats),
+                      builder: (_) => ReadingStatsScreen(
+                        stats: widget.state.readingStats,
+                        sources: widget.state.sources,
+                      ),
                     ),
                   ),
                 ),

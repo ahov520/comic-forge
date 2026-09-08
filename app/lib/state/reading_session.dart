@@ -11,6 +11,7 @@ class ReadingSession {
   Chapter? _chapter;
   DateTime? _startedAt;
   bool _active = false;
+  bool _counted = false;
 
   Future<void> openChapter(Book book, Chapter chapter) async {
     final closing = closeChapter();
@@ -39,7 +40,15 @@ class ReadingSession {
     if (!_active || book == null || chapter == null) return;
     final at = stats.now;
     _startedAt = at;
-    await stats.record(book, chapter, from: at, to: at);
+    final startsSession = !_counted;
+    _counted = true;
+    await stats.record(
+      book,
+      chapter,
+      from: at,
+      to: at,
+      startsSession: startsSession,
+    );
   }
 
   Future<void> checkpoint() async {
@@ -49,7 +58,7 @@ class ReadingSession {
     if (from == null || book == null || chapter == null) return;
     final to = stats.now;
     _startedAt = to;
-    await stats.record(book, chapter, from: from, to: to);
+    await stats.record(book, chapter, from: from, to: to, startsSession: false);
   }
 
   Future<void> closeChapter() async {
@@ -57,6 +66,7 @@ class ReadingSession {
     _startedAt = null;
     _book = null;
     _chapter = null;
+    _counted = false;
     await saving;
   }
 }
