@@ -14,6 +14,7 @@ import 'shelf_updates.dart';
 import 'shelf_update_schedule.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
+import 'chapter_bookmarks.dart';
 import 'reading_stats.dart';
 import 'shelf_groups.dart';
 import 'shelf_sort.dart';
@@ -127,6 +128,7 @@ class AppState extends ChangeNotifier {
   static const _kDark = 'cf.dark';
   static const _kProgress = 'cf.progress';
   static const _kReadingHistory = 'cf.readingHistory';
+  static const _kChapterBookmarks = 'cf.chapterBookmarks';
   static const _kDetailCache = 'cf.detailCache';
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kReaderMode = 'cf.readerMode';
@@ -168,6 +170,10 @@ class AppState extends ChangeNotifier {
   final Map<String, ReadingProgress> progress = {}; // key: bookUrl
   final List<ReadingHistoryEntry> _readingHistory = [];
   List<ReadingHistoryEntry> get readingHistory => List.unmodifiable(_readingHistory);
+  final List<ChapterBookmark> _chapterBookmarks = [];
+  int _bookmarkWrite = 0;
+  List<ChapterBookmark> get chapterBookmarks =>
+      List.unmodifiable(_chapterBookmarks);
   final Map<String, CachedDetail> detailCache = {}; // key: bookUrl
   final Map<String, int> repoLastRefresh = {}; // key: repo url, epoch ms
   final Map<String, RepoUpdateState> repoUpdates = {}; // key: repo url
@@ -296,6 +302,7 @@ class AppState extends ChangeNotifier {
     await downloads.load();
     _restoreReadingHistory(sp.get(_kReadingHistory));
     if (!sp.containsKey(_kReadingHistory)) await _persistReadingHistory();
+    _restoreChapterBookmarks(sp.get(_kChapterBookmarks));
   }
 
   void _restoreSearchHistory(Object? saved) {
@@ -480,6 +487,100 @@ class AppState extends ChangeNotifier {
     _readingHistory.removeWhere((entry) => entry.key == key);
     await _persistReadingHistory();
     notifyListeners();
+  }
+
+  List<ChapterBookmark> bookmarksFor(Book book) {
+    final key = ChapterBookmark.bookKeyFor(book);
+    return _chapterBookmarks.where((entry) => entry.bookKey == key).toList();
+  }
+
+  bool isChapterBookmarked(Book book, Chapter chapter) {
+    if (chapter.url.isEmpty) return false;
+    final key = ChapterBookmark.keyFor(book, chapter);
+    return _chapterBookmarks.any((entry) => entry.key == key);
+  }
+
+  /// 添加或移除当前话书签。返回 true 表示现在已收藏。
+  Future<bool> toggleChapterBookmark(
+    Book book, {
+    required Chapter chapter,
+    required int chapterIndex,
+  }) async {
+    if (book.bookUrl.isEmpty || chapter.url.isEmpty || chapterIndex < 0) {
+      return isChapterBookmarked(book, chapter);
+    }
+    final key = ChapterBookmark.keyFor(book, chapter);
+    final existing = _chapterBookmarks.indexWhere((entry) => entry.key == key);
+    if (existing >= 0) {
+      _chapterBookmarks.removeAt(existing);
+      await _persistChapterBookmarks();
+      notifyListeners();
+      return false;
+    }
+    final entry = ChapterBookmark(
+      book: Book.fromJson(book.toJson()),
+      chapter: Chapter.fromJson(chapter.toJson()),
+      chapterIndex: chapterIndex,
+      at: DateTime.now().millisecondsSinceEpoch,
+    );
+    _chapterBookmarks.insert(0, entry);
+    await _persistChapterBookmarks();
+    notifyListeners();
+    return true;
+  }
+
+  /// 只移除书签，不影响阅读进度、历史或章内位置。
+  Future<void> removeChapterBookmark(String key) async {
+    final before = _chapterBookmarks.length;
+    _chapterBookmarks.removeWhere((entry) => entry.key == key);
+    if (_chapterBookmarks.length == before) return;
+    await _persistChapterBookmarks();
+    notifyListeners();
+  }
+
+  void _restoreChapterBookmarks(Object? saved) {
+    _chapterBookmarks.clear();
+    if (saved is! String) return;
+    try {
+      final decoded = jsonDecode(saved);
+      if (decoded is! List) return;
+      final entries = <(int, ChapterBookmark)>[];
+      for (final (index, value) in decoded.indexed) {
+        try {
+          if (value is! Map<String, dynamic>) continue;
+          final entry = ChapterBookmark.fromJson(value);
+          if (entry.book.bookUrl.isEmpty ||
+              entry.chapter.url.isEmpty ||
+              entry.chapterIndex < 0 ||
+              entry.at < 0) {
+            continue;
+          }
+          entries.add((index, entry));
+        } catch (_) {
+          // 保留同一列表中其它完整记录。
+        }
+      }
+      entries.sort((a, b) {
+        final byTime = b.$2.at.compareTo(a.$2.at);
+        return byTime == 0 ? a.$1.compareTo(b.$1) : byTime;
+      });
+      final seen = <String>{};
+      _chapterBookmarks.addAll(entries
+          .map((entry) => entry.$2)
+          .where((entry) => seen.add(entry.key)));
+    } on FormatException {
+      // 书签损坏不影响书架、阅读进度或应用启动。
+    }
+  }
+
+  Future<void> _persistChapterBookmarks() async {
+    final token = ++_bookmarkWrite;
+    final payload = jsonEncode(
+      _chapterBookmarks.map((entry) => entry.toJson()).toList(),
+    );
+    final sp = await SharedPreferences.getInstance();
+    if (_disposed || token != _bookmarkWrite) return;
+    await sp.setStringSafe(_kChapterBookmarks, payload);
   }
 
   void _restoreShelfUpdates(SharedPreferences sp) {

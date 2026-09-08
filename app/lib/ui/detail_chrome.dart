@@ -255,12 +255,14 @@ class ChapterTile extends StatelessWidget {
     required this.title,
     required this.isCurrent,
     required this.onTap,
+    this.isBookmarked = false,
     this.numberWidth,
   });
 
   final int index;
   final String title;
   final bool isCurrent;
+  final bool isBookmarked;
   final VoidCallback? onTap;
   final double? numberWidth;
 
@@ -339,7 +341,9 @@ class ChapterTile extends StatelessWidget {
                     ),
                   ),
                   if (isCurrent)
-                    Icon(Icons.bookmark, size: 16, color: numColor),
+                    Icon(Icons.bookmark, size: 16, color: numColor)
+                  else if (isBookmarked)
+                    Icon(Icons.bookmark_outline, size: 16, color: numColor),
                 ],
               ),
             ),

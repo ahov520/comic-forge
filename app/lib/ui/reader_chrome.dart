@@ -96,7 +96,7 @@ Duration _chromeAnim(BuildContext context) =>
     ? Duration.zero
     : const Duration(milliseconds: 200);
 
-/// 顶栏：关闭 · 书名/章节 · 更多。隐藏时不拦截点击。
+/// 顶栏：关闭 · 书名/章节 · 书签 · 更多。隐藏时不拦截点击。
 class ReaderTopChrome extends StatelessWidget {
   const ReaderTopChrome({
     super.key,
@@ -104,12 +104,16 @@ class ReaderTopChrome extends StatelessWidget {
     required this.title,
     this.onClose,
     this.onMore,
+    this.onBookmark,
+    this.bookmarked = false,
   });
 
   final bool visible;
   final String title;
   final VoidCallback? onClose;
   final VoidCallback? onMore;
+  final VoidCallback? onBookmark;
+  final bool bookmarked;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +156,24 @@ class ReaderTopChrome extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 2),
+              if (onBookmark != null)
+                IconButton(
+                  tooltip: bookmarked ? '移除书签' : '添加书签',
+                  color: const Color(0xFFEEEEEE),
+                  iconSize: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: onBookmark,
+                  icon: Icon(
+                    bookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  ),
+                ),
               IconButton(
                 tooltip: '阅读设置',
                 color: const Color(0xFFEEEEEE),
@@ -255,11 +277,13 @@ class ReaderCatalogSheet extends StatefulWidget {
     required this.chapters,
     required this.currentIndex,
     required this.onPick,
+    this.bookmarkedUrls = const {},
   });
 
   final List<Chapter> chapters;
   final int currentIndex;
   final ValueChanged<int> onPick;
+  final Set<String> bookmarkedUrls;
 
   @override
   State<ReaderCatalogSheet> createState() => _ReaderCatalogSheetState();
@@ -348,6 +372,9 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
                     itemCount: widget.chapters.length,
                     itemBuilder: (context, i) {
                       final current = i == widget.currentIndex;
+                      final bookmarked = widget.bookmarkedUrls.contains(
+                        widget.chapters[i].url,
+                      );
                       return ListTile(
                         dense: true,
                         selected: current,
@@ -368,6 +395,13 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
                             fontWeight: current ? FontWeight.w600 : null,
                           ),
                         ),
+                        trailing: bookmarked && !current
+                            ? const Icon(
+                                Icons.bookmark_outline,
+                                size: 16,
+                                color: Colors.white54,
+                              )
+                            : null,
                         onTap: () => widget.onPick(i),
                       );
                     },

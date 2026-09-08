@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../state/source_share.dart';
 import '../state/download_queue.dart';
 import 'comic_reading_stats_screen.dart';
+import 'chapter_bookmark_sheet.dart';
 import 'detail_chrome.dart';
 import 'download_selection_sheet.dart';
 import 'downloads_screen.dart';
@@ -144,6 +145,39 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           stats: widget.appState.readingStats,
           sources: widget.appState.sources,
           book: book,
+        ),
+      ),
+    );
+  }
+
+  void _openBookmarks({
+    required Book book,
+    required List<Chapter> chapters,
+    required void Function(int index) openAt,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetCtx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.7,
+        ),
+        child: ChapterBookmarkSheet(
+          state: widget.appState,
+          book: book,
+          onPick: (bookmark) {
+            final index = bookmark.indexIn(chapters);
+            Navigator.of(sheetCtx).pop();
+            if (index == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('目录中找不到该书签对应的章节')),
+              );
+              return;
+            }
+            openAt(index);
+          },
         ),
       ),
     );
@@ -392,6 +426,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 !canRead && hasOffline && !offlineIndices.contains(resumeIndex)
                 ? offlineIndices.first
                 : resumeIndex;
+            final bookmarkedUrls = {
+              for (final bookmark in widget.appState.bookmarksFor(book))
+                bookmark.chapter.url,
+            };
+            final bookmarkCount = widget.appState.bookmarksFor(book).length;
             final labelSource = _source ?? currentSource;
             final sourceName = labelSource == null
                 ? null
@@ -502,6 +541,25 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                             onTap: () => _openReadingStats(book),
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: ListTile(
+                            key: const Key('detail-chapter-bookmarks'),
+                            leading: const Icon(Icons.bookmark_outline),
+                            title: const Text('书签'),
+                            subtitle: Text(
+                              bookmarkCount == 0
+                                  ? '阅读时点顶栏书签即可添加'
+                                  : '$bookmarkCount 话',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _openBookmarks(
+                              book: book,
+                              chapters: chapters,
+                              openAt: openAt,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -569,6 +627,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           numberWidth: chapterNumberWidth,
                           title: chapters[index].title,
                           isCurrent: index == savedIdx,
+                          isBookmarked: bookmarkedUrls.contains(
+                            chapters[index].url,
+                          ),
                           onTap: canRead || offlineIndices.contains(index)
                               ? () => openAt(index)
                               : null,

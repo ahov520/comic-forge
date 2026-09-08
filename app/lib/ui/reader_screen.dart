@@ -8,9 +8,11 @@ import 'package:engine/engine.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import '../state/chapter_bookmarks.dart';
 import '../state/reading_session.dart';
 import '../state/scroll_restore.dart';
 import '../state/download_queue.dart';
+import 'chapter_bookmark_sheet.dart';
 import 'reader_chrome.dart';
 import 'reader_image_page.dart';
 import 'reader_network_image.dart';
@@ -714,6 +716,14 @@ class _ReaderScreenState extends State<ReaderScreen>
                 child: ReaderTopChrome(
                   visible: _chromeVisible,
                   title: _chromeTitle,
+                  bookmarked: widget.appState?.isChapterBookmarked(
+                        widget.book,
+                        _chapter,
+                      ) ??
+                      false,
+                  onBookmark: widget.appState == null
+                      ? null
+                      : () => _toggleBookmark(context),
                   onMore: widget.appState == null
                       ? null
                       : () => _showReaderSettingsSheet(context),
@@ -724,6 +734,57 @@ class _ReaderScreenState extends State<ReaderScreen>
             ],
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _toggleBookmark(BuildContext context) async {
+    final appState = widget.appState;
+    if (appState == null) return;
+    final added = await appState.toggleChapterBookmark(
+      widget.book,
+      chapter: _chapter,
+      chapterIndex: _index,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(added ? '已添加书签' : '已移除书签')),
+    );
+  }
+
+  void _jumpToBookmark(ChapterBookmark bookmark) {
+    final index = bookmark.indexIn(widget.chapters);
+    if (index == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('目录中找不到该书签对应的章节')),
+      );
+      return;
+    }
+    if (index != _index) _loadChapter(index, save: true);
+  }
+
+  void _showBookmarkSheet(BuildContext context) {
+    final appState = widget.appState;
+    if (appState == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF161619),
+      showDragHandle: true,
+      builder: (sheetCtx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.7,
+        ),
+        child: ChapterBookmarkSheet(
+          state: appState,
+          book: widget.book,
+          currentChapterUrl: _chapter.url,
+          onPick: (bookmark) {
+            Navigator.of(sheetCtx).pop();
+            _jumpToBookmark(bookmark);
+          },
+        ),
       ),
     );
   }
@@ -742,6 +803,12 @@ class _ReaderScreenState extends State<ReaderScreen>
         child: ReaderCatalogSheet(
           chapters: widget.chapters,
           currentIndex: _index,
+          bookmarkedUrls: {
+            for (final bookmark
+                in widget.appState?.bookmarksFor(widget.book) ??
+                    const <ChapterBookmark>[])
+              bookmark.chapter.url,
+          },
           onPick: (i) {
             Navigator.of(sheetCtx).pop();
             if (i != _index) _loadChapter(i, save: true);
@@ -751,7 +818,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     );
   }
 
-  /// 阅读设置面板：亮度 / 模式切换 / 音量键翻页开关。
+  /// 阅读设置面板：亮度 / 模式切换 / 音量键翻页开关 / 章节书签。
   void _showReaderSettingsSheet(BuildContext context) {
     final appState = widget.appState;
     if (appState == null) return;
@@ -763,14 +830,18 @@ class _ReaderScreenState extends State<ReaderScreen>
       backgroundColor: const Color(0xFF161619),
       builder: (sheetCtx) => AnimatedBuilder(
         animation: appState,
-        builder: (context, _) => SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        builder: (context, _) {
+          final bookmarked =
+              appState.isChapterBookmarked(widget.book, _chapter);
+          final bookmarkCount = appState.bookmarksFor(widget.book).length;
+          return SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Row(
                   children: [
                     const Icon(
@@ -832,10 +903,50 @@ class _ReaderScreenState extends State<ReaderScreen>
                   value: appState.readerVolumeKeys,
                   onChanged: appState.setReaderVolumeKeys,
                 ),
+                const Divider(color: Colors.white24),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    bookmarked ? Icons.bookmark : Icons.bookmark_border,
+                    color: Colors.white70,
+                  ),
+                  title: Text(
+                    bookmarked ? '移除本章书签' : '添加本章书签',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                  onTap: () => _toggleBookmark(context),
+                ),
+                ListTile(
+                  key: const Key('reader-chapter-bookmarks'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.bookmarks_outlined,
+                    color: Colors.white70,
+                  ),
+                  title: const Text(
+                    '本书书签',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    bookmarkCount == 0 ? '暂无书签' : '$bookmarkCount 话',
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    _showBookmarkSheet(context);
+                  },
+                ),
               ],
             ),
           ),
-        ),
+        );
+        },
       ),
     );
   }
