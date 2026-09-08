@@ -7,6 +7,7 @@ import 'package:engine/engine.dart';
 
 import '../services/source_service.dart';
 import '../state/app_state.dart';
+import '../state/shelf_sort.dart';
 import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
 import 'comic_reading_stats_screen.dart';
@@ -57,6 +58,14 @@ class _ShelfScreenState extends State<ShelfScreen> {
   void _clearSearch() {
     _searchController.clear();
     _search('');
+  }
+
+  Future<void> _setSort(ShelfSort sort) async {
+    FocusScope.of(context).unfocus();
+    if (widget.state.shelfSort != sort && _scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await widget.state.setShelfSort(sort);
   }
 
   Future<void> _refreshUpdates() async {
@@ -140,28 +149,10 @@ class _ShelfScreenState extends State<ShelfScreen> {
     return AnimatedBuilder(
       animation: widget.state,
       builder: (context, _) {
-        // 筛选：kind 含「完结」→ 已完结；kind 非空且不含「完结」→ 连载中；kind 空 → 仅「全部」可见
-        final books =
-            widget.state.shelf.where((b) {
-              if (!widget.state.shelfGroups.matches(b.bookUrl)) return false;
-              if (_query.isNotEmpty &&
-                  !b.name.toLowerCase().contains(_query) &&
-                  !b.author.toLowerCase().contains(_query)) {
-                return false;
-              }
-              switch (_filter) {
-                case 2:
-                  return b.kind.contains('完结');
-                case 1:
-                  return b.kind.isNotEmpty && !b.kind.contains('完结');
-                default:
-                  return true;
-              }
-            }).toList()..sort((a, b) {
-              final pa = widget.state.progress[a.bookUrl]?.at ?? 0;
-              final pb = widget.state.progress[b.bookUrl]?.at ?? 0;
-              return pb.compareTo(pa);
-            });
+        final books = widget.state.shelfBooks(
+          query: _query,
+          kindFilter: _filter,
+        );
         return SafeArea(
           bottom: false,
           child: RefreshIndicator(
@@ -192,6 +183,19 @@ class _ShelfScreenState extends State<ShelfScreen> {
                                   ),
                                 )
                               : const Icon(Icons.refresh),
+                        ),
+                        PopupMenuButton<ShelfSort>(
+                          tooltip: '排序：${widget.state.shelfSort.label}',
+                          initialValue: widget.state.shelfSort,
+                          onSelected: _setSort,
+                          itemBuilder: (_) => [
+                            for (final sort in ShelfSort.values)
+                              PopupMenuItem(
+                                value: sort,
+                                child: Text(sort.label),
+                              ),
+                          ],
+                          icon: const Icon(Icons.sort),
                         ),
                         PopupMenuButton<String>(
                           tooltip: '书架操作',
