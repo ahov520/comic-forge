@@ -376,12 +376,16 @@ class _SourceEditorScreenState extends State<SourceEditorScreen> {
               const SizedBox(height: 6),
               SizedBox(
                 height: 120,
-                child: Image.network(
-                  _trialImages.first,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Text('首图预览加载失败（URL 见下）',
-                      style: TextStyle(fontSize: 11, color: scheme.outline)),
-                ),
+                child: SourceService.instance.networkPolicy
+                        .isBlocked(_trialImages.first)
+                    ? Text('首图域名已被屏蔽',
+                        style: TextStyle(fontSize: 11, color: scheme.outline))
+                    : Image.network(
+                        _trialImages.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Text('首图预览加载失败（URL 见下）',
+                            style: TextStyle(fontSize: 11, color: scheme.outline)),
+                      ),
               ),
               const SizedBox(height: 4),
               Text(_trialImages.take(3).join('\n'),

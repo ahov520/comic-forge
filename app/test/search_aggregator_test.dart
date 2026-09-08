@@ -99,6 +99,20 @@ void main() {
         '已聚合 3 个源 · 1 成功 1 超时 1 失败',
       );
     });
+
+    test('屏蔽单独计数', () {
+      expect(
+        searchAggregateStatus(
+          sourceCount: 2,
+          successCount: 1,
+          timeoutCount: 0,
+          errorCount: 0,
+          blockedCount: 1,
+          searching: false,
+        ),
+        '已聚合 2 个源 · 1 成功 1 屏蔽',
+      );
+    });
   });
 
   group('searchFailureTip / classifySearchFailure', () {
@@ -126,8 +140,35 @@ void main() {
         classifySearchFailure(Exception('Fetch timeout')),
         SearchSourceFailKind.timeout,
       );
-      expect(classifySearchFailure(Exception('连接超时')), SearchSourceFailKind.timeout);
-      expect(classifySearchFailure(Exception('offline')), SearchSourceFailKind.error);
+      expect(
+        classifySearchFailure(Exception('连接超时')),
+        SearchSourceFailKind.timeout,
+      );
+      expect(
+        classifySearchFailure(Exception('offline')),
+        SearchSourceFailKind.error,
+      );
+      expect(
+        classifySearchFailure(
+          BlockedHostException('evil.com', url: 'https://evil.com/x'),
+        ),
+        SearchSourceFailKind.blocked,
+      );
+      expect(
+        classifySearchFailure(
+          Exception('BlockedHostException: 域名已被屏蔽：evil.com'),
+        ),
+        SearchSourceFailKind.blocked,
+      );
+    });
+
+    test('屏蔽源单独点名', () {
+      expect(
+        searchFailureTip(const [
+          SearchSourceFailure(name: '坏站', kind: SearchSourceFailKind.blocked),
+        ]),
+        '1 个源已屏蔽：坏站',
+      );
     });
   });
 }

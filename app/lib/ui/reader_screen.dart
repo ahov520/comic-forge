@@ -523,9 +523,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
             if (!isLast || _index + 1 < widget.chapters.length) {
               _pageTurn(1);
             } else {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('已是最后一话')));
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text('已是最后一话')));
             }
           },
           onToggleChrome: () =>
@@ -586,7 +585,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ? Icons.cloud_off_outlined
                   : Icons.image_not_supported_outlined,
               title: failed ? '暂时无法加载章节' : '本话暂无图片',
-              message: failed ? '检查网络后重试，或从目录选择其它章节。' : '可以重试加载，或从目录选择其它章节。',
+              message: failed
+                  ? (snap.error is BlockedHostException
+                        ? (snap.error as BlockedHostException).userMessage
+                        : '检查网络后重试，或从目录选择其它章节。')
+                  : '可以重试加载，或从目录选择其它章节。',
               actionLabel: '重试',
               onAction: () => _loadChapter(_index, refresh: true),
             ),

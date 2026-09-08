@@ -20,10 +20,16 @@ class SourceService {
   SourceService._();
   static final instance = SourceService._();
 
-  final Fetcher fetcher = HttpFetcher(defaultHeaders: {
-    'User-Agent':
-        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-  });
+  /// 全局域名黑名单（设置页维护；抓取与阅读器图片共用）。
+  final NetworkPolicy networkPolicy = NetworkPolicy();
+
+  late final Fetcher fetcher = HttpFetcher(
+    defaultHeaders: {
+      'User-Agent':
+          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+    },
+    policy: networkPolicy,
+  );
 
   final Map<String, SourceRuntime> _runtimes = {};
 
@@ -112,6 +118,11 @@ class SourceService {
     _runtimes.clear();
   }
 
+  /// 测试接缝：清空域名黑名单，避免用例互相污染。
+  void debugResetNetworkPolicy() {
+    networkPolicy.replaceAll(const []);
+  }
+
   SourceRuntime runtimeFor(ComicSource source) {
     final cached = _runtimes[source.id];
     if (cached != null && identical(cached.source, source)) return cached;
@@ -164,6 +175,7 @@ class SourceService {
     final urls = imagesFor(runtime, chapterUrl);
     unawaited(urls.then((list) async {
       for (final u in list.take(count)) {
+        if (networkPolicy.isBlocked(u)) continue;
         if (!context.mounted) return;
         try {
           await precacheImage(

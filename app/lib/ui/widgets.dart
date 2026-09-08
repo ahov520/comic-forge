@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:engine/engine.dart';
 
+import '../services/source_service.dart';
 import '../state/app_state.dart';
 import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
@@ -19,9 +20,8 @@ class ScreenTitle extends StatelessWidget {
     header: true,
     child: Text(
       title,
-      style: Theme.of(
-        context,
-      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+      style: Theme.of(context).textTheme.headlineSmall
+          ?.copyWith(fontWeight: FontWeight.w700),
     ),
   );
 }
@@ -112,7 +112,8 @@ class BookCover extends StatelessWidget {
         height: height,
         color: scheme.surfaceContainerHighest,
         alignment: Alignment.center,
-        child: url.isEmpty
+        child:
+            url.isEmpty || SourceService.instance.networkPolicy.isBlocked(url)
             ? Icon(Icons.menu_book_outlined, color: scheme.outline)
             : Image.network(
                 url,

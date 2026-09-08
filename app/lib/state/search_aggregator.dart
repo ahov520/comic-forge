@@ -89,8 +89,8 @@ class AggregatedSearch {
   final int duplicatesRemoved;
 }
 
-/// 单源失败原因：超时与其它错误分开提示。
-enum SearchSourceFailKind { timeout, error }
+/// 单源失败原因：超时、屏蔽与其它错误分开提示。
+enum SearchSourceFailKind { timeout, error, blocked }
 
 class SearchSourceFailure {
   const SearchSourceFailure({required this.name, required this.kind});
@@ -106,11 +106,13 @@ String searchAggregateStatus({
   required int timeoutCount,
   required int errorCount,
   required bool searching,
+  int blockedCount = 0,
 }) {
   final counts = <String>[
     if (successCount > 0) '$successCount 成功',
     if (timeoutCount > 0) '$timeoutCount 超时',
     if (errorCount > 0) '$errorCount 失败',
+    if (blockedCount > 0) '$blockedCount 屏蔽',
   ];
   final prefix = searching ? '正在聚合' : '已聚合';
   if (counts.isEmpty) return '$prefix $sourceCount 个源';
@@ -121,17 +123,21 @@ String searchAggregateStatus({
 String? searchFailureTip(Iterable<SearchSourceFailure> failures) {
   final timeouts = <String>[];
   final errors = <String>[];
+  final blocked = <String>[];
   for (final f in failures) {
     switch (f.kind) {
       case SearchSourceFailKind.timeout:
         timeouts.add(f.name);
       case SearchSourceFailKind.error:
         errors.add(f.name);
+      case SearchSourceFailKind.blocked:
+        blocked.add(f.name);
     }
   }
   final parts = <String>[
     if (timeouts.isNotEmpty) '${timeouts.length} 个源超时：${timeouts.join('、')}',
     if (errors.isNotEmpty) '${errors.length} 个源失败：${errors.join('、')}',
+    if (blocked.isNotEmpty) '${blocked.length} 个源已屏蔽：${blocked.join('、')}',
   ];
   if (parts.isEmpty) return null;
   return parts.join(' · ');
@@ -139,9 +145,14 @@ String? searchFailureTip(Iterable<SearchSourceFailure> failures) {
 
 /// 将异常归类为超时或其它失败（TimeoutException / 文案含 timeout、超时）。
 SearchSourceFailKind classifySearchFailure(Object error) {
+  if (error is BlockedHostException) return SearchSourceFailKind.blocked;
   if (error is TimeoutException) return SearchSourceFailKind.timeout;
-  final text = error.toString().toLowerCase();
-  if (text.contains('timeout') || text.contains('超时')) {
+  final text = error.toString();
+  if (text.contains('域名已被屏蔽') || text.contains('BlockedHostException')) {
+    return SearchSourceFailKind.blocked;
+  }
+  final lower = text.toLowerCase();
+  if (lower.contains('timeout') || lower.contains('超时')) {
     return SearchSourceFailKind.timeout;
   }
   return SearchSourceFailKind.error;

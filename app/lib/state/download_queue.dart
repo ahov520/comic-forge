@@ -433,9 +433,12 @@ class DownloadQueue extends ChangeNotifier {
       } catch (error) {
         if (_current(task)) {
           task.status = DownloadStatus.failed;
-          task.error = error is StateError
-              ? error.message.toString()
-              : (error is TimeoutException ? '下载超时，请重试' : '下载失败，请检查网络和可用空间后重试');
+          task.error = switch (error) {
+            BlockedHostException e => e.userMessage,
+            StateError e => e.message.toString(),
+            TimeoutException() => '下载超时，请重试',
+            _ => '下载失败，请检查网络和可用空间后重试',
+          };
         }
       } finally {
         if (_current(task)) {
