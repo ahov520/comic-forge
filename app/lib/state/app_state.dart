@@ -1780,6 +1780,22 @@ class AppState extends ChangeNotifier {
     return n;
   }
 
+  /// 重新启用已停用源。默认全部已停用；[unhealthyOnly] 只恢复失效候选。
+  Future<int> enableDisabledSources({bool unhealthyOnly = false}) async {
+    var n = 0;
+    for (final s in sources) {
+      if (!s.enabled && (!unhealthyOnly || s.isUnhealthy)) {
+        s.enabled = true;
+        n++;
+      }
+    }
+    if (n > 0) {
+      await _persistSources();
+      notifyListeners();
+    }
+    return n;
+  }
+
   /// 清空全部失败记录（重新探活时用）。
   Future<int> resetSourceHealth() async {
     var n = 0;

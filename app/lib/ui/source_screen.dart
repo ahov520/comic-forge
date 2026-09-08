@@ -52,6 +52,18 @@ String repoFailureLabel(String? error) {
   return '上次失败：$msg';
 }
 
+/// 源列表健康筛选：全部 / 连续失败≥3 / 已停用。
+enum SourceHealthFilter { all, unhealthy, disabled }
+
+/// 源是否属于当前健康筛选。
+bool sourceMatchesHealthFilter(ComicSource source, SourceHealthFilter filter) {
+  return switch (filter) {
+    SourceHealthFilter.all => true,
+    SourceHealthFilter.unhealthy => source.isUnhealthy,
+    SourceHealthFilter.disabled => !source.enabled,
+  };
+}
+
 /// 设置页「源订阅」副标题。
 String sourceSubscriptionSubtitle(AppState state) {
   if (state.repos.isEmpty) return '订阅远程源列表并检查更新';
@@ -76,6 +88,7 @@ class _SourceScreenState extends State<SourceScreen> {
   final _feedback = ValueNotifier<String?>(null);
   String? _refreshingRepo;
   bool _probing = false;
+  SourceHealthFilter _healthFilter = SourceHealthFilter.all;
 
   @override
   void dispose() {
@@ -278,6 +291,28 @@ class _SourceScreenState extends State<SourceScreen> {
     }
   }
 
+  Future<void> _disableUnhealthy() async {
+    final n = await widget.state.disableUnhealthySources();
+    if (!mounted) return;
+    setState(
+      () => _feedback.value = n > 0
+          ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）'
+          : '没有连续失败≥3 的源',
+    );
+  }
+
+  Future<void> _enableDisabled({required bool unhealthyOnly}) async {
+    final n = await widget.state.enableDisabledSources(
+      unhealthyOnly: unhealthyOnly,
+    );
+    if (!mounted) return;
+    setState(
+      () => _feedback.value = n > 0
+          ? (unhealthyOnly ? '已启用 $n 个已停用的失效源' : '已启用 $n 个已停用源')
+          : (unhealthyOnly ? '没有已停用的失效源' : '没有已停用的源'),
+    );
+  }
+
   /// 长按源：编辑 / 删除。
   void _showSourceActions(ComicSource s) {
     final scheme = Theme.of(context).colorScheme;
@@ -335,14 +370,9 @@ class _SourceScreenState extends State<SourceScreen> {
     } else if (v == 'refreshAll') {
       await _refreshAllRepos();
     } else if (v == 'disableUnhealthy') {
-      final n = await widget.state.disableUnhealthySources();
-      if (mounted) {
-        setState(
-          () => _feedback.value = n > 0
-              ? '已禁用 $n 个失效源（连续失败≥3，可重新打开开关恢复）'
-              : '没有连续失败≥3 的源',
-        );
-      }
+      await _disableUnhealthy();
+    } else if (v == 'enableDisabledUnhealthy') {
+      await _enableDisabled(unhealthyOnly: true);
     } else if (v == 'resetHealth') {
       final n = await widget.state.resetSourceHealth();
       if (mounted) {
@@ -373,6 +403,9 @@ class _SourceScreenState extends State<SourceScreen> {
                   hasSources: widget.state.sources.isNotEmpty,
                   unhealthyEnabled: widget.state.sources
                       .where((s) => s.isUnhealthy && s.enabled)
+                      .length,
+                  disabledUnhealthy: widget.state.sources
+                      .where((s) => s.isUnhealthy && !s.enabled)
                       .length,
                   hasUnhealthy: widget.state.sources.any((s) => s.isUnhealthy),
                   onBack: () => Navigator.of(context).pop(),
@@ -439,11 +472,22 @@ class _SourceScreenState extends State<SourceScreen> {
   Widget _body(ColorScheme scheme) {
     final repos = widget.state.repos;
     final sources = widget.state.sources;
+    final visible = sources
+        .where((s) => sourceMatchesHealthFilter(s, _healthFilter))
+        .toList();
+    final unhealthyCount = sources.where((s) => s.isUnhealthy).length;
+    final disabledCount = sources.where((s) => !s.enabled).length;
+    final unhealthyEnabled = sources
+        .where((s) => s.isUnhealthy && s.enabled)
+        .length;
+    final disabledUnhealthy = sources
+        .where((s) => s.isUnhealthy && !s.enabled)
+        .length;
     final empty = repos.isEmpty && sources.isEmpty;
     return Column(
       children: [
         Flexible(
-          fit: sources.isEmpty ? FlexFit.tight : FlexFit.loose,
+          fit: visible.isEmpty ? FlexFit.tight : FlexFit.loose,
           child: empty
               ? EmptyStateView(
                   icon: Icons.source_outlined,
@@ -454,7 +498,7 @@ class _SourceScreenState extends State<SourceScreen> {
                 )
               : CustomScrollView(
                   // 短列表让导入按钮紧随内容；长列表仍受可用高度约束。
-                  shrinkWrap: sources.isNotEmpty,
+                  shrinkWrap: visible.isNotEmpty,
                   slivers: [
                     if (repos.isNotEmpty) ...[
                       const SliverToBoxAdapter(child: _SectionLabel('已订阅仓库')),
@@ -469,9 +513,30 @@ class _SourceScreenState extends State<SourceScreen> {
                     ],
                     SliverToBoxAdapter(
                       child: _SectionLabel(
-                        sources.isEmpty ? '源' : '源（${sources.length}）',
+                        sources.isEmpty
+                            ? '源'
+                            : _healthFilter == SourceHealthFilter.all
+                            ? '源（${sources.length}）'
+                            : '源（${visible.length}/${sources.length}）',
                       ),
                     ),
+                    if (sources.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: _SourceHealthFilterBar(
+                          filter: _healthFilter,
+                          unhealthyCount: unhealthyCount,
+                          disabledCount: disabledCount,
+                          unhealthyEnabled: unhealthyEnabled,
+                          disabledUnhealthy: disabledUnhealthy,
+                          onFilter: (value) =>
+                              setState(() => _healthFilter = value),
+                          onDisableUnhealthy: _disableUnhealthy,
+                          onEnableDisabledUnhealthy: () =>
+                              _enableDisabled(unhealthyOnly: true),
+                          onEnableDisabled: () =>
+                              _enableDisabled(unhealthyOnly: false),
+                        ),
+                      ),
                     if (sources.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
@@ -485,13 +550,30 @@ class _SourceScreenState extends State<SourceScreen> {
                               : _refreshAllRepos,
                         ),
                       )
+                    else if (visible.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyStateView(
+                          icon: Icons.filter_list_outlined,
+                          title: _healthFilter == SourceHealthFilter.unhealthy
+                              ? '没有失效源'
+                              : '没有已停用的源',
+                          message: _healthFilter == SourceHealthFilter.unhealthy
+                              ? '连续失败达到 3 次的源会列在这里，可一键禁用或重新启用。'
+                              : '关掉开关或禁用失效源后，它们会出现在这里。',
+                          actionLabel: '查看全部',
+                          onAction: () => setState(
+                            () => _healthFilter = SourceHealthFilter.all,
+                          ),
+                        ),
+                      )
                     else
                       SliverList.builder(
-                        itemCount: sources.length,
+                        itemCount: visible.length,
                         itemBuilder: (context, i) =>
-                            _sourceRow(sources[i], scheme),
+                            _sourceRow(visible[i], scheme),
                       ),
-                    if (sources.isNotEmpty)
+                    if (visible.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(24, 6, 24, 4),
@@ -759,6 +841,7 @@ class _SourceHeader extends StatelessWidget {
     required this.hasRepos,
     required this.hasSources,
     required this.unhealthyEnabled,
+    required this.disabledUnhealthy,
     required this.hasUnhealthy,
     required this.onBack,
     required this.onSubscribe,
@@ -772,6 +855,7 @@ class _SourceHeader extends StatelessWidget {
   final bool hasRepos;
   final bool hasSources;
   final int unhealthyEnabled;
+  final int disabledUnhealthy;
   final bool hasUnhealthy;
   final VoidCallback onBack;
   final VoidCallback? onSubscribe;
@@ -915,6 +999,16 @@ class _SourceHeader extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
+              PopupMenuItem(
+                value: 'enableDisabledUnhealthy',
+                child: ListTile(
+                  leading: const Icon(Icons.play_circle_outline),
+                  title: const Text('启用已停用的失效源'),
+                  subtitle: Text('连续失败≥3 且已停用（当前 $disabledUnhealthy 个）'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
               const PopupMenuItem(
                 value: 'resetHealth',
                 child: ListTile(
@@ -929,6 +1023,93 @@ class _SourceHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SourceHealthFilterBar extends StatelessWidget {
+  const _SourceHealthFilterBar({
+    required this.filter,
+    required this.unhealthyCount,
+    required this.disabledCount,
+    required this.unhealthyEnabled,
+    required this.disabledUnhealthy,
+    required this.onFilter,
+    required this.onDisableUnhealthy,
+    required this.onEnableDisabledUnhealthy,
+    required this.onEnableDisabled,
+  });
+
+  final SourceHealthFilter filter;
+  final int unhealthyCount;
+  final int disabledCount;
+  final int unhealthyEnabled;
+  final int disabledUnhealthy;
+  final ValueChanged<SourceHealthFilter> onFilter;
+  final VoidCallback onDisableUnhealthy;
+  final VoidCallback onEnableDisabledUnhealthy;
+  final VoidCallback onEnableDisabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final showDisable = unhealthyEnabled > 0;
+    final showEnableUnhealthy =
+        filter != SourceHealthFilter.disabled && disabledUnhealthy > 0;
+    final showEnableDisabled =
+        filter == SourceHealthFilter.disabled && disabledCount > 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FilterChipRow(
+          children: [
+            FilterChoiceChip(
+              key: const ValueKey('source-health-filter-all'),
+              label: const Text('全部'),
+              selected: filter == SourceHealthFilter.all,
+              onSelected: (_) => onFilter(SourceHealthFilter.all),
+            ),
+            FilterChoiceChip(
+              key: const ValueKey('source-health-filter-unhealthy'),
+              label: Text('失效 $unhealthyCount'),
+              selected: filter == SourceHealthFilter.unhealthy,
+              onSelected: (_) => onFilter(SourceHealthFilter.unhealthy),
+            ),
+            FilterChoiceChip(
+              key: const ValueKey('source-health-filter-disabled'),
+              label: Text('已停用 $disabledCount'),
+              selected: filter == SourceHealthFilter.disabled,
+              onSelected: (_) => onFilter(SourceHealthFilter.disabled),
+            ),
+          ],
+        ),
+        if (showDisable || showEnableUnhealthy || showEnableDisabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                if (showDisable)
+                  TextButton(
+                    key: const ValueKey('source-health-disable-unhealthy'),
+                    onPressed: onDisableUnhealthy,
+                    child: Text('禁用 $unhealthyEnabled 个失效源'),
+                  ),
+                if (showEnableUnhealthy)
+                  TextButton(
+                    key: const ValueKey('source-health-enable-unhealthy'),
+                    onPressed: onEnableDisabledUnhealthy,
+                    child: Text('启用 $disabledUnhealthy 个已停用的失效源'),
+                  ),
+                if (showEnableDisabled)
+                  TextButton(
+                    key: const ValueKey('source-health-enable-disabled'),
+                    onPressed: onEnableDisabled,
+                    child: Text('启用 $disabledCount 个已停用源'),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

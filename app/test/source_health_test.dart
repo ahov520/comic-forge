@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:engine/engine.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/search_filters.dart';
 
 ComicSource _src(String id) => ComicSource.fromPpcatFlat({
       'bookSourceName': '源$id',
@@ -116,6 +117,58 @@ void main() {
       expect(fixed.rules.searchList, isNotEmpty, reason: '只有源 ID 的旧数据也需补齐列表规则');
       expect(fixed.rules.searchName, isNotEmpty);
       expect(fixed.failCount, failCountBefore, reason: '修复不应抹掉健康记录');
+    });
+
+    test('一键启用只恢复已停用的失效源，健康已停用源保持关闭并持久化', () async {
+      final st = AppState();
+      addTearDown(st.dispose);
+      final unhealthy = _src('bad')..failCount = 3;
+      final healthyOff = _src('off')..enabled = false;
+      await st.addSourceManual(unhealthy);
+      await st.addSourceManual(healthyOff);
+      expect(await st.disableUnhealthySources(), 1);
+      expect(st.sources.first.enabled, isFalse);
+
+      final n = await st.enableDisabledSources(unhealthyOnly: true);
+      expect(n, 1);
+      expect(st.sources.first.enabled, isTrue);
+      expect(st.sources.last.enabled, isFalse);
+      expect(
+        SearchFilters(onlyHealthy: true).accepts(st.sources.first),
+        isFalse,
+      );
+      expect(SearchFilters().accepts(st.sources.first), isTrue);
+      expect(SearchFilters().accepts(st.sources.last), isFalse);
+
+      final restored = AppState();
+      addTearDown(restored.dispose);
+      await restored.load();
+      expect(
+        restored.sources.firstWhere((s) => s.id == unhealthy.id).enabled,
+        isTrue,
+      );
+      expect(
+        restored.sources.firstWhere((s) => s.id == healthyOff.id).enabled,
+        isFalse,
+      );
+      expect(
+        SearchFilters(onlyHealthy: true)
+            .accepts(restored.sources.firstWhere((s) => s.id == unhealthy.id)),
+        isFalse,
+      );
+    });
+
+    test('enableDisabledSources 默认恢复全部已停用源', () async {
+      final st = AppState();
+      addTearDown(st.dispose);
+      final unhealthy = _src('bad')
+        ..failCount = 3
+        ..enabled = false;
+      final healthyOff = _src('off')..enabled = false;
+      await st.addSourceManual(unhealthy);
+      await st.addSourceManual(healthyOff);
+      expect(await st.enableDisabledSources(), 2);
+      expect(st.sources.every((s) => s.enabled), isTrue);
     });
 
     test('清除失败记录', () async {

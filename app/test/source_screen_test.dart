@@ -293,6 +293,146 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('健康筛选：失效看连续失败，已停用看开关', () {
+    final healthy = _src();
+    final failing = _src(name: '失效源', url: 'https://fail.example')
+      ..failCount = 3;
+    final disabled = _src(
+      name: '停用源',
+      url: 'https://off.example',
+      enabled: false,
+    );
+    expect(sourceMatchesHealthFilter(healthy, SourceHealthFilter.all), isTrue);
+    expect(
+      sourceMatchesHealthFilter(failing, SourceHealthFilter.unhealthy),
+      isTrue,
+    );
+    expect(
+      sourceMatchesHealthFilter(healthy, SourceHealthFilter.unhealthy),
+      isFalse,
+    );
+    expect(
+      sourceMatchesHealthFilter(disabled, SourceHealthFilter.disabled),
+      isTrue,
+    );
+    expect(
+      sourceMatchesHealthFilter(healthy, SourceHealthFilter.disabled),
+      isFalse,
+    );
+  });
+
+  testWidgets('按健康筛选并一键禁用/启用失效源，启停会持久化', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final healthy = _src();
+    final failing = _src(name: '失效漫画源', url: 'https://fail.example');
+    final disabled = _src(
+      name: '已停用源',
+      url: 'https://off.example',
+      enabled: false,
+    );
+    await state.addSourceManual(healthy);
+    await state.addSourceManual(failing);
+    await state.addSourceManual(disabled);
+    for (var count = 0; count < 3; count++) {
+      await state.reportSourceHealth(const [], {failing.id: 'timeout'});
+    }
+    await _show(tester, state);
+
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('失效 1'), findsOneWidget);
+    expect(find.text('已停用 1'), findsOneWidget);
+    expect(find.text('示例漫画源 A'), findsOneWidget);
+    expect(find.text('失效漫画源'), findsOneWidget);
+    expect(find.text('已停用源'), findsOneWidget);
+    expect(find.text('禁用 1 个失效源'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-filter-unhealthy')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('源（1/3）'), findsOneWidget);
+    expect(find.text('示例漫画源 A'), findsNothing);
+    expect(find.text('已停用源'), findsNothing);
+    expect(find.text('失效漫画源'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-disable-unhealthy')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      state.sources.firstWhere((s) => s.id == failing.id).enabled,
+      isFalse,
+    );
+    expect(find.textContaining('已禁用 1 个失效源'), findsOneWidget);
+    expect(find.text('失效漫画源'), findsOneWidget);
+    expect(find.text('启用 1 个已停用的失效源'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-enable-unhealthy')),
+    );
+    await tester.pumpAndSettle();
+    expect(state.sources.firstWhere((s) => s.id == failing.id).enabled, isTrue);
+    expect(find.textContaining('已启用 1 个已停用的失效源'), findsOneWidget);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(
+      state.sources.firstWhere((s) => s.id == failing.id).enabled,
+      isFalse,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-filter-disabled')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已停用源'), findsOneWidget);
+    expect(find.text('失效漫画源'), findsOneWidget);
+    expect(find.text('示例漫画源 A'), findsNothing);
+    expect(find.text('启用 2 个已停用源'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-enable-disabled')),
+    );
+    await tester.pumpAndSettle();
+    expect(state.sources.every((s) => s.enabled), isTrue);
+    expect(find.textContaining('已启用 2 个已停用源'), findsOneWidget);
+
+    final restored = AppState();
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.sources.every((s) => s.enabled), isTrue);
+    expect(
+      restored.sources.firstWhere((s) => s.id == failing.id).isUnhealthy,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('健康筛选空态可回到全部，不影响其它源开关', (tester) async {
+    await state.addSourceManual(_src());
+    await state.addSourceManual(
+      _src(name: '备用源', url: 'https://spare.example'),
+    );
+    await _show(tester, state);
+    await tester.tap(
+      find.byKey(const ValueKey('source-health-filter-unhealthy')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('没有失效源'), findsOneWidget);
+    await tester.tap(find.text('查看全部'));
+    await tester.pumpAndSettle();
+    expect(find.text('示例漫画源 A'), findsOneWidget);
+    expect(find.text('备用源'), findsOneWidget);
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    expect(state.sources.first.enabled, isFalse);
+    expect(state.sources.last.enabled, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('从其它页推入时显示返回', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
