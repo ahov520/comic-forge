@@ -541,25 +541,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                             onTap: () => _openReadingStats(book),
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: ListTile(
-                            key: const Key('detail-chapter-bookmarks'),
-                            leading: const Icon(Icons.bookmark_outline),
-                            title: const Text('书签'),
-                            subtitle: Text(
-                              bookmarkCount == 0
-                                  ? '阅读时点顶栏书签即可添加'
-                                  : '$bookmarkCount 话',
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _openBookmarks(
-                              book: book,
-                              chapters: chapters,
-                              openAt: openAt,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -596,6 +577,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                                 label: Text(_chaptersReversed ? '倒序' : '正序'),
                               ),
                             ),
+                          TextButton.icon(
+                            key: const Key('detail-chapter-bookmarks'),
+                            onPressed: () => _openBookmarks(
+                              book: book,
+                              chapters: chapters,
+                              openAt: openAt,
+                            ),
+                            icon: const Icon(Icons.bookmark_outline, size: 18),
+                            label: Text(
+                              bookmarkCount == 0 ? '书签' : '书签 $bookmarkCount',
+                            ),
+                          ),
                         ],
                       ),
                     ),

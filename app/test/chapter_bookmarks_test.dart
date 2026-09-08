@@ -54,10 +54,6 @@ void main() {
     a.name = '被外部修改的对象';
     expect(state.bookmarksFor(a).single.book.name, '甲漫画');
 
-    expect(await pin(a, 2), isFalse);
-    expect(state.bookmarksFor(a), isEmpty);
-    expect(await pin(a, 2), isTrue);
-
     final restored = AppState();
     addTearDown(restored.dispose);
     await restored.load();
@@ -66,6 +62,11 @@ void main() {
     expect(restored.bookmarksFor(a).single.chapter.url, chapter(a, 2).url);
     expect(restored.progressFor(a.bookUrl)?.chapterIndex, 2);
     expect(restored.readingHistory.single.chapterIndex, 2);
+
+    expect(await pin(a, 2), isFalse);
+    expect(state.bookmarksFor(a), isEmpty);
+    expect(await pin(a, 2), isTrue);
+    expect(state.bookmarksFor(a).single.book.name, '被外部修改的对象');
   });
 
   test('按源和书籍链接隔离，同一漫画多话各自一条且新到旧排序', () async {

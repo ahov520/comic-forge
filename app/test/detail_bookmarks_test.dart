@@ -86,8 +86,7 @@ void main() {
     );
     await showDetail(tester);
 
-    expect(find.text('书签'), findsOneWidget);
-    expect(find.text('1 话'), findsOneWidget);
+    expect(find.text('书签 1'), findsOneWidget);
     final marked = tester.widget<ChapterTile>(
       find.widgetWithText(ChapterTile, '第二话'),
     );
@@ -105,8 +104,20 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-chapter-bookmarks')));
     await tester.pumpAndSettle();
     expect(find.byType(ChapterBookmarkSheet), findsOneWidget);
-    expect(find.text('第二话'), findsWidgets);
-    expect(find.text('第三话'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(ChapterBookmarkSheet),
+        matching: find.text('第二话'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(ChapterBookmarkSheet),
+        matching: find.text('第三话'),
+      ),
+      findsNothing,
+    );
 
     await tester.tap(
       find.descendant(
@@ -130,7 +141,7 @@ void main() {
     await tester.tap(find.byKey(const Key('detail-chapter-bookmarks')));
     await tester.pumpAndSettle();
     expect(find.text('还没有书签'), findsOneWidget);
-    expect(find.textContaining('阅读时点顶栏书签'), findsWidgets);
+    expect(find.textContaining('阅读时点顶栏书签'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
