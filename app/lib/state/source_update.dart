@@ -25,7 +25,9 @@ class SourceUpdate {
   /// - 指纹未变 → 原样保留（unchanged）
   /// 返回合并后的列表与统计。不修改入参。
   static SourceUpdateResult merge(
-      List<ComicSource> existing, List<ComicSource> incoming) {
+    List<ComicSource> existing,
+    List<ComicSource> incoming,
+  ) {
     final byId = <String, ComicSource>{for (final s in existing) s.id: s};
     final result = List<ComicSource>.of(existing);
     var added = 0, updated = 0;
@@ -66,6 +68,8 @@ class RepoUpdateState {
     this.pendingVersion = -1,
     this.checkedAt = 0,
     this.auto = false,
+    this.lastError = '',
+    this.lastFailedAt = 0,
   });
 
   /// 上次已应用的 meta.ruleVersion（-1 = 未知/仓库无版本号）。
@@ -80,21 +84,36 @@ class RepoUpdateState {
   /// 仓库 meta 标记的 auto（ruleAuto），自动应用新版本。
   final bool auto;
 
+  /// 最近一次失败摘要（成功后清空）。
+  final String lastError;
+
+  /// 最近一次失败时间（epoch ms；0 = 从未失败或已被成功覆盖）。
+  final int lastFailedAt;
+
   bool get hasPending => pendingVersion > lastRuleVersion;
+  bool get hasError => lastError.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
-        'lastRuleVersion': lastRuleVersion,
-        'pendingVersion': pendingVersion,
-        'checkedAt': checkedAt,
-        'auto': auto,
-      };
+    'lastRuleVersion': lastRuleVersion,
+    'pendingVersion': pendingVersion,
+    'checkedAt': checkedAt,
+    'auto': auto,
+    if (lastError.isNotEmpty) 'lastError': lastError,
+    if (lastFailedAt > 0) 'lastFailedAt': lastFailedAt,
+  };
 
   static RepoUpdateState fromJson(Map<String, dynamic> j) => RepoUpdateState(
-        lastRuleVersion: j['lastRuleVersion'] is int ? j['lastRuleVersion'] as int : -1,
-        pendingVersion: j['pendingVersion'] is int ? j['pendingVersion'] as int : -1,
-        checkedAt: j['checkedAt'] is int ? j['checkedAt'] as int : 0,
-        auto: j['auto'] == true,
-      );
+    lastRuleVersion: j['lastRuleVersion'] is int
+        ? j['lastRuleVersion'] as int
+        : -1,
+    pendingVersion: j['pendingVersion'] is int
+        ? j['pendingVersion'] as int
+        : -1,
+    checkedAt: j['checkedAt'] is int ? j['checkedAt'] as int : 0,
+    auto: j['auto'] == true,
+    lastError: j['lastError'] is String ? j['lastError'] as String : '',
+    lastFailedAt: j['lastFailedAt'] is int ? j['lastFailedAt'] as int : 0,
+  );
 }
 
 /// 一次仓库刷新的结果。

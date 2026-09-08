@@ -14,6 +14,7 @@ import 'domain_blacklist_screen.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
 import 'reading_stats_screen.dart';
+import 'source_screen.dart';
 import 'widgets.dart';
 
 /// 设置。
@@ -619,6 +620,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => DownloadsScreen(state: widget.state),
+                    ),
+                  ),
+                ),
+              ),
+              row(
+                ListTile(
+                  leading: Icon(
+                    Icons.rss_feed_outlined,
+                    color: widget.state.repos.isNotEmpty
+                        ? scheme.primary
+                        : null,
+                  ),
+                  title: const Text('源订阅'),
+                  subtitle: Text(
+                    sourceSubscriptionSubtitle(widget.state),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SourceScreen(state: widget.state),
                     ),
                   ),
                 ),

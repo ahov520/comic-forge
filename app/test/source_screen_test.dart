@@ -1,4 +1,5 @@
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/source_update.dart';
 import 'package:comic_forge/ui/source_screen.dart';
 import 'package:comic_forge/ui/widgets.dart';
 import 'package:engine/engine.dart';
@@ -90,12 +91,24 @@ void main() {
       expect(repoDisplayName('https://gitee.com/user/repo.git'), 'user/repo');
     });
 
-    test('同步时间格式化为 MM-DD', () {
-      expect(repoSyncLabel(null), '尚未检查更新');
+    test('源列表 URL 显示 host/文件名', () {
       expect(
-        repoSyncLabel(DateTime(2026, 9, 6).millisecondsSinceEpoch),
-        '上次同步 09-06',
+        repoDisplayName('https://cdn.example.com/rules/store.json'),
+        'cdn.example.com/store.json',
       );
+    });
+
+    test('同步时间格式化为上次成功 MM-DD HH:mm', () {
+      expect(repoSyncLabel(null), '尚未成功更新');
+      expect(
+        repoSyncLabel(DateTime(2026, 9, 6, 19, 21).millisecondsSinceEpoch),
+        '上次成功 09-06 19:21',
+      );
+      expect(
+        repoFailureLabel('HTTP 404 for https://x'),
+        '上次失败：HTTP 404 for https://x',
+      );
+      expect(repoFailureLabel(''), '');
     });
   });
 
@@ -132,7 +145,7 @@ void main() {
 
     expect(find.text('已订阅仓库'), findsOneWidget);
     expect(find.text('AcgLibrary/ppcat_store'), findsOneWidget);
-    expect(find.text('上次同步 09-06'), findsOneWidget);
+    expect(find.text('上次成功 09-06 00:00'), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
 
     expect(find.text('示例漫画源 A'), findsOneWidget);
@@ -245,6 +258,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.error_outline), findsNothing);
     expect(find.textContaining('最近失败'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('订阅卡片显示失败摘要，长按可取消订阅并保留源', (tester) async {
+    const repo = 'https://cdn.example.com/store.json';
+    await state.addRepoSubscribed(repo, const []);
+    state.repoLastRefresh[repo] = DateTime(
+      2026,
+      9,
+      8,
+      11,
+      20,
+    ).millisecondsSinceEpoch;
+    state.repoUpdates[repo] = RepoUpdateState(
+      lastError: 'HTTP 404 for $repo',
+      lastFailedAt: DateTime(2026, 9, 8, 12).millisecondsSinceEpoch,
+    );
+    await state.addSourceManual(_src());
+    await _show(tester, state);
+
+    expect(find.text('cdn.example.com/store.json'), findsOneWidget);
+    expect(find.text('上次成功 09-08 11:20'), findsOneWidget);
+    expect(find.textContaining('上次失败：HTTP 404'), findsOneWidget);
+
+    await tester.longPress(find.text('cdn.example.com/store.json'));
+    await tester.pumpAndSettle();
+    expect(find.text('取消订阅'), findsOneWidget);
+    await tester.tap(find.text('取消订阅'));
+    await tester.pumpAndSettle();
+    expect(state.repos, isEmpty);
+    expect(find.text('已订阅仓库'), findsNothing);
+    expect(state.sources.single.name, '示例漫画源 A');
     expect(tester.takeException(), isNull);
   });
 

@@ -1,8 +1,8 @@
 /// Comic Forge Engine — 纯 Dart 漫画源规则引擎。
 ///
 /// 兼容 legado / 皮皮喵(ppcat) 风格的 rule* 规则键名，支持订阅 GitHub/Gitee
-/// 形式的明文源仓库（Track A）与 ppcat 加密 `.mh_rules` 仓库（Track B，
-/// 解码器由外部注入）。
+/// 形式的明文源仓库（Track A）、远程明文源列表 URL，以及 ppcat 加密
+/// `.mh_rules` 仓库（Track B，解码器由外部注入）。
 library;
 
 export 'src/models/comic_source.dart';

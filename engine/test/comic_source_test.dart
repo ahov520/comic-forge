@@ -177,7 +177,8 @@ void main() {
     });
 
     test('无法识别返回 null', () {
-      expect(RepoRef.parse('https://example.com/foo'), isNull);
+      expect(RepoRef.parse('ftp://example.com/foo'), isNull);
+      expect(RepoRef.parse('https://example.com/foo')?.isListUrl, isTrue);
     });
 
     test('jsdelivr 兜底候选存在', () {
