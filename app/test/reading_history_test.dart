@@ -244,4 +244,46 @@ void main() {
       '09:04',
     );
   });
+
+  test('继续阅读条取最近若干条，保留历史顺序', () {
+    final history = List.generate(
+      10,
+      (i) => ReadingHistoryEntry(
+        book: book('漫画 $i', url: '/b$i'),
+        chapter: Chapter(title: '第${i + 1}话', url: '/c$i'),
+        chapterIndex: i,
+        chapterCount: 10,
+        at: 100 - i,
+      ),
+    );
+    expect(
+      continueReadingEntries(history).map((e) => e.book.name),
+      ['漫画 0', '漫画 1', '漫画 2', '漫画 3', '漫画 4', '漫画 5', '漫画 6', '漫画 7'],
+    );
+    expect(continueReadingEntries(history.take(3)), hasLength(3));
+    expect(continueReadingEntries(history, limit: 0), isEmpty);
+  });
+
+  test('继续阅读提示使用章节名，缺标题时回退话序，并可附带进度', () {
+    final named = ReadingHistoryEntry(
+      book: book('甲'),
+      chapter: Chapter(title: '番外篇', url: '/extra'),
+      chapterIndex: 4,
+      chapterCount: 12,
+      at: 1,
+    );
+    final untitled = ReadingHistoryEntry(
+      book: Book(bookUrl: '/anon'),
+      chapter: Chapter(url: '/c'),
+      chapterIndex: 2,
+      chapterCount: 0,
+      at: 1,
+    );
+    expect(readingHistoryBookName(named), '甲');
+    expect(readingHistoryBookName(untitled), '未命名漫画');
+    expect(readingHistoryChapterName(named), '番外篇');
+    expect(readingHistoryChapterName(untitled), '第 3 话');
+    expect(continueReadingHint(named), '番外篇 · 5/12');
+    expect(continueReadingHint(untitled), '第 3 话');
+  });
 }

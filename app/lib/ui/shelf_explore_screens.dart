@@ -12,6 +12,7 @@ import 'book_detail_screen.dart';
 import 'book_tile_typography.dart';
 import 'comic_reading_stats_screen.dart';
 import 'explore_results.dart';
+import 'continue_reading_strip.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
 import 'shelf_groups_screen.dart';
@@ -371,6 +372,11 @@ class _ShelfScreenState extends State<ShelfScreen> {
                             ),
                     ),
                   ),
+                  if (!_selecting &&
+                      continueReadingStripVisible(widget.state))
+                    SliverToBoxAdapter(
+                      child: ContinueReadingStrip(state: widget.state),
+                    ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),

@@ -53,3 +53,33 @@ String readingHistoryTime(int at) {
   final date = DateTime.fromMillisecondsSinceEpoch(at).toLocal();
   return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 }
+
+/// 书架「继续阅读」条展示的最近记录数。
+const int continueReadingLimit = 8;
+
+List<ReadingHistoryEntry> continueReadingEntries(
+  Iterable<ReadingHistoryEntry> history, {
+  int limit = continueReadingLimit,
+}) {
+  if (limit <= 0) return const [];
+  return history.take(limit).toList(growable: false);
+}
+
+String readingHistoryBookName(ReadingHistoryEntry entry) {
+  final name = entry.book.name.trim();
+  return name.isEmpty ? '未命名漫画' : name;
+}
+
+String readingHistoryChapterName(ReadingHistoryEntry entry) {
+  final title = entry.chapter.title.trim();
+  return title.isEmpty ? '第 ${entry.chapterIndex + 1} 话' : title;
+}
+
+/// 封面旁的章节/进度提示：有目录总数时带上 `当前/总话数`。
+String continueReadingHint(ReadingHistoryEntry entry) {
+  final chapter = readingHistoryChapterName(entry);
+  if (entry.chapterCount > 0) {
+    return '$chapter · ${entry.chapterIndex + 1}/${entry.chapterCount}';
+  }
+  return chapter;
+}
