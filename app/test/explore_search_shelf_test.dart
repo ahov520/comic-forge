@@ -15,14 +15,17 @@ ComicSource _source({
   String name = '测试源',
   String url = 'https://example.com',
   String entries = '连载::/serial',
-}) => ComicSource.fromPpcatFlat({
-  'bookSourceName': name,
-  'bookSourceUrl': url,
-  'exploreUrl': entries,
-  'ruleSearchUrl': '/search?q=searchKey',
-  'ruleSearchList': 'class.item',
-  'ruleSearchName': 'class.title@text',
-  'ruleSearchBookUrl': 'class.title@href',
+}) => ComicSource.fromJson({
+  'id': 'shelf-add-source',
+  'name': name,
+  'url': url,
+  'rules': {
+    'findUrl': entries,
+    'searchUrl': '/search?q={{key}}',
+    'searchList': 'class.item',
+    'searchName': 'class.title@text',
+    'searchBookUrl': 'class.title@href',
+  },
 });
 
 String _books(String name, {String path = '/book/1'}) =>
@@ -60,7 +63,7 @@ void main() {
     return restored;
   }
 
-  Future<void> _addGroupedBook() async {
+  Future<void> addGroupedBook() async {
     final grouped = Book(
       name: '已分组',
       bookUrl: 'https://example.com/grouped',
@@ -74,19 +77,18 @@ void main() {
   testWidgets(
     '探索结果可一键加入并持久化，已在书架可移出且不打乱其它分组',
     (tester) async {
-      await _addGroupedBook();
+      await addGroupedBook();
       await tester.pumpWidget(MaterialApp(home: ExploreScreen(state: state)));
       await tester.tap(_category('连载'));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(BookTile, '探索漫画'), findsOneWidget);
       expect(find.text('加入'), findsOneWidget);
+      final listed = tester.widget<BookTile>(find.byType(BookTile)).book;
+      expect(listed.bookUrl, isNotEmpty);
 
       await tester.tap(find.byTooltip('加入书架'));
       await tester.pumpAndSettle();
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(state.inShelf(listed), isTrue);
       expect(find.byTooltip('已在书架'), findsOneWidget);
       expect(find.text('已在'), findsOneWidget);
       expect(find.byType(BookDetailScreen), findsNothing);
@@ -96,20 +98,14 @@ void main() {
       expect(state.shelfGroups.groupsFor(groupedUrl), {groupId});
 
       final restored = await restart();
-      expect(
-        restored.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(restored.inShelf(listed), isTrue);
       expect(restored.shelfGroups.groupsFor(groupedUrl), {groupId});
 
       await tester.tap(find.byTooltip('已在书架'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('移出书架'));
       await tester.pumpAndSettle();
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isFalse,
-      );
+      expect(state.inShelf(listed), isFalse);
       expect(find.byTooltip('加入书架'), findsOneWidget);
       expect(state.shelfGroups.groupsFor(groupedUrl), {groupId});
       expect(find.byType(BookDetailScreen), findsNothing);
@@ -124,6 +120,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: ExploreScreen(state: state)));
       await tester.tap(_category('连载'));
       await tester.pumpAndSettle();
+      final listed = tester.widget<BookTile>(find.byType(BookTile)).book;
       await tester.tap(find.byTooltip('加入书架'));
       await tester.pumpAndSettle();
 
@@ -133,26 +130,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BookDetailScreen), findsOneWidget);
       expect(
-        tester
-            .widget<BookDetailScreen>(find.byType(BookDetailScreen))
-            .book
-            .bookUrl,
-        'https://example.com/book/1',
+        tester.widget<BookDetailScreen>(find.byType(BookDetailScreen)).book,
+        same(listed),
       );
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(state.inShelf(listed), isTrue);
 
       await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.tap(find.text('探索漫画'));
       await tester.pumpAndSettle();
       expect(find.byType(BookDetailScreen), findsOneWidget);
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(state.inShelf(listed), isTrue);
       expect(tester.takeException(), isNull);
     },
     variant: const TargetPlatformVariant({TargetPlatform.android}),
@@ -161,20 +149,19 @@ void main() {
   testWidgets(
     '搜索结果可一键加入并持久化，已在书架可移出且不打乱其它分组',
     (tester) async {
-      await _addGroupedBook();
+      await addGroupedBook();
       await tester.pumpWidget(MaterialApp(home: SearchScreen(state: state)));
       await tester.enterText(find.byType(TextField), '海贼王');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();
       expect(find.widgetWithText(BookTile, '搜索漫画'), findsOneWidget);
       expect(find.text('加入'), findsOneWidget);
+      final listed = tester.widget<BookTile>(find.byType(BookTile)).book;
+      expect(listed.bookUrl, isNotEmpty);
 
       await tester.tap(find.byTooltip('加入书架'));
       await tester.pumpAndSettle();
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(state.inShelf(listed), isTrue);
       expect(find.byTooltip('已在书架'), findsOneWidget);
       expect(find.byType(BookDetailScreen), findsNothing);
 
@@ -183,20 +170,14 @@ void main() {
       expect(state.shelfGroups.groupsFor(groupedUrl), {groupId});
 
       final restored = await restart();
-      expect(
-        restored.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isTrue,
-      );
+      expect(restored.inShelf(listed), isTrue);
       expect(restored.shelfGroups.groupsFor(groupedUrl), {groupId});
 
       await tester.tap(find.byTooltip('已在书架'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('移出书架'));
       await tester.pumpAndSettle();
-      expect(
-        state.inShelf(Book(bookUrl: 'https://example.com/book/1')),
-        isFalse,
-      );
+      expect(state.inShelf(listed), isFalse);
       expect(find.byTooltip('加入书架'), findsOneWidget);
       expect(state.shelfGroups.groupsFor(groupedUrl), {groupId});
       expect(find.byType(BookDetailScreen), findsNothing);

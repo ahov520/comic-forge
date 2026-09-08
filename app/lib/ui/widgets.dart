@@ -439,13 +439,10 @@ class _ShelfCardAction extends StatelessWidget {
     }
     return Tooltip(
       message: '加入书架',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => state.toggleShelf(book),
-          borderRadius: BorderRadius.circular(12),
-          child: visual,
-        ),
+      child: InkWell(
+        onTap: () => state.toggleShelf(book),
+        borderRadius: BorderRadius.circular(12),
+        child: visual,
       ),
     );
   }

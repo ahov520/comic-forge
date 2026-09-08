@@ -135,7 +135,11 @@ class BookListSkeleton extends StatelessWidget {
                         radius: 8,
                       ),
                       label: SkeletonBox(
-                        width: 22,
+                        width: BookTileTypography.textWidth(
+                          context,
+                          '加入',
+                          BookTileTypography.shelfActionLabel(context),
+                        ),
                         height: BookTileTypography.lineHeight(
                           context,
                           BookTileTypography.shelfActionLabel(context),
