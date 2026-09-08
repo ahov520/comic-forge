@@ -131,19 +131,46 @@ class ShelfGroups extends ChangeNotifier {
     await _persist();
   }
 
-  Future<void> assign(String bookUrl, Iterable<String> groupIds) async {
+  Future<void> assign(String bookUrl, Iterable<String> groupIds) =>
+      assignMany([bookUrl], groupIds: groupIds);
+
+  /// [union] 为 true 时把分组追加到已有关联；否则整表替换（空集合即移出全部分组）。
+  Future<void> assignMany(
+    Iterable<String> bookUrls, {
+    required Iterable<String> groupIds,
+    bool union = false,
+  }) async {
     final existing = _groups.map((group) => group.id).toSet();
     final ids = groupIds.where(existing.contains).toSet();
-    if (ids.isEmpty) {
-      _assignments.remove(bookUrl);
-    } else {
-      _assignments[bookUrl] = ids;
+    var changed = false;
+    for (final url in bookUrls) {
+      if (url.isEmpty) continue;
+      if (union) {
+        if (ids.isEmpty) continue;
+        final current = _assignments.putIfAbsent(url, () => <String>{});
+        final before = current.length;
+        current.addAll(ids);
+        if (current.length != before) changed = true;
+      } else if (!setEquals(_assignments[url] ?? const <String>{}, ids)) {
+        if (ids.isEmpty) {
+          _assignments.remove(url);
+        } else {
+          _assignments[url] = Set<String>.of(ids);
+        }
+        changed = true;
+      }
     }
-    await _persist();
+    if (changed) await _persist();
   }
 
-  Future<void> removeBook(String bookUrl) async {
-    if (_assignments.remove(bookUrl) != null) await _persist();
+  Future<void> removeBook(String bookUrl) => removeBooks([bookUrl]);
+
+  Future<void> removeBooks(Iterable<String> bookUrls) async {
+    var changed = false;
+    for (final url in bookUrls) {
+      if (_assignments.remove(url) != null) changed = true;
+    }
+    if (changed) await _persist();
   }
 
   Future<void> selectFilter(String? id) async {

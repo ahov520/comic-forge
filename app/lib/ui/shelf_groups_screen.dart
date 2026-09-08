@@ -114,7 +114,7 @@ class ShelfGroupsScreen extends StatelessWidget {
             ? EmptyStateView(
                 icon: Icons.folder_outlined,
                 title: '还没有自定义分组',
-                message: '创建分组后，长按书架漫画即可设置。一本漫画可加入多个分组。',
+                message: '创建分组后，长按书架漫画或使用批量管理即可设置。一本漫画可加入多个分组。',
                 actionLabel: '新建分组',
                 onAction: () => _editGroup(context, groups),
               )
@@ -153,103 +153,149 @@ Future<void> showShelfGroupPicker(
   BuildContext context,
   AppState state,
   Book book,
-) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
-  showDragHandle: true,
-  builder: (_) => _ShelfGroupPicker(state: state, book: book),
-);
+) => showShelfGroupPickerFor(context, state, [book]);
+
+Future<void> showShelfGroupPickerFor(
+  BuildContext context,
+  AppState state,
+  List<Book> books,
+) {
+  if (books.isEmpty) return Future<void>.value();
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (_) => _ShelfGroupPicker(state: state, books: books),
+  );
+}
 
 class _ShelfGroupPicker extends StatefulWidget {
-  const _ShelfGroupPicker({required this.state, required this.book});
+  const _ShelfGroupPicker({required this.state, required this.books});
   final AppState state;
-  final Book book;
+  final List<Book> books;
 
   @override
   State<_ShelfGroupPicker> createState() => _ShelfGroupPickerState();
 }
 
 class _ShelfGroupPickerState extends State<_ShelfGroupPicker> {
-  late final _selected = widget.state.shelfGroups
-      .groupsFor(widget.book.bookUrl)
-      .toSet();
+  late final _selected = _sharedGroups();
+
+  Set<String> _sharedGroups() {
+    Set<String>? shared;
+    for (final book in widget.books) {
+      final groups = widget.state.shelfGroups.groupsFor(book.bookUrl);
+      shared = shared == null ? Set.of(groups) : shared.intersection(groups);
+    }
+    return shared ?? <String>{};
+  }
+
+  Future<void> _save({required bool union}) async {
+    await widget.state.assignShelfGroupsMany(
+      widget.books,
+      _selected,
+      union: union,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.state,
-    builder: (context, _) => SafeArea(
-      top: false,
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.65,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Text(
-                '设置分组 · ${widget.book.name}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) {
+    final batch = widget.books.length > 1;
+    final title = batch
+        ? '设置分组 · 已选 ${widget.books.length} 本'
+        : '设置分组 · ${widget.books.first.name}';
+    return AnimatedBuilder(
+      animation: widget.state,
+      builder: (context, _) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.65,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.create_new_folder_outlined),
-              title: const Text('新建分组'),
-              onTap: () async {
-                final id = await _editGroup(context, widget.state.shelfGroups);
-                if (mounted && id != null) setState(() => _selected.add(id));
-              },
-            ),
-            Expanded(
-              child: ListView(
-                children: [
-                  if (widget.state.shelfGroups.groups.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('新建分组以整理这本漫画。'),
+              ListTile(
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: const Text('新建分组'),
+                onTap: () async {
+                  final id = await _editGroup(
+                    context,
+                    widget.state.shelfGroups,
+                  );
+                  if (mounted && id != null) setState(() => _selected.add(id));
+                },
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    if (widget.state.shelfGroups.groups.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(batch ? '新建分组以整理选中的漫画。' : '新建分组以整理这本漫画。'),
+                      ),
+                    for (final group in widget.state.shelfGroups.groups)
+                      CheckboxListTile(
+                        key: ValueKey('assign-${group.id}'),
+                        title: Text(group.name),
+                        value: _selected.contains(group.id),
+                        onChanged: (value) => setState(() {
+                          if (value == true) {
+                            _selected.add(group.id);
+                          } else {
+                            _selected.remove(group.id);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: () => setState(_selected.clear),
+                      child: const Text('清空分组'),
                     ),
-                  for (final group in widget.state.shelfGroups.groups)
-                    CheckboxListTile(
-                      key: ValueKey('assign-${group.id}'),
-                      title: Text(group.name),
-                      value: _selected.contains(group.id),
-                      onChanged: (value) => setState(() {
-                        if (value == true) {
-                          _selected.add(group.id);
-                        } else {
-                          _selected.remove(group.id);
-                        }
-                      }),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (batch)
+                          TextButton(
+                            onPressed: _selected.isEmpty
+                                ? null
+                                : () => _save(union: true),
+                            child: const Text('添加'),
+                          ),
+                        FilledButton(
+                          onPressed: () => _save(union: false),
+                          child: const Text('保存'),
+                        ),
+                      ],
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: () => setState(_selected.clear),
-                    child: const Text('清空分组'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () async {
-                      await widget.state.assignShelfGroups(
-                        widget.book,
-                        _selected,
-                      );
-                      if (context.mounted) Navigator.of(context).pop();
-                    },
-                    child: const Text('保存'),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

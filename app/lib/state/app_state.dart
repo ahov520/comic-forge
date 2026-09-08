@@ -752,11 +752,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> clearShelfUpdates() async {
-    for (final book in shelf) {
+  Future<void> clearShelfUpdates() => clearShelfUpdatesFor(shelf);
+
+  /// 按选中漫画清除更新角标；不修改真实阅读进度。
+  Future<void> clearShelfUpdatesFor(Iterable<Book> books) async {
+    var changed = false;
+    for (final book in books) {
+      if (!inShelf(book)) continue;
       final badge = shelfUpdateFor(book, includeDismissed: true);
-      if (badge != null) _shelfDismissals[book.bookUrl] = badge.token;
+      if (badge == null || _shelfDismissals[book.bookUrl] == badge.token) {
+        continue;
+      }
+      _shelfDismissals[book.bookUrl] = badge.token;
+      changed = true;
     }
+    if (!changed) return;
     await _persistShelfUpdates();
     notifyListeners();
   }
@@ -1802,35 +1812,66 @@ class AppState extends ChangeNotifier {
   Future<void> toggleShelf(Book b) async {
     final exists = shelf.any((e) => e.bookUrl == b.bookUrl);
     if (exists) {
-      shelf.removeWhere((e) => e.bookUrl == b.bookUrl);
-      _shelfChapters.remove(b.bookUrl);
-      _shelfDismissals.remove(b.bookUrl);
-      await shelfGroups.removeBook(b.bookUrl);
-    } else {
-      shelf.insert(0, b);
-      final cached = detailCacheFor(b.bookUrl);
-      if (cached != null &&
-          cached.chapters.isNotEmpty &&
-          cached.book.sourceId == b.sourceId) {
-        _shelfChapters[b.bookUrl] = ShelfChapters.fromDetail(
-          cached.book,
-          cached.chapters,
-        );
-      }
+      await removeShelfBooks([b]);
+      return;
     }
+    shelf.insert(0, b);
+    final cached = detailCacheFor(b.bookUrl);
+    if (cached != null &&
+        cached.chapters.isNotEmpty &&
+        cached.book.sourceId == b.sourceId) {
+      _shelfChapters[b.bookUrl] = ShelfChapters.fromDetail(
+        cached.book,
+        cached.chapters,
+      );
+    }
+    await _persistShelf();
+    await _persistShelfUpdates();
+    notifyListeners();
+  }
+
+  /// 批量移出书架，一次写入；阅读进度、历史和统计保留。
+  Future<void> removeShelfBooks(Iterable<Book> books) async {
+    final urls = {
+      for (final book in books)
+        if (shelf.any((e) => e.bookUrl == book.bookUrl)) book.bookUrl,
+    };
+    if (urls.isEmpty) return;
+    shelf.removeWhere((book) => urls.contains(book.bookUrl));
+    for (final url in urls) {
+      _shelfChapters.remove(url);
+      _shelfDismissals.remove(url);
+    }
+    await shelfGroups.removeBooks(urls);
+    await _persistShelf();
+    await _persistShelfUpdates();
+    notifyListeners();
+  }
+
+  Future<void> _persistShelf() async {
     final sp = await SharedPreferences.getInstance();
     await sp.setStringSafe(
       _kShelf,
       jsonEncode(shelf.map((e) => e.toJson()).toList()),
     );
-    await _persistShelfUpdates();
-    notifyListeners();
   }
 
   bool inShelf(Book b) => shelf.any((e) => e.bookUrl == b.bookUrl);
 
-  Future<void> assignShelfGroups(Book book, Iterable<String> groupIds) async {
-    if (inShelf(book)) await shelfGroups.assign(book.bookUrl, groupIds);
+  Future<void> assignShelfGroups(Book book, Iterable<String> groupIds) =>
+      assignShelfGroupsMany([book], groupIds);
+
+  Future<void> assignShelfGroupsMany(
+    Iterable<Book> books,
+    Iterable<String> groupIds, {
+    bool union = false,
+  }) async {
+    final urls = [
+      for (final book in books)
+        if (inShelf(book)) book.bookUrl,
+    ];
+    if (urls.isEmpty) return;
+    await shelfGroups.assignMany(urls, groupIds: groupIds, union: union);
   }
 
   Future<void> setDark(bool v) async {

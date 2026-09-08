@@ -100,6 +100,48 @@ void main() {
     expect(restored.readingHistory, hasLength(1));
   });
 
+  test('批量追加与替换分组一次写入并跨重启保留，未收藏漫画忽略', () async {
+    final extra = Book(name: '另一本', bookUrl: '/extra', sourceId: 'groups');
+    await state.toggleShelf(extra);
+    final a = await state.shelfGroups.create('追更');
+    final b = await state.shelfGroups.create('喜爱');
+    await state.assignShelfGroups(book, [a]);
+    await state.assignShelfGroupsMany([book, extra], [b], union: true);
+    expect(state.shelfGroups.groupsFor(book.bookUrl), {a, b});
+    expect(state.shelfGroups.groupsFor(extra.bookUrl), {b});
+    await state.assignShelfGroupsMany([book, extra], [a]);
+    await state.assignShelfGroupsMany(
+      [Book(name: '不在书架', bookUrl: '/missing')],
+      [b],
+    );
+    final restored = await restart();
+    expect(restored.shelfGroups.groupsFor(book.bookUrl), {a});
+    expect(restored.shelfGroups.groupsFor(extra.bookUrl), {a});
+    expect(restored.shelfGroups.groupsFor('/missing'), isEmpty);
+  });
+
+  test('批量移出书架一次写入，进度保留且关联清除', () async {
+    final extra = Book(name: '另一本', bookUrl: '/extra', sourceId: 'groups');
+    await state.toggleShelf(extra);
+    final id = await state.shelfGroups.create('追更');
+    await state.assignShelfGroupsMany([book, extra], [id]);
+    await state.saveProgress(
+      book,
+      chapterUrl: '/c1',
+      chapterTitle: '第一话',
+      chapterIndex: 0,
+      chapterCount: 2,
+    );
+    final progress = state.progressFor(book.bookUrl)!.toJson();
+    await state.removeShelfBooks([book, extra, extra]);
+    expect(state.shelf, isEmpty);
+    expect(state.progressFor(book.bookUrl)!.toJson(), progress);
+    final restored = await restart();
+    expect(restored.shelf, isEmpty);
+    expect(restored.shelfGroups.groupsFor(book.bookUrl), isEmpty);
+    expect(restored.progressFor(book.bookUrl)!.toJson(), progress);
+  });
+
   test('取消收藏清理关联，未收藏漫画不能分组，重新收藏归入未分组', () async {
     final id = await state.shelfGroups.create('追更');
     await state.assignShelfGroups(book, [id]);
