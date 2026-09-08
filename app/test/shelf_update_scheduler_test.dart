@@ -6,6 +6,7 @@ import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/shelf_update_schedule.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -60,13 +61,25 @@ void main() {
     service.debugClearSwitchCache();
   });
 
+  // 平台消息会补齐 inactive/hidden 等中间状态，输入框也能收到正常的生命周期。
+  Future<void> setLifecycle(
+    WidgetTester tester,
+    AppLifecycleState lifecycle,
+  ) async {
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'flutter/lifecycle',
+      const StringCodec().encodeMessage(lifecycle.toString()),
+      (_) {},
+    );
+  }
+
   Future<AppState> openApp(
     WidgetTester tester, {
     bool enabled = true,
     bool withBook = true,
     AppLifecycleState lifecycle = AppLifecycleState.resumed,
   }) async {
-    tester.binding.handleAppLifecycleStateChanged(lifecycle);
+    await setLifecycle(tester, lifecycle);
     final state = AppState(
       shelfUpdateSchedule: ShelfUpdateSchedule(now: tester.binding.clock.now),
     );
@@ -82,7 +95,7 @@ void main() {
 
   Future<void> closeApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await setLifecycle(tester, AppLifecycleState.resumed);
   }
 
   testWidgets('启动到期检查和前台计时复用目录刷新，未读角标随新话变化', (tester) async {
@@ -132,15 +145,15 @@ void main() {
   testWidgets('后台暂停计时，恢复前台只补查一次，未到期不重复', (tester) async {
     await openApp(tester);
     expect(calls, 1);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await setLifecycle(tester, AppLifecycleState.paused);
     await tester.pump(const Duration(hours: 3));
     expect(calls, 1);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await setLifecycle(tester, AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(calls, 2);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await setLifecycle(tester, AppLifecycleState.inactive);
     await tester.pump(const Duration(minutes: 10));
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await setLifecycle(tester, AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(calls, 2);
     await closeApp(tester);
@@ -156,7 +169,7 @@ void main() {
     );
     await tester.pump(const Duration(days: 1));
     expect(calls, 0);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await setLifecycle(tester, AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(calls, 0);
     await state.toggleShelf(book);
@@ -175,8 +188,8 @@ void main() {
     expect(state.refreshShelfUpdates(), same(manual));
     await tester.pump();
     expect(calls, 1);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await setLifecycle(tester, AppLifecycleState.paused);
+    await setLifecycle(tester, AppLifecycleState.resumed);
     await tester.pump();
     expect(calls, 1);
     pending.completeError(StateError('offline'));

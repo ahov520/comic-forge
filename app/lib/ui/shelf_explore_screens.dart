@@ -35,6 +35,29 @@ class _ShelfScreenState extends State<ShelfScreen> {
 
   /// 筛选：0=全部 1=连载中 2=已完结（按 book.kind 关键词，缺失归入全部）
   int _filter = 0;
+  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _search(String value) {
+    final query = value.trim().toLowerCase();
+    if (_query != query && _scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    setState(() => _query = query);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _search('');
+  }
 
   Future<void> _refreshUpdates() async {
     final result = await widget.state.refreshShelfUpdates();
@@ -51,6 +74,7 @@ class _ShelfScreenState extends State<ShelfScreen> {
   }
 
   void _showBookActions(Book book) {
+    FocusScope.of(context).unfocus();
     showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
@@ -120,6 +144,11 @@ class _ShelfScreenState extends State<ShelfScreen> {
         final books =
             widget.state.shelf.where((b) {
               if (!widget.state.shelfGroups.matches(b.bookUrl)) return false;
+              if (_query.isNotEmpty &&
+                  !b.name.toLowerCase().contains(_query) &&
+                  !b.author.toLowerCase().contains(_query)) {
+                return false;
+              }
               switch (_filter) {
                 case 2:
                   return b.kind.contains('完结');
@@ -138,7 +167,9 @@ class _ShelfScreenState extends State<ShelfScreen> {
           child: RefreshIndicator(
             onRefresh: _refreshUpdates,
             child: CustomScrollView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -216,6 +247,28 @@ class _ShelfScreenState extends State<ShelfScreen> {
                     ),
                   ),
                 ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: '搜索书架',
+                        hintText: '漫画名或作者',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: '清空搜索',
+                                icon: const Icon(Icons.clear),
+                                onPressed: _clearSearch,
+                              ),
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onChanged: _search,
+                    ),
+                  ),
+                ),
                 if (widget.state.shelfGroups.groups.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -282,10 +335,16 @@ class _ShelfScreenState extends State<ShelfScreen> {
                           )
                         : EmptyStateView(
                             icon: Icons.filter_list_outlined,
-                            title: '这个分类还没有漫画',
-                            message: '试试其他分类，或查看书架中的全部漫画。',
-                            actionLabel: '查看全部',
+                            title: _query.isEmpty ? '这个分类还没有漫画' : '没有匹配的漫画',
+                            message: _query.isEmpty
+                                ? '试试其他分类，或查看书架中的全部漫画。'
+                                : '当前分组与分类下未找到匹配漫画，试试其他漫画名或作者，或清空搜索。',
+                            actionLabel: _query.isEmpty ? '查看全部' : '清空搜索',
                             onAction: () {
+                              if (_query.isNotEmpty) {
+                                _clearSearch();
+                                return;
+                              }
                               setState(() => _filter = 0);
                               widget.state.shelfGroups.selectFilter(null);
                             },
@@ -325,14 +384,17 @@ class _ShelfScreenState extends State<ShelfScreen> {
                             return InkWell(
                               borderRadius: BorderRadius.circular(12),
                               onLongPress: () => _showBookActions(b),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => BookDetailScreen(
-                                    book: b,
-                                    appState: widget.state,
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => BookDetailScreen(
+                                      book: b,
+                                      appState: widget.state,
+                                    ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
