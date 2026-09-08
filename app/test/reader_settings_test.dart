@@ -66,12 +66,19 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(find.byType(ListView), findsNothing);
 
-    await tester.drag(find.byType(Slider), const Offset(-120, 0));
+    await tester.drag(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(Slider),
+      ),
+      const Offset(-120, 0),
+    );
     await tester.pumpAndSettle();
     expect(state.readerBrightness, lessThan(1));
     await tester.tapAt(const Offset(10, 20));
     await tester.pumpAndSettle();
-    expect(find.byType(Slider), findsNothing);
+    expect(find.text('音量键翻页'), findsNothing);
+    expect(find.byKey(const Key('reader-page-slider')), findsOneWidget);
     expect(find.byType(PageView), findsOneWidget);
     expect(
       find.descendant(
@@ -95,38 +102,42 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('音量键开关立即同步原生通道，退出阅读器释放拦截', (tester) async {
-    const channel = MethodChannel('comic-forge/reader');
-    final calls = <bool>[];
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'setVolumeKeysEnabled') {
-        calls.add((call.arguments as Map)['enabled'] as bool);
-      }
-      return null;
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await _openReader(tester, state, 'volume-toggle');
-    expect(calls, isEmpty);
+  testWidgets(
+    '音量键开关立即同步原生通道，退出阅读器释放拦截',
+    (tester) async {
+      const channel = MethodChannel('comic-forge/reader');
+      final calls = <bool>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'setVolumeKeysEnabled') {
+          calls.add((call.arguments as Map)['enabled'] as bool);
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      await _openReader(tester, state, 'volume-toggle');
+      expect(calls, isEmpty);
 
-    await tester.tap(find.byTooltip('阅读设置'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('音量键翻页'));
-    await tester.pumpAndSettle();
-    expect(calls, [true]);
-    await tester.tap(find.text('音量键翻页'));
-    await tester.pumpAndSettle();
-    expect(calls, [true, false]);
-    await tester.tapAt(const Offset(10, 20));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('阅读设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('音量键翻页'));
+      await tester.pumpAndSettle();
+      expect(calls, [true]);
+      await tester.tap(find.text('音量键翻页'));
+      await tester.pumpAndSettle();
+      expect(calls, [true, false]);
+      await tester.tapAt(const Offset(10, 20));
+      await tester.pumpAndSettle();
 
-    await state.setReaderVolumeKeys(true);
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(const SizedBox.shrink());
-    expect(calls, [true, false, true, false]);
-    expect(tester.takeException(), isNull);
-  }, variant: const TargetPlatformVariant({TargetPlatform.android}));
+      await state.setReaderVolumeKeys(true);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(calls, [true, false, true, false]);
+      expect(tester.takeException(), isNull);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
 
   testWidgets('低高度大字号设置面板可滚动并切换阅读模式', (tester) async {
     tester.view.physicalSize = const Size(320, 240);

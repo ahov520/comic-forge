@@ -194,7 +194,11 @@ class ReaderTopChrome extends StatelessWidget {
   }
 }
 
-/// 底栏：上一话 · 进度 · 亮度 · 下一话。隐藏时不拦截点击。
+/// 底栏渐变高度：有章内进度条时加高，避免浅色漫画顶到滑杆。
+double readerChromeBottomHeight({required int pageCount}) =>
+    pageCount > 1 ? 132 : 84;
+
+/// 底栏：章内页进度（可选）· 上一话 · 目录 · 亮度 · 下一话。隐藏时不拦截点击。
 class ReaderBottomChrome extends StatelessWidget {
   const ReaderBottomChrome({
     super.key,
@@ -206,6 +210,10 @@ class ReaderBottomChrome extends StatelessWidget {
     this.onNext,
     this.onBrightness,
     this.onCatalog,
+    this.pageIndex = 0,
+    this.pageCount = 0,
+    this.onPageChanged,
+    this.onPickPage,
   });
 
   final bool visible;
@@ -216,6 +224,10 @@ class ReaderBottomChrome extends StatelessWidget {
   final VoidCallback? onNext;
   final VoidCallback? onBrightness;
   final VoidCallback? onCatalog;
+  final int pageIndex;
+  final int pageCount;
+  final ValueChanged<int>? onPageChanged;
+  final VoidCallback? onPickPage;
 
   @override
   Widget build(BuildContext context) {
@@ -232,38 +244,179 @@ class ReaderBottomChrome extends StatelessWidget {
             ),
             child: SafeArea(
               top: false,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _NavItem(
-                    icon: Icons.chevron_left,
-                    label: '上一话',
-                    enabled: canPrev,
-                    onTap: onPrev,
-                  ),
-                  _NavItem(
-                    icon: Icons.menu,
-                    label: progressLabel,
-                    tooltip: '目录',
-                    wrapLabel: true,
-                    enabled: onCatalog != null,
-                    onTap: onCatalog,
-                  ),
-                  _NavItem(
-                    icon: Icons.wb_sunny_outlined,
-                    label: '亮度',
-                    onTap: onBrightness,
-                  ),
-                  _NavItem(
-                    icon: Icons.chevron_right,
-                    label: '下一话',
-                    enabled: canNext,
-                    onTap: onNext,
+                  if (pageCount > 0)
+                    ReaderPageProgress(
+                      pageIndex: pageIndex,
+                      pageCount: pageCount,
+                      onChanged: onPageChanged,
+                      onPickPage: onPickPage,
+                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _NavItem(
+                        icon: Icons.chevron_left,
+                        label: '上一话',
+                        enabled: canPrev,
+                        onTap: onPrev,
+                      ),
+                      _NavItem(
+                        icon: Icons.menu,
+                        label: progressLabel,
+                        tooltip: '目录',
+                        wrapLabel: true,
+                        enabled: onCatalog != null,
+                        onTap: onCatalog,
+                      ),
+                      _NavItem(
+                        icon: Icons.wb_sunny_outlined,
+                        label: '亮度',
+                        onTap: onBrightness,
+                      ),
+                      _NavItem(
+                        icon: Icons.chevron_right,
+                        label: '下一话',
+                        enabled: canNext,
+                        onTap: onNext,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 章内页码 + 可拖进度条；点页码打开跳页。仅一页时只显示页码。
+class ReaderPageProgress extends StatelessWidget {
+  const ReaderPageProgress({
+    super.key,
+    required this.pageIndex,
+    required this.pageCount,
+    this.onChanged,
+    this.onPickPage,
+  });
+
+  final int pageIndex;
+  final int pageCount;
+  final ValueChanged<int>? onChanged;
+  final VoidCallback? onPickPage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pageCount <= 0) return const SizedBox.shrink();
+    final max = math.max(pageCount - 1, 0);
+    final value = pageIndex.clamp(0, max).toDouble();
+    final label = '${value.round() + 1}/$pageCount';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 8, 0),
+      child: Row(
+        children: [
+          Tooltip(
+            message: '跳转页码',
+            child: InkWell(
+              onTap: onPickPage,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                child: Center(
+                  child: Text(
+                    label,
+                    key: const Key('reader-page-label'),
+                    semanticsLabel: '第 ${value.round() + 1} 页，共 $pageCount 页',
+                    style: const TextStyle(
+                      color: Color(0xFFEEEEEE),
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (pageCount > 1)
+            Expanded(
+              child: Slider(
+                key: const Key('reader-page-slider'),
+                min: 0,
+                max: max.toDouble(),
+                divisions: max,
+                value: value,
+                label: '${value.round() + 1}',
+                semanticFormatterCallback: (v) =>
+                    '第 ${v.round() + 1} 页，共 $pageCount 页',
+                onChanged: onChanged == null
+                    ? null
+                    : (v) => onChanged!(v.round()),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 沉浸态页码徽章：工具栏收起后仍显示章内进度，点按打开跳页。
+class ReaderPageBadge extends StatelessWidget {
+  const ReaderPageBadge({
+    super.key,
+    required this.visible,
+    required this.label,
+    this.progress = 0,
+    this.onTap,
+  });
+
+  final bool visible;
+  final String label;
+  final double progress;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible || label.isEmpty) return const SizedBox.shrink();
+    return Tooltip(
+      message: '跳转页码',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            ReaderFrostedBar(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Text(
+                label,
+                key: const Key('reader-page-badge'),
+                semanticsLabel: '当前 $label 页',
+                style: const TextStyle(
+                  color: Color(0xFFEEEEEE),
+                  fontSize: 12,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(1),
+                child: LinearProgressIndicator(
+                  key: const Key('reader-page-bar'),
+                  minHeight: 2,
+                  value: progress.clamp(0.0, 1.0),
+                  backgroundColor: const Color(0x33FFFFFF),
+                  color: const Color(0xFF169876),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -295,9 +448,13 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
   Future<void> _jumpToChapter() async {
     final index = await showDialog<int>(
       context: context,
-      builder: (context) => _ReaderChapterJumpDialog(
+      builder: (context) => ReaderIndexJumpDialog(
         currentIndex: widget.currentIndex,
-        chapterCount: widget.chapters.length,
+        count: widget.chapters.length,
+        title: '跳转章节',
+        fieldLabel: '章节序号',
+        helperText: '共 ${widget.chapters.length} 话',
+        errorText: '请输入 1–${widget.chapters.length} 之间的序号',
       ),
     );
     if (mounted && index != null) widget.onPick(index);
@@ -416,21 +573,30 @@ class _ReaderCatalogSheetState extends State<ReaderCatalogSheet> {
   }
 }
 
-class _ReaderChapterJumpDialog extends StatefulWidget {
-  const _ReaderChapterJumpDialog({
+/// 阅读器序号跳转：章节目录与章内页码共用。
+class ReaderIndexJumpDialog extends StatefulWidget {
+  const ReaderIndexJumpDialog({
+    super.key,
     required this.currentIndex,
-    required this.chapterCount,
+    required this.count,
+    required this.title,
+    required this.fieldLabel,
+    required this.helperText,
+    required this.errorText,
   });
 
   final int currentIndex;
-  final int chapterCount;
+  final int count;
+  final String title;
+  final String fieldLabel;
+  final String helperText;
+  final String errorText;
 
   @override
-  State<_ReaderChapterJumpDialog> createState() =>
-      _ReaderChapterJumpDialogState();
+  State<ReaderIndexJumpDialog> createState() => _ReaderIndexJumpDialogState();
 }
 
-class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
+class _ReaderIndexJumpDialogState extends State<ReaderIndexJumpDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _controller;
 
@@ -471,7 +637,7 @@ class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFF161619),
       scrollable: true,
-      semanticLabel: '跳转章节',
+      semanticLabel: widget.title,
       insetPadding: EdgeInsets.symmetric(
         horizontal: compact ? 24 : 40,
         vertical: compact ? 8 : 24,
@@ -479,7 +645,7 @@ class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
       contentPadding: compact
           ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
           : const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      title: compact ? null : const Text('跳转章节'),
+      title: compact ? null : Text(widget.title),
       content: Form(
         key: _formKey,
         child: SizedBox(
@@ -497,18 +663,16 @@ class _ReaderChapterJumpDialogState extends State<_ReaderChapterJumpDialog> {
                   textInputAction: TextInputAction.go,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
-                    labelText: compact ? '跳转章节' : '章节序号',
-                    hintText: compact ? '1–${widget.chapterCount}' : null,
-                    helperText: compact ? null : '共 ${widget.chapterCount} 话',
+                    labelText: compact ? widget.title : widget.fieldLabel,
+                    hintText: compact ? '1–${widget.count}' : null,
+                    helperText: compact ? null : widget.helperText,
                     isDense: compact,
                     errorMaxLines: 2,
                   ),
                   validator: (value) {
                     final number = int.tryParse(value ?? '');
-                    if (number == null ||
-                        number < 1 ||
-                        number > widget.chapterCount) {
-                      return '请输入 1–${widget.chapterCount} 之间的序号';
+                    if (number == null || number < 1 || number > widget.count) {
+                      return widget.errorText;
                     }
                     return null;
                   },
