@@ -17,6 +17,7 @@ import 'chapter_bookmark_sheet.dart';
 import 'reader_chrome.dart';
 import 'reader_image_page.dart';
 import 'reader_network_image.dart';
+import 'reading_pref_presets_screen.dart';
 import 'skeleton.dart';
 import 'widgets.dart' show EmptyStateView;
 
@@ -988,6 +989,90 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ),
                     value: appState.readerVolumeKeys,
                     onChanged: appState.setReaderVolumeKeys,
+                  ),
+                  const Divider(color: Colors.white24),
+                  const Text(
+                    '阅读预设',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  if (appState.readerPresets.presets.isEmpty)
+                    const Text(
+                      '保存当前滚动/翻页、亮度和音量键，下次一点切换',
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                    )
+                  else
+                    for (final preset in appState.readerPresets.presets)
+                      ListTile(
+                        key: ValueKey('reader-preset-${preset.id}'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          appState.activeReaderPreset?.id == preset.id
+                              ? Icons.check_circle
+                              : Icons.tune,
+                          color: Colors.white70,
+                        ),
+                        title: Text(
+                          preset.name,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                        subtitle: Text(
+                          preset.summary,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
+                        onTap: () => appState.applyReaderPreset(preset.id),
+                        trailing: PopupMenuButton<String>(
+                          tooltip: '${preset.name}的操作',
+                          color: const Color(0xFF2A2A2E),
+                          onSelected: (action) async {
+                            switch (action) {
+                              case 'update':
+                                await appState.updateReaderPreset(preset.id);
+                              case 'rename':
+                                await showReaderPresetNameDialog(
+                                  sheetCtx,
+                                  appState,
+                                  preset: preset,
+                                );
+                              case 'delete':
+                                if (await confirmDeleteReaderPreset(
+                                  sheetCtx,
+                                  preset,
+                                )) {
+                                  await appState.readerPresets.delete(
+                                    preset.id,
+                                  );
+                                }
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'update',
+                              child: Text('更新为当前设置'),
+                            ),
+                            PopupMenuItem(value: 'rename', child: Text('重命名')),
+                            PopupMenuItem(value: 'delete', child: Text('删除预设')),
+                          ],
+                        ),
+                      ),
+                  ListTile(
+                    key: const Key('reader-save-preset'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.bookmark_add_outlined,
+                      color: Colors.white70,
+                    ),
+                    title: const Text(
+                      '保存当前为预设',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    onTap: () => showReaderPresetNameDialog(sheetCtx, appState),
                   ),
                   const Divider(color: Colors.white24),
                   ListTile(

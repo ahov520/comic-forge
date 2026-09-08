@@ -34,6 +34,7 @@ class BackupPayload {
     this.settings,
     this.shelfGroups,
     this.readingStats,
+    this.readerPresets,
     this.readerPages,
     this.scrollOffsets,
   });
@@ -48,6 +49,7 @@ class BackupPayload {
   final Map<String, dynamic>? settings;
   final Map<String, dynamic>? shelfGroups;
   final Map<String, dynamic>? readingStats;
+  final Map<String, dynamic>? readerPresets;
   final Map<String, int>? readerPages;
   final Map<String, dynamic>? scrollOffsets;
 
@@ -81,6 +83,9 @@ class BackupPayload {
           : null,
       readingStats: json['readingStats'] is Map<String, dynamic>
           ? json['readingStats'] as Map<String, dynamic>
+          : null,
+      readerPresets: json['readerPresets'] is Map<String, dynamic>
+          ? json['readerPresets'] as Map<String, dynamic>
           : null,
       readerPages: _readerPages(json['readerPages']),
       scrollOffsets: json['scrollOffsets'] is Map<String, dynamic>
@@ -215,6 +220,7 @@ class BackupService {
       },
       'shelfGroups': st.shelfGroups.toBackupJson(),
       'readingStats': st.readingStats.toBackupJson(),
+      'readerPresets': st.readerPresets.toBackupJson(),
       'readerPages': st.readerPages,
       'scrollOffsets': st.scrollOffsets.map(
         (k, v) => MapEntry(k, {

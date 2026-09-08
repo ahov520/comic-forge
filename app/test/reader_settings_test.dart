@@ -156,4 +156,34 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('阅读设置可保存当前预设并一点切换模式', (tester) async {
+    await _openReader(tester, state, 'preset-switch');
+    await tester.tap(find.byTooltip('阅读设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('翻页'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PageView), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('reader-save-preset')));
+    await tester.tap(find.byKey(const Key('reader-save-preset')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '夜间翻页');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('夜间翻页'), findsOneWidget);
+    expect(state.readerPresets.presets, hasLength(1));
+
+    await tester.ensureVisible(find.text('滚动'));
+    await tester.tap(find.text('滚动'));
+    await tester.pumpAndSettle();
+    expect(state.readerMode, 'scroll');
+    await tester.ensureVisible(find.text('夜间翻页'));
+    await tester.tap(find.text('夜间翻页'));
+    await tester.pumpAndSettle();
+    expect(state.readerMode, 'paged');
+    expect(find.byType(PageView), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

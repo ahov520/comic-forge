@@ -169,6 +169,8 @@ void main() {
       );
       final groupId = await src.shelfGroups.create('追更');
       await src.assignShelfGroups(book, [groupId]);
+      await src.setReaderBrightness(0.4);
+      await src.saveCurrentReaderPreset('夜间翻页');
       await src.saveProgress(
         book,
         chapterUrl: 'c1',
@@ -214,6 +216,8 @@ void main() {
       expect(dst.readingHistory, isNotEmpty);
       expect(dst.shelfGroups.groups.single.name, '追更');
       expect(dst.readingStats.forBook(book), isNotNull);
+      expect(dst.readerPresets.presets.single.name, '夜间翻页');
+      expect(dst.readerBrightness, 0.4);
 
       final re = AppState();
       addTearDown(re.dispose);
@@ -223,6 +227,7 @@ void main() {
       expect(re.readingHistory, isNotEmpty);
       expect(re.shelfGroups.groups.single.name, '追更');
       expect(re.blockedDomains, contains('blocked.example'));
+      expect(re.readerPresets.presets.single.name, '夜间翻页');
     });
 
     test('覆盖导入替换集合，缺省的 v1 字段不改本地设置', () async {
