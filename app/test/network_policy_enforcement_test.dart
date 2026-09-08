@@ -132,7 +132,10 @@ void main() {
       sourceFor: (_) => null,
       store: store,
       loadImages: (_, _) async =>
-          (urls: ['https://blocked.example/1.png'], headers: const {}),
+          (
+            urls: ['https://blocked.example/1.png'],
+            headers: const <String, String>{},
+          ),
       fetchBytes: (_, _) async => downloadTestImage(),
     );
     addTearDown(ok.dispose);
@@ -148,7 +151,10 @@ void main() {
       sourceFor: (_) => null,
       store: store,
       loadImages: (_, _) async =>
-          (urls: ['https://blocked.example/2.png'], headers: const {}),
+          (
+            urls: ['https://blocked.example/2.png'],
+            headers: const <String, String>{},
+          ),
       fetchBytes: (url, headers) =>
           SourceService.instance.fetcher.getBytes(url, headers: headers),
     );
@@ -163,7 +169,9 @@ void main() {
       [0],
     );
     await blocked.idle;
-    expect(blocked.tasks.single.status, DownloadStatus.failed);
-    expect(blocked.tasks.single.error, '域名已被屏蔽：blocked.example');
+    final failed = blocked.tasks.where((t) => t.chapter.url.endsWith('/c2'));
+    expect(failed, hasLength(1));
+    expect(failed.single.status, DownloadStatus.failed);
+    expect(failed.single.error, '域名已被屏蔽：blocked.example');
   });
 }
