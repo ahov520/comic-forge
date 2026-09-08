@@ -81,9 +81,10 @@ Future<void> resumeReadingHistory({
     final index = savedIndex < 0
         ? entry.chapterIndex.clamp(0, chapters.length - 1)
         : savedIndex;
+    if (!context.mounted) return;
     openReader(context, runtime, book, chapters, index, state);
   } catch (_) {
-    if (!isCurrent()) return;
+    if (!isCurrent() || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('暂时无法续读，可打开详情重试或换源'),

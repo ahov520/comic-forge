@@ -256,10 +256,16 @@ void main() {
         at: 100 - i,
       ),
     );
-    expect(
-      continueReadingEntries(history).map((e) => e.book.name),
-      ['漫画 0', '漫画 1', '漫画 2', '漫画 3', '漫画 4', '漫画 5', '漫画 6', '漫画 7'],
-    );
+    expect(continueReadingEntries(history).map((e) => e.book.name), [
+      '漫画 0',
+      '漫画 1',
+      '漫画 2',
+      '漫画 3',
+      '漫画 4',
+      '漫画 5',
+      '漫画 6',
+      '漫画 7',
+    ]);
     expect(continueReadingEntries(history.take(3)), hasLength(3));
     expect(continueReadingEntries(history, limit: 0), isEmpty);
   });
