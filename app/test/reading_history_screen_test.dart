@@ -424,6 +424,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('阅读历史'), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('阅读历史'));
     await tester.pumpAndSettle();
     expect(find.byType(ReadingHistoryScreen), findsOneWidget);

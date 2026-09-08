@@ -162,7 +162,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.go);
     tester.view.viewInsets = FakeViewPadding.zero;
     await tester.pumpAndSettle();
-    expect(state.repos, ['team/comics']);
+    expect(state.repos, ['github.com/team/comics']);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

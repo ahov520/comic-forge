@@ -587,28 +587,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const _Header('数据'),
               row(
                 ListTile(
-                  leading: Icon(
-                    Icons.rss_feed_outlined,
-                    color: widget.state.repos.isNotEmpty
-                        ? scheme.primary
-                        : null,
-                  ),
-                  title: const Text('源订阅'),
-                  subtitle: Text(
-                    sourceSubscriptionSubtitle(widget.state),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SourceScreen(state: widget.state),
-                    ),
-                  ),
-                ),
-              ),
-              row(
-                ListTile(
                   leading: const Icon(Icons.bar_chart_outlined),
                   title: const Text('阅读统计'),
                   trailing: const Icon(Icons.chevron_right),
@@ -642,6 +620,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => DownloadsScreen(state: widget.state),
+                    ),
+                  ),
+                ),
+              ),
+              row(
+                ListTile(
+                  leading: Icon(
+                    Icons.rss_feed_outlined,
+                    color: widget.state.repos.isNotEmpty
+                        ? scheme.primary
+                        : null,
+                  ),
+                  title: const Text('源订阅'),
+                  subtitle: Text(
+                    sourceSubscriptionSubtitle(widget.state),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SourceScreen(state: widget.state),
                     ),
                   ),
                 ),

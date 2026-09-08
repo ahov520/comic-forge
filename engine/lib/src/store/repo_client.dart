@@ -73,13 +73,14 @@ class RepoRef {
 
   /// 去掉 fragment，保留 query；host 小写，便于去重。
   static String _canonicalListUrl(Uri uri) {
-    return uri
-        .replace(
-          scheme: uri.scheme.toLowerCase(),
-          host: uri.host.toLowerCase(),
-          fragment: '',
-        )
-        .toString();
+    return Uri(
+      scheme: uri.scheme.toLowerCase(),
+      userInfo: '',
+      host: uri.host.toLowerCase(),
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path,
+      query: uri.hasQuery ? uri.query : null,
+    ).toString();
   }
 
   /// 一个仓库的多个 raw 候选地址（按优先级）。
