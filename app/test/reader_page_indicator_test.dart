@@ -158,8 +158,9 @@ void main() {
       await tester.enterText(find.byType(TextField), '4');
       await tester.testTextInput.receiveAction(TextInputAction.go);
       await tester.pumpAndSettle();
-      expect(_pages(tester).page, 3);
-      expect(find.text('4/5'), findsOneWidget);
+    expect(_pages(tester).page, 3);
+    expect(find.byKey(const Key('reader-page-badge')), findsOneWidget);
+    expect(find.text('4/5'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
