@@ -375,6 +375,9 @@ void main() {
         home: Scaffold(body: SettingsScreen(state: state)),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('下载管理'), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('下载管理'));
     await tester.pumpAndSettle();
     expect(find.byType(DownloadsScreen), findsOneWidget);
