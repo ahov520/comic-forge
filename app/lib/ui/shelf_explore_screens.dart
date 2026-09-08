@@ -186,12 +186,12 @@ class _ShelfScreenState extends State<ShelfScreen> {
                         ),
                         PopupMenuButton<ShelfSort>(
                           tooltip: '排序：${widget.state.shelfSort.label}',
+                          initialValue: widget.state.shelfSort,
                           onSelected: _setSort,
                           itemBuilder: (_) => [
                             for (final sort in ShelfSort.values)
-                              CheckedPopupMenuItem(
+                              PopupMenuItem(
                                 value: sort,
-                                checked: widget.state.shelfSort == sort,
                                 child: Text(sort.label),
                               ),
                           ],

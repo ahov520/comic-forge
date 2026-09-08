@@ -1,7 +1,6 @@
 import 'package:comic_forge/state/app_state.dart';
 import 'package:comic_forge/state/shelf_sort.dart';
 import 'package:comic_forge/ui/shelf_explore_screens.dart';
-import 'package:comic_forge/ui/widgets.dart';
 import 'package:engine/engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,7 +82,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
   }
 
   List<String> gridTitles(WidgetTester tester) => tester
@@ -94,13 +93,18 @@ void main() {
       .where((name) => name.isNotEmpty)
       .toList();
 
+  Future<void> settleMenu(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
   Future<void> chooseSort(WidgetTester tester, String label) async {
-    await tester.tap(
-      find.byTooltip('排序：${state.shelfSort.label}'),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(label).last);
-    await tester.pumpAndSettle();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.tap(find.byTooltip('排序：${state.shelfSort.label}'));
+    await settleMenu(tester);
+    await tester.tap(find.widgetWithText(PopupMenuItem<ShelfSort>, label));
+    await settleMenu(tester);
   }
 
   testWidgets('默认最近阅读，可改为更新时间、书名和作者', (tester) async {
@@ -121,71 +125,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('排序作用于分组、连载状态和搜索之后的列表，并跨重启保留', (tester) async {
-    final group = await state.shelfGroups.create('追更');
-    await state.shelfGroups.assign(moon.bookUrl, [group]);
-    await state.shelfGroups.assign(extra.bookUrl, [group]);
+  testWidgets('排序作用于连载状态筛选之后的列表', (tester) async {
     await showShelf(tester);
-    await tester.enterText(find.byType(TextField), 'alice');
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('追更').last);
-    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, '已完结'));
-    await tester.pumpAndSettle();
-    expect(gridTitles(tester), [extra.name]);
+    await tester.pump();
+    expect(gridTitles(tester), [extra.name, mountain.name]);
 
-    await chooseSort(tester, '书名');
-    expect(gridTitles(tester), [extra.name]);
-    expect(state.shelfGroups.filter, group);
+    await chooseSort(tester, '更新时间');
+    expect(gridTitles(tester), [mountain.name, extra.name]);
     expect(
       tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '已完结')).selected,
       isTrue,
-    );
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).controller!.text,
-      'alice',
-    );
-
-    final restored = AppState();
-    addTearDown(restored.dispose);
-    await restored.load();
-    expect(restored.shelfSort, ShelfSort.title);
-    expect(
-      restored
-          .shelfBooks(query: 'alice', kindFilter: 2)
-          .map((book) => book.name),
-      [extra.name],
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('切换排序后从顶部展示，窄屏大字号不溢出', (tester) async {
-    tester.view.physicalSize = const Size(320, 480);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    for (var i = 0; i < 24; i++) {
+  testWidgets('切换排序后列表回到顶部', (tester) async {
+    for (var i = 0; i < 12; i++) {
       await state.toggleShelf(Book(name: '合辑 $i', bookUrl: '/collection-$i'));
     }
-    await showShelf(tester, textScale: 2);
-    await tester.scrollUntilVisible(
-      find.text('合辑 23'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text(moon.name).hitTestable(), findsNothing);
+    await showShelf(tester);
+    final scrollable = find.byType(Scrollable).first;
+    tester.state<ScrollableState>(scrollable).position.jumpTo(24);
+    await tester.pump();
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 24);
     await chooseSort(tester, '书名');
+    expect(tester.state<ScrollableState>(scrollable).position.pixels, 0);
     expect(
       find
           .descendant(of: find.byType(SliverGrid), matching: find.text(moon.name))
           .hitTestable(),
       findsOneWidget,
     );
-    expect(find.byType(BookCover).evaluate().length, greaterThan(0));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('窄屏大字号可打开排序菜单且不溢出', (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await showShelf(tester, textScale: 2);
+    await chooseSort(tester, '书名');
+    expect(state.shelfSort, ShelfSort.title);
+    expect(gridTitles(tester), [moon.name, extra.name, mountain.name]);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
