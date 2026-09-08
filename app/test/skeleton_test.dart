@@ -112,6 +112,9 @@ void main() {
         final metadata = tester.getRect(boxes.at(2));
         final chapter = tester.getRect(boxes.at(3));
         final favorite = showShelfAction ? tester.getRect(boxes.at(4)) : null;
+        final actionLabel = showShelfAction
+            ? tester.getRect(boxes.at(5))
+            : null;
         final card = tester.getRect(find.byType(Card).first);
 
         await show(
@@ -130,6 +133,11 @@ void main() {
         expect(tester.getRect(find.byType(Card)), card);
         if (favorite != null) {
           expect(tester.getRect(find.byIcon(Icons.favorite_border)), favorite);
+        }
+        if (actionLabel != null) {
+          final label = tester.getRect(find.text('加入'));
+          expect(label.topLeft, actionLabel.topLeft);
+          expect(label.height, actionLabel.height);
         }
         for (final pair in [
           (title, find.text('漫画')),

@@ -128,12 +128,23 @@ class BookListSkeleton extends StatelessWidget {
                     ),
                   ),
                   if (showShelfAction)
-                    const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: SkeletonBox(width: 16, height: 16, radius: 8),
+                    BookTileTypography.shelfActionColumn(
+                      icon: const SkeletonBox(
+                        width: BookTileTypography.shelfActionIconSize,
+                        height: BookTileTypography.shelfActionIconSize,
+                        radius: 8,
+                      ),
+                      label: SkeletonBox(
+                        width: BookTileTypography.textWidth(
+                          context,
+                          '加入',
+                          BookTileTypography.shelfActionLabel(context),
+                        ),
+                        height: BookTileTypography.lineHeight(
+                          context,
+                          BookTileTypography.shelfActionLabel(context),
+                        ),
+                        radius: 4,
                       ),
                     ),
                 ],
