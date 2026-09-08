@@ -39,7 +39,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('域名黑名单'), 200);
+    await tester.scrollUntilVisible(find.text('域名黑名单'), 120);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('域名黑名单'));
+    await tester.pumpAndSettle();
     expect(find.text('未拦截任何域名'), findsOneWidget);
     await tester.tap(find.text('域名黑名单'));
     await tester.pumpAndSettle();
