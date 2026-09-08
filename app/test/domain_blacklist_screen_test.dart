@@ -34,10 +34,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: SettingsScreen(state: state))),
+      MaterialApp(
+        home: Scaffold(body: SettingsScreen(state: state)),
+      ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('域名黑名单'));
+    await tester.scrollUntilVisible(find.text('域名黑名单'), 200);
     expect(find.text('未拦截任何域名'), findsOneWidget);
     await tester.tap(find.text('域名黑名单'));
     await tester.pumpAndSettle();

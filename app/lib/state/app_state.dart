@@ -11,6 +11,7 @@ import '../services/source_service.dart';
 import 'safe_prefs.dart';
 import 'scroll_restore.dart';
 import 'shelf_updates.dart';
+import 'shelf_update_schedule.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
 import 'shelf_groups.dart';
@@ -83,11 +84,16 @@ class CachedDetail {
 
 /// 全局应用状态：源库、书架、订阅仓库。
 class AppState extends ChangeNotifier {
-  AppState({DownloadQueue? downloadQueue}) : _downloads = downloadQueue {
+  AppState({DownloadQueue? downloadQueue, ShelfUpdateSchedule? shelfUpdateSchedule})
+      : _downloads = downloadQueue,
+        shelfUpdateSchedule = shelfUpdateSchedule ?? ShelfUpdateSchedule() {
     shelfGroups.addListener(notifyListeners);
+    this.shelfUpdateSchedule.addListener(notifyListeners);
   }
 
   final ShelfGroups shelfGroups = ShelfGroups();
+  final ShelfUpdateSchedule shelfUpdateSchedule;
+  bool _disposed = false;
 
   DownloadQueue? _downloads;
   DownloadQueue get downloads => _downloads ??= DownloadQueue(
@@ -96,6 +102,9 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    shelfUpdateSchedule.removeListener(notifyListeners);
+    shelfUpdateSchedule.dispose();
     shelfGroups.removeListener(notifyListeners);
     shelfGroups.dispose();
     _downloads?.dispose();
@@ -172,6 +181,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
+    await shelfUpdateSchedule.load();
     _restoreSearchHistory(sp.get(_kSearchHistory));
     final filterData = sp.get(_kSearchFilters);
     try {
@@ -553,13 +563,13 @@ class AppState extends ChangeNotifier {
     await sp.setStringSafe(_kShelfDismissals, jsonEncode(_shelfDismissals));
   }
 
-  /// 手动检查更新：并发最多 3 本，单本失败不覆盖上次成功的目录。
+  /// 手动/自动共用检查：并发最多 3 本，单本失败不覆盖上次成功的目录。
   Future<ShelfRefreshResult> refreshShelfUpdates() {
     final pending = _shelfRefresh;
     if (pending != null) return pending;
     final request = _refreshShelfUpdates().whenComplete(() {
       _shelfRefresh = null;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     });
     _shelfRefresh = request;
     notifyListeners();
@@ -571,7 +581,12 @@ class AppState extends ChangeNotifier {
     var failed = 0;
     var skipped = 0;
     final targets = List<Book>.of(shelf);
+    await shelfUpdateSchedule.recordCheck();
     Future<void> refresh(Book book) async {
+      if (_disposed) {
+        skipped++;
+        return;
+      }
       final source = sources
           .where((s) => s.id == book.sourceId && s.enabled)
           .firstOrNull;
@@ -584,7 +599,7 @@ class AppState extends ChangeNotifier {
             .runtimeFor(source)
             .detail(book.bookUrl)
             .timeout(const Duration(seconds: 20));
-        if (!inShelf(book) ||
+        if (_disposed || !inShelf(book) ||
             !sources.any((s) => identical(s, source) && s.enabled)) {
           skipped++;
           return;
@@ -739,7 +754,7 @@ class AppState extends ChangeNotifier {
         jsonEncode(shelf.map((b) => b.toJson()).toList()),
       );
       await _persistShelfUpdates();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 

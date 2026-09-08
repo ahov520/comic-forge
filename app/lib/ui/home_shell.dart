@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
+import '../state/shelf_update_scheduler.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'shelf_explore_screens.dart';
@@ -15,8 +16,30 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  late ShelfUpdateScheduler _shelfUpdateScheduler;
   int _tab = 0;
   final _visited = <int>{0};
+
+  @override
+  void initState() {
+    super.initState();
+    _shelfUpdateScheduler = ShelfUpdateScheduler(widget.state);
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state) {
+      _shelfUpdateScheduler.dispose();
+      _shelfUpdateScheduler = ShelfUpdateScheduler(widget.state);
+    }
+  }
+
+  @override
+  void dispose() {
+    _shelfUpdateScheduler.dispose();
+    super.dispose();
+  }
 
   void _selectTab(int index) {
     if (_tab == index) return;

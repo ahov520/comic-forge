@@ -1,5 +1,6 @@
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/shelf_update_schedule.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -21,8 +22,9 @@ Future<void> _showSettings(
     MaterialApp(
       theme: ThemeData(brightness: brightness),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(textScaler: TextScaler.linear(textScale)),
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
       ),
       home: Scaffold(body: SettingsScreen(state: state)),
@@ -47,7 +49,7 @@ void main() {
     await _showSettings(
       tester,
       state,
-      size: const Size(340, 720),
+      size: const Size(340, 1200),
       textScale: 1,
     );
     final firstTitle = tester.getRect(find.text('深色模式'));
@@ -80,7 +82,12 @@ void main() {
         matching: find.byIcon(Icons.chevron_right),
       ),
     );
-    final toggle = tester.getRect(find.byType(Switch));
+    final toggle = tester.getRect(
+      find.descendant(
+        of: find.widgetWithText(SwitchListTile, '深色模式'),
+        matching: find.byType(Switch),
+      ),
+    );
     expect(toggle.right, arrow.right);
     expect(toggle.width, greaterThanOrEqualTo(48));
     expect(toggle.height, greaterThanOrEqualTo(48));
@@ -113,6 +120,8 @@ void main() {
   for (final brightness in Brightness.values) {
     testWidgets('设置状态随外部更新刷新，窄屏大字号仍可清除规则：${brightness.name}', (tester) async {
       await _showSettings(tester, state, brightness: brightness);
+      await tester.scrollUntilVisible(find.text('WebDAV 备份 / 恢复'), 200);
+      await tester.pumpAndSettle();
       expect(find.text('未配置服务器'), findsOneWidget);
       await state.setWebDavConfig({
         'url': 'https://backup.example/dav/comic-forge',
@@ -133,6 +142,8 @@ void main() {
 
   testWidgets('WebDAV 大字号面板在键盘展开后仍可滚动到备份与恢复按钮', (tester) async {
     await _showSettings(tester, state);
+    await tester.scrollUntilVisible(find.text('WebDAV 备份 / 恢复'), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('WebDAV 备份 / 恢复'));
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 240);
@@ -142,6 +153,48 @@ void main() {
     expect(find.text('备份').hitTestable(), findsOneWidget);
     expect(find.text('恢复').hitTestable(), findsOneWidget);
     expect(tester.getRect(find.text('备份')).bottom, lessThanOrEqualTo(400));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('书架自动检查开关和间隔可设置，窄屏大字号可选择全部预设', (tester) async {
+    await _showSettings(tester, state);
+    final toggle = find.widgetWithText(SwitchListTile, '自动检查书架更新');
+    final interval = find.widgetWithText(ListTile, '检查间隔');
+    await tester.scrollUntilVisible(interval, 160);
+    await tester.pumpAndSettle();
+    expect(tester.widget<ListTile>(interval).enabled, isFalse);
+    await tester.scrollUntilVisible(toggle, -160);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.shelfUpdateSchedule.enabled, isTrue);
+    await tester.ensureVisible(interval);
+    await tester.pumpAndSettle();
+    await tester.tap(interval);
+    await tester.pumpAndSettle();
+    expect(find.text('每 1 小时'), findsOneWidget);
+    expect(find.text('每 24 小时'), findsOneWidget);
+    await tester.ensureVisible(find.text('每 24 小时'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('每 24 小时'));
+    await tester.pumpAndSettle();
+    expect(state.shelfUpdateSchedule.interval, ShelfUpdateInterval.daily);
+    expect(find.text('每 24 小时'), findsOneWidget);
+
+    final restored = ShelfUpdateSchedule();
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.enabled, isTrue);
+    expect(restored.interval, ShelfUpdateInterval.daily);
+    await tester.scrollUntilVisible(toggle, -160);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.shelfUpdateSchedule.enabled, isFalse);
+    await restored.load();
+    expect(restored.enabled, isFalse);
+    expect(restored.interval, ShelfUpdateInterval.daily);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

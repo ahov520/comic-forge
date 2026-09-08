@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../backup_service.dart';
 import '../state/app_state.dart';
+import '../state/shelf_update_schedule.dart';
 import 'domain_blacklist_screen.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
@@ -21,6 +22,35 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String? _adMsg;
+
+  Future<void> _chooseShelfUpdateInterval() async {
+    final selected = await showModalBottomSheet<ShelfUpdateInterval>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('书架更新检查间隔')),
+              for (final interval in ShelfUpdateInterval.values)
+                ListTile(
+                  title: Text(interval.label),
+                  trailing:
+                      widget.state.shelfUpdateSchedule.interval == interval
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.pop(context, interval),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      await widget.state.shelfUpdateSchedule.setInterval(selected);
+    }
+  }
 
   Future<void> _importAdBlock() async {
     try {
@@ -309,8 +339,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               row(
                 SwitchTheme(
                   // 去掉轨道两侧内边距，让可见右缘与其它行尾控件对齐。
-                  data: SwitchTheme.of(context)
-                      .copyWith(padding: EdgeInsets.zero),
+                  data: SwitchTheme.of(
+                    context,
+                  ).copyWith(padding: EdgeInsets.zero),
                   child: SwitchListTile(
                     materialTapTargetSize: MaterialTapTargetSize.padded,
                     secondary: const Icon(Icons.dark_mode_outlined),
@@ -318,6 +349,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: widget.state.darkMode,
                     onChanged: (v) => widget.state.setDark(v),
                   ),
+                ),
+              ),
+              const _Header('书架'),
+              row(
+                SwitchListTile(
+                  secondary: const Icon(Icons.update),
+                  title: const Text('自动检查书架更新'),
+                  subtitle: const Text('前台定时检查，回到应用时补查到期更新'),
+                  value: widget.state.shelfUpdateSchedule.enabled,
+                  onChanged: widget.state.shelfUpdateSchedule.setEnabled,
+                ),
+              ),
+              row(
+                ListTile(
+                  leading: const Icon(Icons.schedule),
+                  title: const Text('检查间隔'),
+                  subtitle: Text(
+                    widget.state.shelfUpdateSchedule.interval.label,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  enabled: widget.state.shelfUpdateSchedule.enabled,
+                  onTap: widget.state.shelfUpdateSchedule.enabled
+                      ? _chooseShelfUpdateInterval
+                      : null,
                 ),
               ),
               const _Header('数据'),
@@ -431,8 +486,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 6, 24, 24),
                 child: Text(
                   '本地规则工具 · 不提供漫画内容',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(fontSize: 11, color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],

@@ -38,6 +38,8 @@ void main() {
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('数据'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('关于'), 200);
+    await tester.pumpAndSettle();
     expect(find.text('关于'), findsOneWidget);
     expect(find.text('Comic Forge v0.1.0'), findsOneWidget);
     expect(find.text('本地规则工具 · 不提供漫画内容'), findsOneWidget);
