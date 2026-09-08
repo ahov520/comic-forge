@@ -212,7 +212,12 @@ void main() {
       ),
     );
     expect(find.text('未读 2'), findsOneWidget);
-    await tester.longPress(find.byType(BookCover));
+    await tester.longPress(
+      find.descendant(
+        of: find.byType(SliverGrid),
+        matching: find.byType(BookCover),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('清除更新角标'));
     await tester.pumpAndSettle();
