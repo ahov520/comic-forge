@@ -110,6 +110,7 @@ void main() {
     final firstTitle = tester.getRect(find.text('深色模式'));
     for (final label in [
       '深色模式',
+      '阅读预设',
       '源订阅',
       'WebDAV 备份 / 恢复',
       '广告拦截规则',

@@ -23,6 +23,7 @@ import 'reading_stats.dart';
 import 'shelf_groups.dart';
 import 'shelf_sort.dart';
 import 'search_filters.dart';
+import 'reading_pref_presets.dart';
 
 /// 阅读进度（按书记忆，重启可续读）。
 class ReadingProgress {
@@ -103,11 +104,13 @@ class AppState extends ChangeNotifier {
        updateNotifications = updateNotifications ?? ShelfUpdateNotifications(),
        updateNotifier = updateNotifier ?? const NoopShelfUpdateNotifier() {
     shelfGroups.addListener(notifyListeners);
+    readerPresets.addListener(notifyListeners);
     this.shelfUpdateSchedule.addListener(notifyListeners);
     this.updateNotifications.addListener(notifyListeners);
   }
 
   final ShelfGroups shelfGroups = ShelfGroups();
+  final ReadingPrefPresets readerPresets = ReadingPrefPresets();
   final ShelfUpdateSchedule shelfUpdateSchedule;
   final ReadingStats readingStats;
   final ShelfUpdateNotifications updateNotifications;
@@ -127,6 +130,8 @@ class AppState extends ChangeNotifier {
     updateNotifications.dispose();
     shelfUpdateSchedule.removeListener(notifyListeners);
     shelfUpdateSchedule.dispose();
+    readerPresets.removeListener(notifyListeners);
+    readerPresets.dispose();
     shelfGroups.removeListener(notifyListeners);
     shelfGroups.dispose();
     _downloads?.dispose();
@@ -251,6 +256,7 @@ class AppState extends ChangeNotifier {
             .map(Book.fromJson),
       );
     await shelfGroups.load(shelf.map((book) => book.bookUrl));
+    await readerPresets.load();
     progress
       ..clear()
       ..addAll(
@@ -1350,6 +1356,12 @@ class AppState extends ChangeNotifier {
         overwrite: overwrite,
       );
     }
+    if (payload.readerPresets != null) {
+      nSettings += await readerPresets.importBackup(
+        payload.readerPresets!,
+        overwrite: overwrite,
+      );
+    }
     if (payload.readerPages != null) {
       payload.readerPages!.forEach((key, page) {
         _readerPages[key] = page;
@@ -1934,27 +1946,79 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 当前阅读偏好命中的命名预设（若有）。
+  ReadingPrefPreset? get activeReaderPreset => readerPresets.matching(
+    brightness: readerBrightness,
+    mode: readerMode,
+    volumeKeys: readerVolumeKeys,
+  );
+
   /// 阅读器亮度（遮罩式调暗，持久化全局）。
   Future<void> setReaderBrightness(double v) async {
-    readerBrightness = v.clamp(0.15, 1.0);
-    final sp = await SharedPreferences.getInstance();
-    await sp.setDoubleSafe(_kReaderBrightness, readerBrightness);
-    notifyListeners();
+    await _writeReaderPrefs(brightness: v.clamp(0.15, 1.0));
   }
 
   /// 阅读模式：scroll / paged。
   Future<void> setReaderMode(String mode) async {
-    readerMode = mode == 'paged' ? 'paged' : 'scroll';
-    final sp = await SharedPreferences.getInstance();
-    await sp.setStringSafe(_kReaderMode, readerMode);
-    notifyListeners();
+    await _writeReaderPrefs(mode: mode);
   }
 
   /// 音量键翻页开关。
   Future<void> setReaderVolumeKeys(bool v) async {
-    readerVolumeKeys = v;
+    await _writeReaderPrefs(volumeKeys: v);
+  }
+
+  /// 把当前阅读偏好存成命名预设，并标为已应用。
+  Future<String> saveCurrentReaderPreset(String name) async {
+    return readerPresets.save(
+      name: name,
+      brightness: readerBrightness,
+      mode: readerMode,
+      volumeKeys: readerVolumeKeys,
+    );
+  }
+
+  /// 用预设覆盖当前阅读偏好，立即生效并持久化。
+  Future<bool> applyReaderPreset(String id) async {
+    final preset = readerPresets.byId(id);
+    if (preset == null) return false;
+    await _writeReaderPrefs(
+      brightness: preset.brightness,
+      mode: preset.mode,
+      volumeKeys: preset.volumeKeys,
+    );
+    await readerPresets.markActive(id);
+    return true;
+  }
+
+  /// 把当前阅读偏好写回已有预设。
+  Future<void> updateReaderPreset(String id) async {
+    await readerPresets.updateValues(
+      id,
+      brightness: readerBrightness,
+      mode: readerMode,
+      volumeKeys: readerVolumeKeys,
+    );
+  }
+
+  Future<void> _writeReaderPrefs({
+    double? brightness,
+    String? mode,
+    bool? volumeKeys,
+  }) async {
+    if (brightness != null) readerBrightness = brightness;
+    if (mode != null) readerMode = mode == 'paged' ? 'paged' : 'scroll';
+    if (volumeKeys != null) readerVolumeKeys = volumeKeys;
     final sp = await SharedPreferences.getInstance();
-    await sp.setBoolSafe(_kReaderVolumeKeys, v);
+    if (brightness != null) {
+      await sp.setDoubleSafe(_kReaderBrightness, readerBrightness);
+    }
+    if (mode != null) {
+      await sp.setStringSafe(_kReaderMode, readerMode);
+    }
+    if (volumeKeys != null) {
+      await sp.setBoolSafe(_kReaderVolumeKeys, readerVolumeKeys);
+    }
     notifyListeners();
   }
 

@@ -13,6 +13,7 @@ import '../state/shelf_update_schedule.dart';
 import 'domain_blacklist_screen.dart';
 import 'downloads_screen.dart';
 import 'reading_history_screen.dart';
+import 'reading_pref_presets_screen.dart';
 import 'reading_stats_screen.dart';
 import 'source_screen.dart';
 import 'widgets.dart';
@@ -539,6 +540,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: const Text('深色模式'),
                     value: widget.state.darkMode,
                     onChanged: (v) => widget.state.setDark(v),
+                  ),
+                ),
+              ),
+              const _Header('阅读'),
+              row(
+                ListTile(
+                  leading: Icon(
+                    Icons.tune,
+                    color: widget.state.readerPresets.presets.isNotEmpty
+                        ? scheme.primary
+                        : null,
+                  ),
+                  title: const Text('阅读预设'),
+                  subtitle: Text(
+                    readerPresetsSubtitle(widget.state),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ReadingPrefPresetsScreen(state: widget.state),
+                    ),
                   ),
                 ),
               ),
