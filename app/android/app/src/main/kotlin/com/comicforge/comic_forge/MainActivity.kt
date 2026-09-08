@@ -1,5 +1,6 @@
 package com.comicforge.comic_forge
 
+import android.content.Intent
 import android.view.KeyEvent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -10,13 +11,23 @@ import io.flutter.plugin.common.MethodChannel
  * 未激活时走系统默认行为。通道名 `comic-forge/reader`：
  * - Flutter → 原生：setVolumeKeysEnabled(enabled: Bool)
  * - 原生 → Flutter：volumeUp() / volumeDown()
+ *
+ * 书架更新通知通道名 `comic-forge/notifications`，点按通知以 singleTop 回到本页。
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var volumeKeysEnabled = false
+    private lateinit var shelfUpdateNotifications: ShelfUpdateNotifications
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        shelfUpdateNotifications = ShelfUpdateNotifications(this)
+        shelfUpdateNotifications.attach(
+            MethodChannel(
+                flutterEngine.dartExecutor.binaryMessenger,
+                "comic-forge/notifications",
+            )
+        )
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "comic-forge/reader"
@@ -30,6 +41,26 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (::shelfUpdateNotifications.isInitialized) {
+            shelfUpdateNotifications.handleIntent(intent, fromLaunch = false)
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (::shelfUpdateNotifications.isInitialized) {
+            shelfUpdateNotifications.onRequestPermissionsResult(requestCode, grantResults)
         }
     }
 

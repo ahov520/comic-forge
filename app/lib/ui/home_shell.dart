@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
+import '../state/shelf_update_notices.dart';
 import '../state/shelf_update_scheduler.dart';
+import 'book_detail_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'shelf_explore_screens.dart';
@@ -24,21 +26,51 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _shelfUpdateScheduler = ShelfUpdateScheduler(widget.state);
+    _bindNotifier(widget.state);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openLaunchRequest());
   }
 
   @override
   void didUpdateWidget(covariant HomeShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.state != widget.state) {
+      oldWidget.state.updateNotifier.setOnOpen(null);
       _shelfUpdateScheduler.dispose();
       _shelfUpdateScheduler = ShelfUpdateScheduler(widget.state);
+      _bindNotifier(widget.state);
+      _openLaunchRequest();
     }
   }
 
   @override
   void dispose() {
+    widget.state.updateNotifier.setOnOpen(null);
     _shelfUpdateScheduler.dispose();
     super.dispose();
+  }
+
+  void _bindNotifier(AppState state) {
+    state.updateNotifier.setOnOpen(_onOpenRequest);
+  }
+
+  void _openLaunchRequest() {
+    if (!mounted) return;
+    final launch = widget.state.updateNotifier.takeLaunchRequest();
+    if (launch != null) _onOpenRequest(launch);
+  }
+
+  void _onOpenRequest(ShelfUpdateOpenRequest request) {
+    final book = widget.state.shelfBookFor(
+      bookUrl: request.bookUrl,
+      sourceId: request.sourceId,
+    );
+    if (book == null || !mounted) return;
+    _selectTab(0);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BookDetailScreen(book: book, appState: widget.state),
+      ),
+    );
   }
 
   void _selectTab(int index) {

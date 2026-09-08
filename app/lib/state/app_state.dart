@@ -11,7 +11,10 @@ import '../services/source_service.dart';
 import 'safe_prefs.dart';
 import 'scroll_restore.dart';
 import 'shelf_updates.dart';
+import 'shelf_update_notices.dart';
+import 'shelf_update_notifications.dart';
 import 'shelf_update_schedule.dart';
+import '../services/shelf_update_notifier.dart';
 import 'download_queue.dart';
 import 'reading_history.dart';
 import 'chapter_bookmarks.dart';
@@ -91,16 +94,23 @@ class AppState extends ChangeNotifier {
     DownloadQueue? downloadQueue,
     ShelfUpdateSchedule? shelfUpdateSchedule,
     ReadingStats? readingStats,
+    ShelfUpdateNotifications? updateNotifications,
+    ShelfUpdateNotifier? updateNotifier,
   }) : _downloads = downloadQueue,
        shelfUpdateSchedule = shelfUpdateSchedule ?? ShelfUpdateSchedule(),
-       readingStats = readingStats ?? ReadingStats() {
+       readingStats = readingStats ?? ReadingStats(),
+       updateNotifications = updateNotifications ?? ShelfUpdateNotifications(),
+       updateNotifier = updateNotifier ?? const NoopShelfUpdateNotifier() {
     shelfGroups.addListener(notifyListeners);
     this.shelfUpdateSchedule.addListener(notifyListeners);
+    this.updateNotifications.addListener(notifyListeners);
   }
 
   final ShelfGroups shelfGroups = ShelfGroups();
   final ShelfUpdateSchedule shelfUpdateSchedule;
   final ReadingStats readingStats;
+  final ShelfUpdateNotifications updateNotifications;
+  final ShelfUpdateNotifier updateNotifier;
   bool _disposed = false;
 
   DownloadQueue? _downloads;
@@ -112,6 +122,8 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     readingStats.dispose();
+    updateNotifications.removeListener(notifyListeners);
+    updateNotifications.dispose();
     shelfUpdateSchedule.removeListener(notifyListeners);
     shelfUpdateSchedule.dispose();
     shelfGroups.removeListener(notifyListeners);
@@ -199,6 +211,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
     await shelfUpdateSchedule.load();
+    await updateNotifications.load();
     await readingStats.load();
     _restoreSearchHistory(sp.get(_kSearchHistory));
     final filterData = sp.get(_kSearchFilters);
@@ -715,6 +728,16 @@ class AppState extends ChangeNotifier {
     var failed = 0;
     var skipped = 0;
     final targets = List<Book>.of(shelf);
+    final previousTokens = <String, String>{};
+    final previouslyCataloged = <String>{};
+    for (final book in targets) {
+      final key = shelfUpdateNoticeKey(book);
+      final badge = shelfUpdateFor(book);
+      if (badge != null) previousTokens[key] = badge.token;
+      if (_shelfChapters.containsKey(book.bookUrl)) {
+        previouslyCataloged.add(key);
+      }
+    }
     await shelfUpdateSchedule.recordCheck();
     Future<void> refresh(Book book) async {
       if (_disposed) {
@@ -749,7 +772,53 @@ class AppState extends ChangeNotifier {
     for (var i = 0; i < targets.length; i += 3) {
       await Future.wait(targets.skip(i).take(3).map(refresh));
     }
+    await _notifyShelfUpdates(
+      previousTokens: previousTokens,
+      previouslyCataloged: previouslyCataloged,
+    );
     return (checked: checked, failed: failed, skipped: skipped);
+  }
+
+  Future<bool> setUpdateNotificationsEnabled(bool value) async {
+    if (value) {
+      final allowed = await updateNotifier.requestPermission();
+      if (!allowed) return false;
+    } else {
+      await updateNotifier.cancelAll();
+    }
+    await updateNotifications.setEnabled(value);
+    return true;
+  }
+
+  Book? shelfBookFor({required String bookUrl, required String sourceId}) {
+    Book? byUrl;
+    for (final book in shelf) {
+      if (book.bookUrl != bookUrl) continue;
+      if ((book.sourceId ?? '') == sourceId) return book;
+      byUrl ??= book;
+    }
+    return byUrl;
+  }
+
+  Future<void> _notifyShelfUpdates({
+    required Map<String, String> previousTokens,
+    required Set<String> previouslyCataloged,
+  }) async {
+    if (_disposed || !updateNotifications.enabled) return;
+    final notices = shelfUpdatesToNotify(
+      shelf: shelf,
+      previousTokens: previousTokens,
+      previouslyCataloged: previouslyCataloged,
+      notifiedTokens: updateNotifications.notifiedTokens,
+      badgeFor: shelfUpdateFor,
+    );
+    for (final notice in notices) {
+      if (_disposed || !updateNotifications.enabled) return;
+      final shown = await updateNotifier.show(notice);
+      if (shown && !_disposed) {
+        await updateNotifications.markNotified(notice.key, notice.badge.token);
+      }
+    }
   }
 
   /// 记录章内滚动位置（LRU 上限 200；节流由调用方负责）。

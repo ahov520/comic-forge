@@ -1,11 +1,14 @@
 import 'package:comic_forge/services/source_service.dart';
 import 'package:comic_forge/state/app_state.dart';
+import 'package:comic_forge/state/shelf_update_notifications.dart';
 import 'package:comic_forge/state/shelf_update_schedule.dart';
 import 'package:comic_forge/ui/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fake_shelf_update_notifier.dart';
 
 Future<void> _showSettings(
   WidgetTester tester,
@@ -195,6 +198,54 @@ void main() {
     await restored.load();
     expect(restored.enabled, isFalse);
     expect(restored.interval, ShelfUpdateInterval.daily);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('更新通知开关默认关闭，授权后可开启并跨重启保留', (tester) async {
+    await _showSettings(
+      tester,
+      state,
+      size: const Size(340, 1200),
+      textScale: 1,
+    );
+    final toggle = find.widgetWithText(SwitchListTile, '更新通知');
+    expect(toggle, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(await state.setUpdateNotificationsEnabled(true), isTrue);
+    await tester.pump();
+    expect(state.updateNotifications.enabled, isTrue);
+
+    final restored = ShelfUpdateNotifications();
+    addTearDown(restored.dispose);
+    await restored.load();
+    expect(restored.enabled, isTrue);
+    expect(await state.setUpdateNotificationsEnabled(false), isTrue);
+    await tester.pump();
+    expect(state.updateNotifications.enabled, isFalse);
+    await restored.load();
+    expect(restored.enabled, isFalse);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('未授予通知权限时开关保持关闭并提示', (tester) async {
+    final notifier = FakeShelfUpdateNotifier(permissionGranted: false);
+    final denied = AppState(updateNotifier: notifier);
+    addTearDown(denied.dispose);
+    await _showSettings(
+      tester,
+      denied,
+      size: const Size(340, 1200),
+      textScale: 1,
+    );
+    final toggle = find.widgetWithText(SwitchListTile, '更新通知');
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    tester.widget<SwitchListTile>(toggle).onChanged!(true);
+    await tester.pump();
+    await tester.pump();
+    expect(denied.updateNotifications.enabled, isFalse);
+    expect(find.text('未授予通知权限，可在系统设置中开启'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
