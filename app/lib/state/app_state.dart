@@ -1689,7 +1689,8 @@ class AppState extends ChangeNotifier {
       }));
     }
     await reportSourceHealth(okIds, errors,
-        inconclusive: inconclusive, observedSources: targets);
+        inconclusive: inconclusive,
+        catalogVerified: true, observedSources: targets);
   }
 
   /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
@@ -1736,7 +1737,8 @@ class AppState extends ChangeNotifier {
       await Future.wait(targets.skip(i).take(batch).map(probeOne));
     }
     await reportSourceHealth(okIds, errors,
-        inconclusive: inconclusive, observedSources: targets);
+        inconclusive: inconclusive,
+        catalogVerified: true, observedSources: targets);
     return (okIds.length, targets.length);
   }
 
@@ -1808,6 +1810,7 @@ class AppState extends ChangeNotifier {
     Iterable<String> okIds,
     Map<String, String> errors, {
     Map<String, String> inconclusive = const {},
+    bool catalogVerified = false,
     Iterable<ComicSource>? observedSources,
   }) async {
     final observed = observedSources == null
@@ -1831,9 +1834,11 @@ class AppState extends ChangeNotifier {
       s.failCount = 0;
       s.lastError = '';
       s.lastOkAt = now;
-      s.lastCheckStatus = 'ok';
-      s.lastCheckNote = '搜索及目录可解析（图片未检测）';
-      s.lastCheckedAt = now;
+      if (catalogVerified) {
+        s.lastCheckStatus = 'ok';
+        s.lastCheckNote = '搜索及目录可解析（图片未检测）';
+        s.lastCheckedAt = now;
+      }
     }
     errors.forEach((id, err) {
       final s = current(id);
@@ -1844,9 +1849,11 @@ class AppState extends ChangeNotifier {
       s.lastError = msg;
       s.lastFailedAt = now;
       s.failCount++;
-      s.lastCheckStatus = 'broken';
-      s.lastCheckNote = msg;
-      s.lastCheckedAt = now;
+      if (catalogVerified) {
+        s.lastCheckStatus = 'broken';
+        s.lastCheckNote = msg;
+        s.lastCheckedAt = now;
+      }
     });
     inconclusive.forEach((id, note) {
       final s = current(id);
