@@ -216,6 +216,12 @@ class ComicSource {
   /// 最近成功时间（epoch 毫秒；0 = 从未成功）。
   int lastOkAt = 0;
 
+  /// Recent usability check: ok / broken / unknown. An empty search result
+  /// is inconclusive and must not count towards disabling a source.
+  String lastCheckStatus = '';
+  String lastCheckNote = '';
+  int lastCheckedAt = 0;
+
   /// 失效候选：连续失败 ≥3 次。
   bool get isUnhealthy => failCount >= 3;
 
@@ -237,6 +243,9 @@ class ComicSource {
         if (lastFailedAt != 0) 'lastFailedAt': lastFailedAt,
         if (failCount != 0) 'failCount': failCount,
         if (lastOkAt != 0) 'lastOkAt': lastOkAt,
+        if (lastCheckStatus.isNotEmpty) 'lastCheckStatus': lastCheckStatus,
+        if (lastCheckNote.isNotEmpty) 'lastCheckNote': lastCheckNote,
+        if (lastCheckedAt != 0) 'lastCheckedAt': lastCheckedAt,
       };
 
   static String _firstNonEmpty(Iterable<Object?> values) {
@@ -268,6 +277,12 @@ class ComicSource {
     s.lastFailedAt = j['lastFailedAt'] is int ? j['lastFailedAt'] as int : 0;
     s.failCount = j['failCount'] is int ? j['failCount'] as int : 0;
     s.lastOkAt = j['lastOkAt'] is int ? j['lastOkAt'] as int : 0;
+    s.lastCheckStatus = j['lastCheckStatus'] is String
+        ? j['lastCheckStatus'] as String : '';
+    s.lastCheckNote = j['lastCheckNote'] is String
+        ? j['lastCheckNote'] as String : '';
+    s.lastCheckedAt = j['lastCheckedAt'] is int
+        ? j['lastCheckedAt'] as int : 0;
     s.raw = Map<String, dynamic>.from(j);
     final r = j['rules'];
     if (r is Map) {
