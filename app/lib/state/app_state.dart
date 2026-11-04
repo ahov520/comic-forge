@@ -1698,7 +1698,7 @@ class AppState extends ChangeNotifier {
   Future<(int ok, int total)> probeSources({
     String keyword = '斗罗大陆',
     int concurrency = 8,
-    Duration timeout = const Duration(seconds: 12),
+    Duration timeout = const Duration(seconds: 15),
     SourceRuntime Function(ComicSource source)? runtimeBuilder,
     void Function(int done, int total)? onProgress,
   }) async {
@@ -1710,23 +1710,33 @@ class AppState extends ChangeNotifier {
     var done = 0;
     final okIds = <String>[];
     final errors = <String, String>{};
+    final inconclusive = <String, String>{};
 
     Future<void> probeOne(ComicSource s) async {
       try {
-        await builder(s).search(keyword).timeout(timeout);
-        okIds.add(s.id);
-      } catch (e) {
-        errors[s.id] = e.toString();
+        final result = await checkSourceReading(
+            builder(s), keyword: keyword, timeout: timeout);
+        if (result.status == 'ok') {
+          okIds.add(s.id);
+        } else if (result.status == 'unknown') {
+          inconclusive[s.id] = result.note;
+        } else {
+          errors[s.id] = result.note;
+        }
+      } catch (_) {
+        errors[s.id] = '源检测出现异常';
       } finally {
         done++;
         onProgress?.call(done, targets.length);
       }
     }
 
-    for (var i = 0; i < targets.length; i += concurrency) {
-      await Future.wait(targets.skip(i).take(concurrency).map(probeOne));
+    final batch = concurrency.clamp(1, 8);
+    for (var i = 0; i < targets.length; i += batch) {
+      await Future.wait(targets.skip(i).take(batch).map(probeOne));
     }
-    await reportSourceHealth(okIds, errors, observedSources: targets);
+    await reportSourceHealth(okIds, errors,
+        inconclusive: inconclusive, observedSources: targets);
     return (okIds.length, targets.length);
   }
 
