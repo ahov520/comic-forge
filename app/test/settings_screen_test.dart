@@ -146,8 +146,9 @@ void main() {
         14,
       );
     }
-    await tester.scrollUntilVisible(find.text('深色模式'), -220,
-        scrollable: find.byType(Scrollable).first);
+    // Return to the very top before testing switch edge hit targets:
+    // scrollUntilVisible alone may leave the tile only partially in view.
+    await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     final arrow = tester.getRect(
       find.descendant(
