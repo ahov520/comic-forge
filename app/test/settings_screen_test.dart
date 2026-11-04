@@ -74,7 +74,7 @@ void main() {
     await _showSettings(
       tester,
       state,
-      size: const Size(340, 1200),
+      size: const Size(340, 1400),
       textScale: 1,
     );
     expect(find.text('源订阅'), findsOneWidget);
@@ -126,6 +126,11 @@ void main() {
       'Comic Forge v0.1.0',
     ]) {
       final title = find.text(label);
+      // Settings may grow as new toggles are introduced; test each tile
+      // after making it visible rather than relying on one viewport height.
+      await tester.scrollUntilVisible(title, 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
       final tile = find.widgetWithText(ListTile, label);
       final leading = find
           .descendant(of: tile, matching: find.byType(Icon))
@@ -141,6 +146,10 @@ void main() {
         14,
       );
     }
+    // Return to the very top before testing switch edge hit targets:
+    // scrollUntilVisible alone may leave the tile only partially in view.
+    await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
+    await tester.pumpAndSettle();
     final arrow = tester.getRect(
       find.descendant(
         of: find.widgetWithText(ListTile, 'WebDAV 备份 / 恢复'),

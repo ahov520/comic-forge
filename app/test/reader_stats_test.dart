@@ -216,4 +216,23 @@ void main() {
     expect(state.readingStats.forBook(book)!.sessionCount, 1);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('无痕模式开启时不计时，关闭后从当前章节开始计时', (tester) async {
+    await state.setIncognitoMode(true);
+    await showReader(tester);
+    expect(state.readingStats.total.chapterCount, 0);
+    expect(state.progress, isEmpty);
+    now = now.add(const Duration(seconds: 30));
+    await state.setIncognitoMode(false);
+    await tester.pumpAndSettle();
+    expect(state.readingStats.total.chapterCount, 1);
+    now = now.add(const Duration(seconds: 20));
+    await state.setIncognitoMode(true);
+    await tester.pumpAndSettle();
+    expect(state.readingStats.total.duration, const Duration(seconds: 20));
+    now = now.add(const Duration(minutes: 5));
+    await closeReader(tester);
+    expect(state.readingStats.total.duration, const Duration(seconds: 20));
+    expect(tester.takeException(), isNull);
+  });
+
 }

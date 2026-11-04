@@ -100,7 +100,13 @@ void main() {
     final initialBounds = tester.getRect(subscribe);
     await tester.tap(subscribe);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'github.com/team/comics');
+    await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'github.com/team/comics',
+      );
     await tester.tap(find.widgetWithText(FilledButton, '订阅'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -170,7 +176,13 @@ void main() {
       );
       await tester.tap(find.text('＋ 订阅仓库'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'github.com/team/comics');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'github.com/team/comics',
+      );
       await tester.tap(find.widgetWithText(FilledButton, '订阅'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
