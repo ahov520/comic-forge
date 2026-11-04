@@ -66,7 +66,24 @@ class RepoRef {
       final repo = segments[1].replaceFirst(RegExp(r'\.git$'), '');
       final validName = RegExp(r'^[\w.\-]+$');
       if (!validName.hasMatch(user) || !validName.hasMatch(repo)) return null;
-      return RepoRef(host: host.split('.').first, user: user, repo: repo);
+      // GitHub/Gitee file-sharing URLs point at a JSON file, not a repo root.
+      // Treat them as direct lists so subdirectory files work too.
+      if (segments.length >= 5 &&
+          (segments[2] == 'blob' || segments[2] == 'raw')) {
+        final filePath = segments.skip(4).map(Uri.encodeComponent).join('/');
+        final branch = Uri.encodeComponent(segments[3]);
+        final fileUrl = host == 'github.com'
+            ? 'https://raw.githubusercontent.com/$user/$repo/$branch/$filePath'
+            : 'https://gitee.com/$user/$repo/raw/$branch/$filePath';
+        return RepoRef.list(fileUrl);
+      }
+      // A shared /tree/<branch> link must not silently revert to master.
+      final branch = segments.length >= 4 && segments[2] == 'tree'
+          ? segments[3]
+          : 'master';
+      if (branch.isEmpty) return null;
+      return RepoRef(
+          host: host.split('.').first, user: user, repo: repo, branch: branch);
     }
     return RepoRef.list(_canonicalListUrl(uri));
   }
@@ -103,7 +120,9 @@ class RepoRef {
     }
   }
 
-  String get canonical => isListUrl ? listUrl! : '$host.com/$user/$repo';
+  String get canonical => isListUrl
+      ? listUrl!
+      : '$host.com/$user/$repo${branch == 'master' ? '' : '/tree/$branch'}';
 }
 
 /// 仓库 meta（键名与 ppcat 保持一致）。
@@ -121,12 +140,15 @@ class StoreMeta {
   final bool ruleAuto;
 
   factory StoreMeta.fromJson(Map<String, dynamic> j) => StoreMeta(
-    ruleId: (j['ruleId'] ?? '0') as String,
+    ruleId: (j['ruleId'] ?? '0').toString(),
     ruleVersion: (j['ruleVersion'] is int)
         ? j['ruleVersion'] as int
         : int.tryParse('${j['ruleVersion']}') ?? 0,
-    ruleContent: (j['ruleContent'] ?? '') as String,
-    ruleAuto: (j['ruleAuto'] ?? true) as bool,
+    ruleContent: (j['ruleContent'] ?? '').toString(),
+    ruleAuto: j['ruleAuto'] == false ||
+            j['ruleAuto']?.toString().toLowerCase() == 'false'
+        ? false
+        : true,
   );
 
   Map<String, dynamic> toJson() => {
@@ -255,6 +277,12 @@ class RepoClient {
     for (final url in ref.rawCandidates('store')) {
       try {
         final bytes = await fetcher.getBytes(url);
+        // Some repositories name their plaintext JSON file "store".
+        final plain = parsePlainStore(utf8.decode(bytes, allowMalformed: true));
+        if (plain != null) {
+          _lastTrack = 'A';
+          return plain;
+        }
         // 先试完整解密（需注入解密器）
         if (storeDecryptor != null) {
           final sources = _parsePpcatStore(bytes);
@@ -338,28 +366,45 @@ class RepoClient {
           for (final e in j.entries)
             if (e.key is String) e.key as String: e.value,
         };
-        list = (map['sources'] ?? map['data']) as List<dynamic>?;
+        final entries =
+            map['sources'] ?? map['data'] ?? map['store'] ?? map['bookSource'];
+        if (entries is List) list = entries;
         if (list == null && _looksLikeSource(map)) {
           list = [map];
         }
       }
       if (list == null) return null;
-      return list
-          .whereType<Map<String, dynamic>>()
-          .map(
-            (m) => _looksPpcatFlat(m)
-                ? ComicSource.fromPpcatFlat(m)
-                : ComicSource.fromJson(m),
-          )
-          .toList();
+      final sources = <ComicSource>[];
+      for (final entry in list) {
+        if (entry is! Map) continue;
+        try {
+          final map = Map<String, dynamic>.from(entry);
+          if (!_looksLikeSource(map)) continue;
+          final source = _looksPpcatFlat(map)
+              ? ComicSource.fromPpcatFlat(map)
+              : ComicSource.fromJson(map);
+          if (source.id.trim().isNotEmpty && source.name.trim().isNotEmpty) {
+            sources.add(source);
+          }
+        } on Exception {
+          // A single malformed community rule must not discard all valid rules.
+        }
+      }
+      return sources.isEmpty ? null : sources;
     } on FormatException {
       return null;
     }
   }
 
   static bool _looksLikeSource(Map<String, dynamic> m) {
-    final name = (m['name'] ?? m['bookSourceName'] ?? '').toString().trim();
-    final id = (m['id'] ?? m['url'] ?? m['bookSourceUrl'] ?? '')
+    final name =
+        (m['name'] ?? m['bookSourceName'] ?? m['sourceName'] ?? '').toString().trim();
+    final id = (m['id'] ??
+            m['url'] ??
+            m['bookSourceUrl'] ??
+            m['sourceUrl'] ??
+            m['ruleId'] ??
+            '')
         .toString()
         .trim();
     return name.isNotEmpty && id.isNotEmpty;
