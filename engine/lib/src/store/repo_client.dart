@@ -386,7 +386,7 @@ class RepoClient {
           if (source.id.trim().isNotEmpty && source.name.trim().isNotEmpty) {
             sources.add(source);
           }
-        } on Exception {
+        } catch (_) {
           // A single malformed community rule must not discard all valid rules.
         }
       }
