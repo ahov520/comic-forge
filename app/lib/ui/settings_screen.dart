@@ -572,6 +572,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const _Header('阅读'),
               row(
+                SwitchListTile(
+                  secondary: const Icon(Icons.visibility_off_outlined),
+                  title: const Text('无痕阅读'),
+                  subtitle: const Text('开启后不记录搜索、阅读历史、进度、时长和章内位置；不清除已有记录或图片缓存'),
+                  value: widget.state.incognitoMode,
+                  onChanged: widget.state.setIncognitoMode,
+                ),
+              ),
+              row(
                 ListTile(
                   leading: Icon(
                     Icons.tune,
