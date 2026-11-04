@@ -39,6 +39,10 @@ ComicSource _src(String id, String host) => ComicSource.fromPpcatFlat({
       'ruleSearchUrl': '/search?q=searchKey',
       'ruleSearchList': 'class.item',
       'ruleSearchName': 'class.t@text',
+      'ruleSearchNoteUrl': 'class.t@href',
+      'ruleChapterList': '.chapters a',
+      'ruleChapterName': 'text',
+      'ruleContentUrl': 'href',
     });
 
 void main() {
@@ -154,6 +158,9 @@ void main() {
         'https://h0.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _page,
         'https://h1.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _page,
         'https://h2.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _page,
+        for (var i = 0; i < 3; i++)
+          'https://h$i.example.com/c/1':
+              '<div class="chapters"><a href="/read/1">第1话</a></div>',
       });
 
       await st.autoProbeIfNeeded(
@@ -187,6 +194,8 @@ void main() {
       }
       final fetcher = FakeFetcher({
         'https://h3.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _page,
+        'https://h3.example.com/c/1':
+            '<div class="chapters"><a href="/read/1">第1话</a></div>',
       });
 
       await st.autoProbeIfNeeded(
