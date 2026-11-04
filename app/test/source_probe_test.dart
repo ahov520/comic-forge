@@ -132,6 +132,28 @@ void main() {
       expect(source.failCount, 1);
     });
 
+    test('自动体检在不同启动周期轮换源，不重复卡在第一个源', () async {
+      final state = AppState();
+      addTearDown(state.dispose);
+      await state.addSourceManual(_src('a', 'first.example'));
+      await state.addSourceManual(_src('b', 'second.example'));
+      final fake = FakeFetcher(const {});
+      SourceRuntime build(ComicSource s) =>
+          SourceRuntime(source: s, fetcher: fake);
+      await state.autoProbeIfNeeded(
+        maxSources: 1,
+        interval: Duration.zero,
+        runtimeBuilder: build,
+      );
+      expect(state.sources.where((s) => s.lastCheckedAt > 0).length, 1);
+      await state.autoProbeIfNeeded(
+        maxSources: 1,
+        interval: Duration.zero,
+        runtimeBuilder: build,
+      );
+      expect(state.sources.where((s) => s.lastCheckedAt > 0).length, 2);
+    });
+
     test('并发受限也能全部完成；禁用源不参与体检', () async {
       final st = AppState();
       final good = _src('g1', 'ok1.example.com');
