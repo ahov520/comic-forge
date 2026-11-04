@@ -1603,7 +1603,7 @@ class AppState extends ChangeNotifier {
   /// 静默执行（结果写入健康记录，源页可看标红）。
   Future<void> autoProbeIfNeeded({
     int maxSources = 20,
-    Duration interval = const Duration(days: 7),
+    Duration interval = const Duration(hours: 6),
     SourceRuntime Function(ComicSource source)? runtimeBuilder,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
