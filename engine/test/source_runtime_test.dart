@@ -105,6 +105,56 @@ ComicSource buildSource() => ComicSource.fromJson({
     });
 
 void main() {
+  group('ppcat 独立目录页与旧式规则回归', () {
+    test('ruleChapterUrl 导航目录页，ruleContentUrl=href 正确提取各章节', () async {
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '双页面源',
+        'bookSourceUrl': 'https://two.example',
+        'ruleChapterUrl': '.catalog-entry@href',
+        'ruleChapterList': '.chapters a',
+        'ruleChapterName': 'text',
+        'ruleContentUrl': 'href',
+        'ruleBookContent': '.reader img@src',
+      });
+      final fetcher = FakeFetcher({
+        'https://two.example/book/1':
+            '<h1>漫画</h1><a class="catalog-entry" href="/catalog/1">目录</a>',
+        'https://two.example/catalog/1':
+            '<div class="chapters"><a href="/read/1">第一话</a>'
+            '<a href="/read/2">第二话</a></div>',
+      });
+      final (_, chapters) = await SourceRuntime(source: source, fetcher: fetcher)
+          .detail('https://two.example/book/1');
+      expect(chapters.length, 2);
+      expect(chapters.map((e) => e.title), ['第一话', '第二话']);
+      expect(chapters.map((e) => e.url),
+          ['https://two.example/read/1', 'https://two.example/read/2']);
+      expect(fetcher.requested, contains('https://two.example/catalog/1'));
+    });
+
+    test('ruleChapterList 已直接返回 href 时不丢章节', () async {
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '直接链接源',
+        'bookSourceUrl': 'https://m.example',
+        'ruleChapterList': '.toc a@href',
+        'ruleChapterName': 'text',
+        'ruleBookContent': '.reader img@src',
+      });
+      final fetcher = FakeFetcher({
+        'https://m.example/book': '<div class="toc">'
+            '<a href="/chapter/1">第一话</a>'
+            '<a href="/chapter/2">第二话</a></div>',
+      });
+      final (_, chapters) = await SourceRuntime(source: source, fetcher: fetcher)
+          .detail('https://m.example/book');
+      expect(chapters.length, 2);
+      expect(chapters.map((e) => e.url),
+          ['https://m.example/chapter/1', 'https://m.example/chapter/2']);
+      expect(chapters.every((c) => c.title.isNotEmpty), isTrue);
+    });
+  });
+
+
   group('SourceRuntime 全链路', () {
     late FakeFetcher fetcher;
     late SourceRuntime rt;
