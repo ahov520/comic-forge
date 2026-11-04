@@ -78,6 +78,27 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   bool get _isPaged => widget.appState?.readerMode == 'paged';
 
+  ReadingSession? _createReadingSession() {
+    final state = widget.appState;
+    if (state == null || state.incognitoMode) return null;
+    return ReadingSession(state.readingStats);
+  }
+
+  void _syncIncognitoSession() {
+    final canRecord = widget.appState != null &&
+        !widget.appState!.incognitoMode;
+    if (!canRecord && _readingSession != null) {
+      _readingSession?.closeChapter();
+      _readingSession = null;
+    } else if (canRecord && _readingSession == null) {
+      _readingSession = _createReadingSession();
+      _syncReadingActivity();
+      if (_chapterReady) {
+        _readingSession?.openChapter(widget.book, _chapter);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -86,8 +107,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         binding.lifecycleState == null ||
         binding.lifecycleState == AppLifecycleState.resumed;
     binding.addObserver(this);
-    final stats = widget.appState?.readingStats;
-    if (stats != null) _readingSession = ReadingSession(stats);
+    _readingSession = _createReadingSession();
     _wasPaged = _isPaged;
     _index = widget.initialIndex.clamp(0, widget.chapters.length - 1);
     _loadChapter(_index, save: true);
@@ -151,6 +171,7 @@ class _ReaderScreenState extends State<ReaderScreen>
       _pageZoomed = false;
     }
     _syncVolumeKeys();
+    _syncIncognitoSession();
     setState(() {});
   }
 
@@ -159,8 +180,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.appState != widget.appState) {
       _readingSession?.closeChapter();
-      final stats = widget.appState?.readingStats;
-      _readingSession = stats == null ? null : ReadingSession(stats);
+      _readingSession = _createReadingSession();
       _syncReadingActivity();
       if (_chapterReady) _readingSession?.openChapter(widget.book, _chapter);
       oldWidget.appState?.removeListener(_onReaderSettingsChanged);
@@ -989,6 +1009,21 @@ class _ReaderScreenState extends State<ReaderScreen>
                     ),
                     value: appState.readerVolumeKeys,
                     onChanged: appState.setReaderVolumeKeys,
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    activeThumbColor: Colors.white70,
+                    title: const Text(
+                      '无痕阅读',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    subtitle: const Text(
+                      '不记录历史、进度、阅读时长和章内位置',
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                    value: appState.incognitoMode,
+                    onChanged: appState.setIncognitoMode,
                   ),
                   const Divider(color: Colors.white24),
                   const Text(
