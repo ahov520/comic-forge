@@ -397,16 +397,16 @@ class RepoClient {
   }
 
   static bool _looksLikeSource(Map<String, dynamic> m) {
-    final name =
-        (m['name'] ?? m['bookSourceName'] ?? m['sourceName'] ?? '').toString().trim();
-    final id = (m['id'] ??
-            m['url'] ??
-            m['bookSourceUrl'] ??
-            m['sourceUrl'] ??
-            m['ruleId'] ??
-            '')
-        .toString()
-        .trim();
+    String firstNonEmpty(List<Object?> values) {
+      for (final value in values) {
+        final text = value?.toString().trim() ?? '';
+        if (text.isNotEmpty) return text;
+      }
+      return '';
+    }
+    final name = firstNonEmpty([m['name'], m['bookSourceName'], m['sourceName']]);
+    final id = firstNonEmpty(
+        [m['id'], m['url'], m['bookSourceUrl'], m['sourceUrl'], m['ruleId']]);
     return name.isNotEmpty && id.isNotEmpty;
   }
 
