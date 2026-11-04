@@ -234,14 +234,22 @@ class ComicSource {
         if (lastOkAt != 0) 'lastOkAt': lastOkAt,
       };
 
+  static String _firstNonEmpty(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
   /// 从明文仓库（Track A）JSON 构建。
   static ComicSource fromJson(Map<String, dynamic> j) {
     final s = ComicSource(
-      id: (j['id'] ?? j['sourceUrl'] ?? j['url'] ?? j['sourceName'] ?? '').toString(),
-      name: (j['name'] ?? j['sourceName'] ?? '').toString(),
+      id: _firstNonEmpty([j['id'], j['sourceUrl'], j['url'], j['sourceName']]),
+      name: _firstNonEmpty([j['name'], j['sourceName'], j['bookSourceName']]),
       group: (j['group'] ?? j['sourceGroup'] ?? '').toString(),
       icon: (j['icon'] ?? j['sourceIcon'] ?? '').toString(),
-      url: (j['url'] ?? j['sourceUrl'] ?? '').toString(),
+      url: _firstNonEmpty([j['url'], j['sourceUrl'], j['bookSourceUrl']]),
       comment: (j['comment'] ?? j['sourceComment'] ?? '').toString(),
       enabled: (j['enabled'] ?? j['enable'] ?? true) != false,
       weight: (j['weight'] ?? 0) is int ? (j['weight'] ?? 0) as int : 0,
@@ -276,11 +284,11 @@ class ComicSource {
   /// 从 ppcat 平铺键 JSON 构建（兼容导入，含 bookSource* 头部字段）。
   static ComicSource fromPpcatFlat(Map<String, dynamic> j) {
     final s = ComicSource.fromJson({
-      'id': j['ruleId'] ?? j['bookSourceUrl'] ?? j['sourceUrl'] ?? '',
-      'name': j['sourceName'] ?? j['bookSourceName'] ?? j['name'] ?? '',
+      'id': _firstNonEmpty([j['ruleId'], j['bookSourceUrl'], j['sourceUrl']]),
+      'name': _firstNonEmpty([j['sourceName'], j['bookSourceName'], j['name']]),
       'group': j['sourceGroup'] ?? j['bookSourceGroup'] ?? '',
       'icon': j['sourceIcon'] ?? '',
-      'url': j['sourceUrl'] ?? j['bookSourceUrl'] ?? '',
+      'url': _firstNonEmpty([j['sourceUrl'], j['bookSourceUrl']]),
       'comment': j['sourceComment'] ?? '',
       'enabled': j['enabled'] ?? j['enable'] ?? true,
       'weight': j['weight'] ?? 0,
