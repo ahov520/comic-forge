@@ -1807,6 +1807,7 @@ class AppState extends ChangeNotifier {
   Future<void> reportSourceHealth(
     Iterable<String> okIds,
     Map<String, String> errors, {
+    Map<String, String> inconclusive = const {},
     Iterable<ComicSource>? observedSources,
   }) async {
     final observed = observedSources == null
@@ -1830,6 +1831,9 @@ class AppState extends ChangeNotifier {
       s.failCount = 0;
       s.lastError = '';
       s.lastOkAt = now;
+      s.lastCheckStatus = 'ok';
+      s.lastCheckNote = '搜索及目录可解析（图片未检测）';
+      s.lastCheckedAt = now;
     }
     errors.forEach((id, err) {
       final s = current(id);
@@ -1840,6 +1844,19 @@ class AppState extends ChangeNotifier {
       s.lastError = msg;
       s.lastFailedAt = now;
       s.failCount++;
+      s.lastCheckStatus = 'broken';
+      s.lastCheckNote = msg;
+      s.lastCheckedAt = now;
+    });
+    inconclusive.forEach((id, note) {
+      final s = current(id);
+      if (s == null) return;
+      // Missing one test keyword is not a network or parsing failure.
+      // Keep prior failure counters intact, but display an unknown result.
+      s.lastCheckStatus = 'unknown';
+      s.lastCheckNote = note.length > 120 ? note.substring(0, 120) : note;
+      s.lastCheckedAt = now;
+      changed = true;
     });
     if (changed) {
       await _persistSources();
