@@ -129,6 +129,14 @@ class RuleAnalyzer {
       }
     }
 
+    // Community ppcat/Legado rules frequently use bare 'href'/'text'
+    // for extraction from the already selected chapter or book node.
+    // Treat these as self-extraction, not CSS tag selectors.
+    if (_isExtractFn(body.trim())) {
+      return [Seg(type: 'self', value: '', attr: body.trim(),
+          regex: postRegex, replacement: postReplacement)];
+    }
+
     // JSONPath
     if (body.startsWith('\$.')) {
       return [Seg(type: 'json', value: body.substring(2))];
