@@ -133,6 +133,53 @@ void main() {
       expect(s.isUnhealthy, isFalse);
     });
 
+    test('Legado nested rule sections produce searchable and readable fields', () {
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '阅读漫画源',
+        'bookSourceUrl': 'https://comics.example',
+        'enable': false,
+        'searchUrl': 'https://comics.example/search?q={{key}}',
+        'header': '{"Referer":"https://comics.example/"}',
+        'cookie': 'session=demo',
+        'ruleSearch': {
+          'bookList': '.search-result',
+          'name': '.title@text',
+          'bookUrl': 'a@href',
+          'coverUrl': 'img@src',
+        },
+        'ruleBookInfo': {
+          'name': 'h1@text',
+          'coverUrl': '.cover img@src',
+        },
+        'ruleToc': {
+          'chapterList': '.chapter-list a',
+          'chapterName': '@text',
+          'chapterUrl': '@href',
+        },
+        'ruleContent': {'content': '.reader img@src'},
+      });
+      expect(source.enabled, isFalse);
+      expect(source.rules.searchUrl, contains('search?q='));
+      expect(source.rules.searchList, '.search-result');
+      expect(source.rules.searchName, '.title@text');
+      expect(source.rules.searchBookUrl, 'a@href');
+      expect(source.rules.bookName, 'h1@text');
+      expect(source.rules.chapterUrl, '@href');
+      expect(source.rules.contentUrl, '.reader img@src');
+      expect(source.headers['Referer'], 'https://comics.example/');
+      expect(source.headers['Cookie'], 'session=demo');
+    });
+
+    test('Legacy flat Legado content rule maps to image extraction', () {
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '旧规则源',
+        'bookSourceUrl': 'https://comics.example',
+        'ruleSearchUrl': '/search?key=searchKey',
+        'ruleContent': 'img.page@src',
+      });
+      expect(source.rules.contentUrl, 'img.page@src');
+    });
+
     test('内置快照多数源导入后 searchUrl 非空', () {
       final snapshot = File('../store-snapshot/store.json');
       expect(snapshot.existsSync(), isTrue, reason: '需从 engine/ 目录运行 dart test');
