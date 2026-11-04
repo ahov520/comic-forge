@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -89,6 +90,54 @@ class CachedDetail {
         .toList(),
     at: j['at'] as int? ?? 0,
   );
+}
+
+/// Check a real title end-to-end. A keyword miss is inconclusive, never a
+/// failure eligible for automatic source disabling.
+Future<({String status, String note})> checkSourceReading(
+  SourceRuntime runtime, {
+  String keyword = '斗罗大陆',
+  Duration timeout = const Duration(seconds: 15),
+}) async {
+  Future<({String status, String note})> run() async {
+    try {
+      final page = await runtime.search(keyword);
+      if (page.items.isEmpty) {
+        return (status: 'unknown', note: '测试关键词没有结果，无法确认是否失效');
+      }
+      final candidates = page.items.where((b) {
+        final uri = Uri.tryParse(b.bookUrl);
+        return uri != null &&
+            (uri.scheme == 'https' || uri.scheme == 'http') &&
+            uri.host.isNotEmpty;
+      });
+      if (candidates.isEmpty) {
+        return (status: 'broken', note: '搜索结果缺少有效详情页地址');
+      }
+      if (runtime.source.rules.chapterList.trim().isEmpty) {
+        return (status: 'broken', note: '缺少章节目录规则');
+      }
+      final (_, chapters) = await runtime.detail(candidates.first.bookUrl);
+      if (chapters.isEmpty) {
+        return (status: 'broken', note: '可搜索，但章节目录为空');
+      }
+      return (status: 'ok', note: '搜索和目录解析成功（未检测图片）');
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      final http = RegExp(r'http[^0-9]*(\d{3})').firstMatch(message);
+      final category = http != null ? 'HTTP ${http.group(1)}'
+          : message.contains('timeout') ? '超时'
+          : message.contains('socket') ? '网络连接异常'
+          : message.contains('blocked') ? '域名被拦截'
+          : '请求或规则错误';
+      return (status: 'broken', note: '搜索或目录检测失败：$category');
+    }
+  }
+  try {
+    return await run().timeout(timeout);
+  } on TimeoutException {
+    return (status: 'broken', note: '搜索或目录请求超时');
+  }
 }
 
 /// 全局应用状态：源库、书架、订阅仓库。
