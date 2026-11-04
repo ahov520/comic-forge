@@ -1661,9 +1661,10 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setInt(_kLastAutoProbe, now);
 
-    // 排序：从未探测（无成败记录）最优先，其次上次成功最早
+    // Rotate through all sources, rather than repeatedly checking the same
+    // failing group. A probe can be inconclusive without a failure timestamp.
     int rank(ComicSource s) =>
-        (s.lastOkAt == 0 && s.lastFailedAt == 0) ? -1 : s.lastOkAt;
+        s.lastCheckedAt == 0 ? -1 : s.lastCheckedAt;
     final candidates =
         sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty).toList()
           ..sort((a, b) => rank(a).compareTo(rank(b)));
@@ -1674,21 +1675,21 @@ class AppState extends ChangeNotifier {
         runtimeBuilder ?? (s) => SourceService.instance.runtimeFor(s);
     final okIds = <String>[];
     final errors = <String, String>{};
-    for (var i = 0; i < targets.length; i += 8) {
-      await Future.wait(
-        targets.skip(i).take(8).map((s) async {
-          try {
-            await builder(
-              s,
-            ).search('斗罗大陆').timeout(const Duration(seconds: 10));
-            okIds.add(s.id);
-          } catch (e) {
-            errors[s.id] = e.toString();
-          }
-        }),
-      );
+    final inconclusive = <String, String>{};
+    for (var i = 0; i < targets.length; i += 4) {
+      await Future.wait(targets.skip(i).take(4).map((s) async {
+        final result = await checkSourceReading(builder(s));
+        if (result.status == 'ok') {
+          okIds.add(s.id);
+        } else if (result.status == 'unknown') {
+          inconclusive[s.id] = result.note;
+        } else {
+          errors[s.id] = result.note;
+        }
+      }));
     }
-    await reportSourceHealth(okIds, errors, observedSources: targets);
+    await reportSourceHealth(okIds, errors,
+        inconclusive: inconclusive, observedSources: targets);
   }
 
   /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
