@@ -214,7 +214,9 @@ class _SourceScreenState extends State<SourceScreen> {
     if (mounted) {
       setState(() {
         _probing = false;
-        _feedback.value = '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
+        final unknown = widget.state.sources.where(
+          (s) => s.lastCheckStatus == 'unknown').length;
+        _feedback.value = '体检完成：搜索和目录可用 $ok/$total · 待确认 $unknown（未命中测试词不算失效）';
       });
     }
   }
