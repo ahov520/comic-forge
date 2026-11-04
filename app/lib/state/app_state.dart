@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -89,6 +90,54 @@ class CachedDetail {
         .toList(),
     at: j['at'] as int? ?? 0,
   );
+}
+
+/// Check a real title end-to-end. A keyword miss is inconclusive, never a
+/// failure eligible for automatic source disabling.
+Future<({String status, String note})> checkSourceReading(
+  SourceRuntime runtime, {
+  String keyword = '斗罗大陆',
+  Duration timeout = const Duration(seconds: 15),
+}) async {
+  Future<({String status, String note})> run() async {
+    try {
+      final page = await runtime.search(keyword);
+      if (page.items.isEmpty) {
+        return (status: 'unknown', note: '测试关键词没有结果，无法确认是否失效');
+      }
+      final candidates = page.items.where((b) {
+        final uri = Uri.tryParse(b.bookUrl);
+        return uri != null &&
+            (uri.scheme == 'https' || uri.scheme == 'http') &&
+            uri.host.isNotEmpty;
+      });
+      if (candidates.isEmpty) {
+        return (status: 'broken', note: '搜索结果缺少有效详情页地址');
+      }
+      if (runtime.source.rules.chapterList.trim().isEmpty) {
+        return (status: 'broken', note: '缺少章节目录规则');
+      }
+      final (_, chapters) = await runtime.detail(candidates.first.bookUrl);
+      if (chapters.isEmpty) {
+        return (status: 'broken', note: '可搜索，但章节目录为空');
+      }
+      return (status: 'ok', note: '搜索和目录解析成功（未检测图片）');
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      final http = RegExp(r'http[^0-9]*(\d{3})').firstMatch(message);
+      final category = http != null ? 'HTTP ${http.group(1)}'
+          : message.contains('timeout') ? '超时'
+          : message.contains('socket') ? '网络连接异常'
+          : message.contains('blocked') ? '域名被拦截'
+          : '请求或规则错误';
+      return (status: 'broken', note: '搜索或目录检测失败：$category');
+    }
+  }
+  try {
+    return await run().timeout(timeout);
+  } on TimeoutException {
+    return (status: 'broken', note: '搜索或目录请求超时');
+  }
 }
 
 /// 全局应用状态：源库、书架、订阅仓库。
@@ -1603,7 +1652,7 @@ class AppState extends ChangeNotifier {
   /// 静默执行（结果写入健康记录，源页可看标红）。
   Future<void> autoProbeIfNeeded({
     int maxSources = 20,
-    Duration interval = const Duration(days: 7),
+    Duration interval = const Duration(hours: 6),
     SourceRuntime Function(ComicSource source)? runtimeBuilder,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -1612,9 +1661,10 @@ class AppState extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setInt(_kLastAutoProbe, now);
 
-    // 排序：从未探测（无成败记录）最优先，其次上次成功最早
+    // Rotate through all sources, rather than repeatedly checking the same
+    // failing group. A probe can be inconclusive without a failure timestamp.
     int rank(ComicSource s) =>
-        (s.lastOkAt == 0 && s.lastFailedAt == 0) ? -1 : s.lastOkAt;
+        s.lastCheckedAt == 0 ? -1 : s.lastCheckedAt;
     final candidates =
         sources.where((s) => s.enabled && s.rules.searchUrl.isNotEmpty).toList()
           ..sort((a, b) => rank(a).compareTo(rank(b)));
@@ -1625,21 +1675,22 @@ class AppState extends ChangeNotifier {
         runtimeBuilder ?? (s) => SourceService.instance.runtimeFor(s);
     final okIds = <String>[];
     final errors = <String, String>{};
-    for (var i = 0; i < targets.length; i += 8) {
-      await Future.wait(
-        targets.skip(i).take(8).map((s) async {
-          try {
-            await builder(
-              s,
-            ).search('斗罗大陆').timeout(const Duration(seconds: 10));
-            okIds.add(s.id);
-          } catch (e) {
-            errors[s.id] = e.toString();
-          }
-        }),
-      );
+    final inconclusive = <String, String>{};
+    for (var i = 0; i < targets.length; i += 4) {
+      await Future.wait(targets.skip(i).take(4).map((s) async {
+        final result = await checkSourceReading(builder(s));
+        if (result.status == 'ok') {
+          okIds.add(s.id);
+        } else if (result.status == 'unknown') {
+          inconclusive[s.id] = result.note;
+        } else {
+          errors[s.id] = result.note;
+        }
+      }));
     }
-    await reportSourceHealth(okIds, errors, observedSources: targets);
+    await reportSourceHealth(okIds, errors,
+        inconclusive: inconclusive,
+        catalogVerified: true, observedSources: targets);
   }
 
   /// 源健康体检：对全部启用源做一次真实搜索探测（受限并发 + 单源超时），
@@ -1648,7 +1699,7 @@ class AppState extends ChangeNotifier {
   Future<(int ok, int total)> probeSources({
     String keyword = '斗罗大陆',
     int concurrency = 8,
-    Duration timeout = const Duration(seconds: 12),
+    Duration timeout = const Duration(seconds: 15),
     SourceRuntime Function(ComicSource source)? runtimeBuilder,
     void Function(int done, int total)? onProgress,
   }) async {
@@ -1660,23 +1711,34 @@ class AppState extends ChangeNotifier {
     var done = 0;
     final okIds = <String>[];
     final errors = <String, String>{};
+    final inconclusive = <String, String>{};
 
     Future<void> probeOne(ComicSource s) async {
       try {
-        await builder(s).search(keyword).timeout(timeout);
-        okIds.add(s.id);
-      } catch (e) {
-        errors[s.id] = e.toString();
+        final result = await checkSourceReading(
+            builder(s), keyword: keyword, timeout: timeout);
+        if (result.status == 'ok') {
+          okIds.add(s.id);
+        } else if (result.status == 'unknown') {
+          inconclusive[s.id] = result.note;
+        } else {
+          errors[s.id] = result.note;
+        }
+      } catch (_) {
+        errors[s.id] = '源检测出现异常';
       } finally {
         done++;
         onProgress?.call(done, targets.length);
       }
     }
 
-    for (var i = 0; i < targets.length; i += concurrency) {
-      await Future.wait(targets.skip(i).take(concurrency).map(probeOne));
+    final batch = concurrency.clamp(1, 8);
+    for (var i = 0; i < targets.length; i += batch) {
+      await Future.wait(targets.skip(i).take(batch).map(probeOne));
     }
-    await reportSourceHealth(okIds, errors, observedSources: targets);
+    await reportSourceHealth(okIds, errors,
+        inconclusive: inconclusive,
+        catalogVerified: true, observedSources: targets);
     return (okIds.length, targets.length);
   }
 
@@ -1747,6 +1809,8 @@ class AppState extends ChangeNotifier {
   Future<void> reportSourceHealth(
     Iterable<String> okIds,
     Map<String, String> errors, {
+    Map<String, String> inconclusive = const {},
+    bool catalogVerified = false,
     Iterable<ComicSource>? observedSources,
   }) async {
     final observed = observedSources == null
@@ -1770,6 +1834,11 @@ class AppState extends ChangeNotifier {
       s.failCount = 0;
       s.lastError = '';
       s.lastOkAt = now;
+      if (catalogVerified) {
+        s.lastCheckStatus = 'ok';
+        s.lastCheckNote = '搜索及目录可解析（图片未检测）';
+        s.lastCheckedAt = now;
+      }
     }
     errors.forEach((id, err) {
       final s = current(id);
@@ -1780,6 +1849,21 @@ class AppState extends ChangeNotifier {
       s.lastError = msg;
       s.lastFailedAt = now;
       s.failCount++;
+      if (catalogVerified) {
+        s.lastCheckStatus = 'broken';
+        s.lastCheckNote = msg;
+        s.lastCheckedAt = now;
+      }
+    });
+    inconclusive.forEach((id, note) {
+      final s = current(id);
+      if (s == null) return;
+      // Missing one test keyword is not a network or parsing failure.
+      // Keep prior failure counters intact, but display an unknown result.
+      s.lastCheckStatus = 'unknown';
+      s.lastCheckNote = note.length > 120 ? note.substring(0, 120) : note;
+      s.lastCheckedAt = now;
+      changed = true;
     });
     if (changed) {
       await _persistSources();

@@ -214,7 +214,9 @@ class _SourceScreenState extends State<SourceScreen> {
     if (mounted) {
       setState(() {
         _probing = false;
-        _feedback.value = '体检完成：可用 $ok / $total（失效源已标红，可用菜单「禁用失效源」一键停用）';
+        final unknown = widget.state.sources.where(
+          (s) => s.lastCheckStatus == 'unknown').length;
+        _feedback.value = '体检完成：搜索和目录可用 $ok/$total · 待确认 $unknown（未命中测试词不算失效）';
       });
     }
   }
@@ -829,10 +831,18 @@ class _SourceScreenState extends State<SourceScreen> {
   Widget _sourceRow(ComicSource s, ColorScheme scheme) {
     final unhealthy = s.isUnhealthy;
     final recentlyFailed = s.failCount > 0 && s.lastError.isNotEmpty;
+    final status = switch (s.lastCheckStatus) {
+      'ok' => '已验证搜索及目录',
+      'broken' => '异常：${s.lastCheckNote}',
+      'unknown' => '待确认：${s.lastCheckNote}',
+      _ => '',
+    };
     final subtitle = [
       if (s.group.isNotEmpty) s.group,
       s.url,
-      if (recentlyFailed) '最近失败(${s.failCount}): ${s.lastError}',
+      if (status.isNotEmpty) status,
+      if (recentlyFailed && s.lastCheckStatus != 'broken')
+        '最近失败(${s.failCount}): ${s.lastError}',
     ].where((e) => e.isNotEmpty).join(' · ');
     final name = s.name.isEmpty ? s.id : s.name;
     final iconColor = unhealthy

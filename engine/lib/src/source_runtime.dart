@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as html_dom;
 
 import 'analyzer/rule_analyzer.dart';
 import 'analyzer/rule_evaluator.dart';
@@ -171,19 +172,61 @@ class SourceRuntime {
     final chapters = <Chapter>[];
     if (r.chapterList.isNotEmpty) {
       var pageUrl = bookUrl;
-      var doc2 = doc; // 首页复用详情 doc，避免重复抓取
+      var doc2 = doc; // Reuse the detail document when the TOC is embedded.
+      // ppcat ruleChapterUrl addresses a *catalog page*, while ruleContentUrl
+      // selects each chapter link. Previously these were confused and the
+      // catalog page was never fetched.
+      if (r.chapterPageUrl.trim().isNotEmpty &&
+          _eval.evalNodes(doc, RuleAnalyzer(r.chapterList).parse()).isEmpty) {
+        final selector = r.chapterPageUrl.trim();
+        final relative = selector.startsWith('/') && !selector.startsWith('//') ||
+            selector.startsWith('?');
+        final target = selector.startsWith('http://') ||
+                selector.startsWith('https://') || relative
+            ? selector
+            : (_eval.evalFirst(doc, RuleAnalyzer(selector).parse()) ?? '');
+        final resolved = _absUrl(bookUrl, target);
+        final catalogUri = Uri.tryParse(resolved);
+        if (catalogUri != null &&
+            (catalogUri.scheme == 'http' || catalogUri.scheme == 'https') &&
+            catalogUri.host.isNotEmpty && resolved != bookUrl) {
+          pageUrl = resolved;
+          doc2 = await _fetchDoc(_request(pageUrl));
+        }
+      }
       final seen = <String>{};
-      // ruleChapterUrlNext：章节列表翻页（legado/ppcat 语义，逐页追加并按链接去重）
+      // Catalog pagination: append each page and deduplicate chapter URLs.
       for (var page = 0; page < 20 && pageUrl.isNotEmpty; page++) {
         final items = _eval.evalNodes(doc2, RuleAnalyzer(r.chapterList).parse());
         var added = 0;
         for (final item in items) {
           String pick(String rule) =>
               rule.isEmpty ? '' : (_eval.evalFirst(item, RuleAnalyzer(rule).parse()) ?? '');
-          final chUrl = _absUrl(pageUrl, pick(r.chapterUrl));
-          if (chUrl.isEmpty || !seen.add(chUrl)) continue;
+          var href = pick(r.chapterUrl).trim();
+          // Some community lists already yield the URL string. Others yield
+          // an anchor but omit ruleContentUrl entirely; retain both forms.
+          if (href.isEmpty && item is String &&
+              (item.startsWith('http://') || item.startsWith('https://') ||
+               item.startsWith('/') || item.startsWith('./'))) {
+            href = item;
+          }
+          if (href.isEmpty && item is html_dom.Element) {
+            href = item.attributes['href'] ??
+                item.querySelector('a[href]')?.attributes['href'] ?? '';
+          }
+          if (href.isEmpty || href.startsWith('#') ||
+              href.toLowerCase().startsWith('javascript:')) continue;
+          final chUrl = _absUrl(pageUrl, href);
+          final uri = Uri.tryParse(chUrl);
+          if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') ||
+              !seen.add(chUrl)) continue;
+          var title = pick(r.chapterName).trim();
+          if (title.isEmpty && item is html_dom.Element) {
+            title = item.text.trim();
+          }
+          if (title.isEmpty) title = '第${chapters.length + 1}话';
           chapters.add(Chapter(
-            title: pick(r.chapterName),
+            title: title,
             url: chUrl,
             coverUrl: _absUrl(pageUrl, pick(r.chapterCoverUrl)),
             time: pick(r.chapterTime),

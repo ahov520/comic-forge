@@ -16,7 +16,7 @@ Future<void> main() async {
   await state.load();
   // 启动后台检查订阅仓库更新（节流 6h，静默失败，不打断首屏）
   state.autoCheckUpdates().catchError((_) {});
-  // 启动后台轻量体检：最多 20 源、7 天一次（优先未探测源，静默）
+  // App 前台启动时最多轮换检查 20 个源；6 小时节流，含章节目录校验。
   state.autoProbeIfNeeded().catchError((_) {});
   runApp(ComicForgeApp(state: state));
 }

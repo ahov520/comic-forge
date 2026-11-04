@@ -251,7 +251,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.widget<SelectableText>(find.byType(SelectableText)).data,
-      contains('体检完成：可用 1 / 1'),
+      contains('体检完成：搜索和目录可用 0/1 · 待确认 1'),
     );
     expect(
       tester.getSize(find.byType(BottomSheet)).height,

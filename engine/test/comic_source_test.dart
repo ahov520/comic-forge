@@ -34,6 +34,23 @@ void main() {
       expect(s.rules.contentUrl, 'img.pic@src');
     });
 
+    test('目录入口与章节链接规则必须分开映射和持久化', () {
+      final source = ComicSource.fromPpcatFlat({
+        'bookSourceName': '目录独立页',
+        'bookSourceUrl': 'https://m.example.com',
+        'ruleChapterUrl': '.catalog-link@href',
+        'ruleChapterList': '.catalog a',
+        'ruleChapterName': 'text',
+        'ruleContentUrl': 'href',
+      });
+      expect(source.rules.chapterPageUrl, '.catalog-link@href');
+      expect(source.rules.chapterUrl, 'href');
+      final copy = ComicSource.fromJson(
+          jsonDecode(jsonEncode(source.toJson())) as Map<String, dynamic>);
+      expect(copy.rules.chapterPageUrl, '.catalog-link@href');
+      expect(copy.rules.chapterUrl, 'href');
+    });
+
     test('ruleSearchUrl 平铺键归一到 rules.searchUrl', () {
       final s = ComicSource.fromPpcatFlat({
         'bookSourceName': '腾讯漫画（正版）',

@@ -226,15 +226,38 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       mounted && generation == _detailGeneration;
 
   Future<(Book, List<Chapter>)> _fetchDetail(int generation) async {
-    final (book, chapters) = widget.detailLoaderOverride != null
-        ? await widget.detailLoaderOverride!(widget.book.bookUrl)
-        : await SourceService.instance
-              .runtimeFor(_source!)
-              .detail(widget.book.bookUrl);
-    if (_isCurrentDetail(generation)) {
-      await widget.appState.saveDetailCache(book, chapters);
+    final source = _source;
+    try {
+      final (book, chapters) = widget.detailLoaderOverride != null
+          ? await widget.detailLoaderOverride!(widget.book.bookUrl)
+          : await SourceService.instance
+                .runtimeFor(source!)
+                .detail(widget.book.bookUrl);
+      if (_isCurrentDetail(generation)) {
+        await widget.appState.saveDetailCache(book, chapters);
+        // A 200 OK detail response with no TOC is *not* proof of usability.
+        if (source != null && widget.detailLoaderOverride == null) {
+          await widget.appState.reportSourceHealth(
+            chapters.isNotEmpty ? [source.id] : const <String>[],
+            chapters.isEmpty ? {source.id: '漫画详情加载成功，但章节目录为空'} : {},
+            catalogVerified: true,
+            observedSources: [source],
+          );
+        }
+      }
+      return (book, chapters);
+    } catch (_) {
+      if (_isCurrentDetail(generation) && source != null &&
+          widget.detailLoaderOverride == null) {
+        await widget.appState.reportSourceHealth(
+          const <String>[],
+          {source.id: '漫画详情或目录请求失败'},
+          catalogVerified: true,
+            observedSources: [source],
+        );
+      }
+      rethrow;
     }
-    return (book, chapters);
   }
 
   Future<void> _refreshInBackground(int generation) async {
