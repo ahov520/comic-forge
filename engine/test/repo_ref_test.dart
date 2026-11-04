@@ -54,7 +54,7 @@ void main() {
     final sources = RepoClient.parsePlainStore(jsonEncode({
       'bookSource': [
         {'bookSourceName': '第一个', 'bookSourceUrl': 'https://one.example'},
-        {'id': 'broken', 'name': '坏条目', 'enabled': {'bad': true}},
+        {'id': 'broken', 'name': '', 'enabled': {'bad': true}},
         {'ruleId': 42, 'sourceName': '第二个', 'sourceUrl': 'https://two.example'},
       ],
     }));
