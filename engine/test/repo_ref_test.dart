@@ -15,12 +15,81 @@ void main() {
     ('https://gitee.com/team/comics.git?from=share', 'gitee.com/team/comics'),
     ('AcgLibrary/ppcat_store', 'github.com/AcgLibrary/ppcat_store'),
     ('AcgLibrary/ppcat_store.git/', 'github.com/AcgLibrary/ppcat_store'),
-    ('https://github.com/team/comics/tree/main', 'github.com/team/comics'),
+    ('https://github.com/team/comics/tree/main', 'github.com/team/comics/tree/main'),
   ]) {
     test('仓库地址归一：$input', () {
       expect(RepoRef.parse(input)?.canonical, canonical);
     });
   }
+
+  test('GitHub tree link preserves non-default branch for fetch and future refresh', () {
+    final ref = RepoRef.parse('https://github.com/team/comics/tree/dev')!;
+    expect(ref.canonical, 'github.com/team/comics/tree/dev');
+    expect(ref.rawCandidates('store.json').first,
+        'https://raw.githubusercontent.com/team/comics/dev/store.json');
+    expect(RepoRef.parse(ref.canonical)?.branch, 'dev');
+  });
+
+  test('GitHub blob link subscribes to the shared JSON file itself', () async {
+    const raw = 'https://raw.githubusercontent.com/team/comics/dev/rules/list.json';
+    final ref = RepoRef.parse(
+        'https://github.com/team/comics/blob/dev/rules/list.json')!;
+    expect(ref.isListUrl, isTrue);
+    expect(ref.canonical, raw);
+    final requests = <String>[];
+    final client = MockClient((request) async {
+      requests.add(request.url.toString());
+      return http.Response(
+          '[{"bookSourceName":"合法源","bookSourceUrl":"https://comic.example"}]',
+          200);
+    });
+    addTearDown(client.close);
+    final bundle = await RepoClient(fetcher: HttpFetcher(client: client))
+        .subscribe('https://github.com/team/comics/blob/dev/rules/list.json');
+    expect(bundle.sources.single.name, '合法源');
+    expect(requests, [raw]);
+  });
+
+  test('mixed source list keeps valid entries when one entry is malformed', () {
+    final sources = RepoClient.parsePlainStore(jsonEncode({
+      'bookSource': [
+        {'bookSourceName': '第一个', 'bookSourceUrl': 'https://one.example'},
+        {'id': 'broken', 'name': '坏条目', 'enabled': {'bad': true}},
+        {'ruleId': 42, 'sourceName': '第二个', 'sourceUrl': 'https://two.example'},
+      ],
+    }));
+    expect(sources, isNotNull);
+    expect(sources!.map((s) => s.name).toList(), ['第一个', '第二个']);
+    expect(sources.last.id, '42');
+  });
+
+  test('plaintext store without .json extension can be imported', () async {
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/store')) {
+        return http.Response(
+            '{"sources":[{"name":"纯文本源","url":"https://comic.example"}]}',
+            200);
+      }
+      return http.Response('not found', 404);
+    });
+    addTearDown(client.close);
+    final bundle = await RepoClient(fetcher: HttpFetcher(client: client))
+        .subscribe('github.com/team/comics');
+    expect(bundle.track, 'A');
+    expect(bundle.sources.single.name, '纯文本源');
+  });
+
+  test('meta tolerates numeric ruleId and string ruleAuto', () {
+    final meta = StoreMeta.fromJson({
+      'ruleId': 17,
+      'ruleVersion': '9',
+      'ruleContent': 0,
+      'ruleAuto': 'false',
+    });
+    expect(meta.ruleId, '17');
+    expect(meta.ruleVersion, 9);
+    expect(meta.ruleAuto, isFalse);
+  });
 
   for (final input in [
     '',
