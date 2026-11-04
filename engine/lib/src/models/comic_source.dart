@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 漫画源的一组规则（嵌套视图）。
 ///
 /// ppcat 的 JSON 里规则是平铺键（如 `ruleSearchList`），载入时由
@@ -70,6 +72,7 @@ class RuleSet {
     'ruleChapterInit': 'chapterInit',
     'ruleContentInit': 'contentInit',
     'ruleBookContent': 'contentUrl',
+    'ruleContent': 'contentUrl', // Legacy flat Legado content rule.
     'ruleContentUrlNext': 'contentUrlNext',
     'ruleContentWebUrl': 'contentWebUrl',
   };
@@ -231,16 +234,24 @@ class ComicSource {
         if (lastOkAt != 0) 'lastOkAt': lastOkAt,
       };
 
+  static String _firstNonEmpty(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
   /// 从明文仓库（Track A）JSON 构建。
   static ComicSource fromJson(Map<String, dynamic> j) {
     final s = ComicSource(
-      id: (j['id'] ?? j['sourceUrl'] ?? j['url'] ?? j['sourceName'] ?? '') as String,
-      name: (j['name'] ?? j['sourceName'] ?? '') as String,
-      group: (j['group'] ?? j['sourceGroup'] ?? '') as String,
-      icon: (j['icon'] ?? j['sourceIcon'] ?? '') as String,
-      url: (j['url'] ?? j['sourceUrl'] ?? '') as String,
-      comment: (j['comment'] ?? j['sourceComment'] ?? '') as String,
-      enabled: (j['enabled'] ?? true) as bool,
+      id: _firstNonEmpty([j['id'], j['sourceUrl'], j['url'], j['sourceName']]),
+      name: _firstNonEmpty([j['name'], j['sourceName'], j['bookSourceName']]),
+      group: (j['group'] ?? j['sourceGroup'] ?? '').toString(),
+      icon: (j['icon'] ?? j['sourceIcon'] ?? '').toString(),
+      url: _firstNonEmpty([j['url'], j['sourceUrl'], j['bookSourceUrl']]),
+      comment: (j['comment'] ?? j['sourceComment'] ?? '').toString(),
+      enabled: (j['enabled'] ?? j['enable'] ?? true) != false,
       weight: (j['weight'] ?? 0) is int ? (j['weight'] ?? 0) as int : 0,
     );
     final h = j['headers'];
@@ -265,6 +276,7 @@ class ComicSource {
         s._setRule(RuleSet.ppcatFlatKeys[k]!, v);
       }
     });
+    s._applyLegadoRuleSections(j);
     s._applyChapterUrlFallback(j);
     return s;
   }
@@ -272,13 +284,13 @@ class ComicSource {
   /// 从 ppcat 平铺键 JSON 构建（兼容导入，含 bookSource* 头部字段）。
   static ComicSource fromPpcatFlat(Map<String, dynamic> j) {
     final s = ComicSource.fromJson({
-      'id': j['ruleId'] ?? j['bookSourceUrl'] ?? j['sourceUrl'] ?? '',
-      'name': j['sourceName'] ?? j['bookSourceName'] ?? j['name'] ?? '',
+      'id': _firstNonEmpty([j['ruleId'], j['bookSourceUrl'], j['sourceUrl']]),
+      'name': _firstNonEmpty([j['sourceName'], j['bookSourceName'], j['name']]),
       'group': j['sourceGroup'] ?? j['bookSourceGroup'] ?? '',
       'icon': j['sourceIcon'] ?? '',
-      'url': j['sourceUrl'] ?? j['bookSourceUrl'] ?? '',
+      'url': _firstNonEmpty([j['sourceUrl'], j['bookSourceUrl']]),
       'comment': j['sourceComment'] ?? '',
-      'enabled': j['enabled'] ?? true,
+      'enabled': j['enabled'] ?? j['enable'] ?? true,
       'weight': j['weight'] ?? 0,
     });
     final ua = j['httpUserAgent'];
@@ -292,16 +304,97 @@ class ComicSource {
         if (key.isNotEmpty && val.isNotEmpty) s.headers[key] = val;
       });
     }
+    // Legado commonly stores headers as a JSON string in "header".
+    final legacyHeader = j['header'];
+    if (legacyHeader is Map) {
+      legacyHeader.forEach((k, v) {
+        if (v != null) s.headers[k.toString()] = v.toString();
+      });
+    } else if (legacyHeader is String && legacyHeader.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(legacyHeader);
+        if (decoded is Map) {
+          decoded.forEach((k, v) {
+            if (v != null) s.headers[k.toString()] = v.toString();
+          });
+        }
+      } on FormatException {
+        // Invalid optional header text should not prevent importing a source.
+      }
+    }
+    final cookie = j['cookie'];
+    if (cookie is String && cookie.isNotEmpty) {
+      s.headers['Cookie'] = cookie;
+    }
     final fields = <String, String>{};
     RuleSet.ppcatFlatKeys.forEach((flat, nested) {
       final v = j[flat];
       if (v is String && v.isNotEmpty) fields[nested] = v;
     });
     s.rules.apply(fields);
+    s._applyLegadoRuleSections(j);
     s._applyChapterUrlFallback(j);
     // raw 保存原始平铺 JSON（此前误存合成 map，导出/分享会丢规则）
     s.raw = Map<String, dynamic>.from(j);
     return s;
+  }
+
+  /// Legado/阅读 App exports put the selectors in ruleSearch, ruleToc,
+  /// ruleBookInfo and ruleContent objects rather than ppcat flat keys.
+  /// Only the selector subset supported by the Dart evaluator is mapped.
+  void _applyLegadoRuleSections(Map<String, dynamic> j) {
+    void applySection(String section, Map<String, String> mappings) {
+      final raw = j[section];
+      if (raw is! Map) return;
+      for (final mapping in mappings.entries) {
+        final value = raw[mapping.key];
+        if (value is String && value.trim().isNotEmpty) {
+          rules.apply({mapping.value: value});
+        }
+      }
+    }
+
+    applySection('ruleSearch', const {
+      'bookList': 'searchList',
+      'name': 'searchName',
+      'author': 'searchAuthor',
+      'coverUrl': 'searchCoverUrl',
+      'bookUrl': 'searchBookUrl',
+      'intro': 'searchIntroduce',
+      'kind': 'searchKind',
+      'lastChapter': 'searchLastChapter',
+      'updateTime': 'searchUpdateTime',
+    });
+    applySection('ruleExplore', const {
+      'bookList': 'findList',
+      'name': 'findName',
+      'author': 'findAuthor',
+      'coverUrl': 'findCoverUrl',
+      'bookUrl': 'findBookUrl',
+      'intro': 'findIntroduce',
+      'kind': 'findKind',
+      'lastChapter': 'findLastChapter',
+      'updateTime': 'findUpdateTime',
+    });
+    applySection('ruleBookInfo', const {
+      'name': 'bookName',
+      'author': 'bookAuthor',
+      'coverUrl': 'bookCoverUrl',
+      'intro': 'bookIntroduce',
+      'kind': 'bookKind',
+      'lastChapter': 'bookLastChapter',
+      'updateTime': 'bookUpdateTime',
+    });
+    applySection('ruleToc', const {
+      'chapterList': 'chapterList',
+      'chapterName': 'chapterName',
+      'chapterUrl': 'chapterUrl',
+      'nextTocUrl': 'chapterUrlNext',
+    });
+    applySection('ruleContent', const {
+      'content': 'contentUrl',
+      'nextContentUrl': 'contentUrlNext',
+    });
   }
 
   void _applyChapterUrlFallback(Map<String, dynamic> j) {
