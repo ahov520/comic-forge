@@ -176,7 +176,8 @@ class SourceRuntime {
       // ppcat ruleChapterUrl addresses a *catalog page*, while ruleContentUrl
       // selects each chapter link. Previously these were confused and the
       // catalog page was never fetched.
-      if (r.chapterPageUrl.trim().isNotEmpty) {
+      if (r.chapterPageUrl.trim().isNotEmpty &&
+          _eval.evalNodes(doc, RuleAnalyzer(r.chapterList).parse()).isEmpty) {
         final selector = r.chapterPageUrl.trim();
         final relative = selector.startsWith('/') && !selector.startsWith('//') ||
             selector.startsWith('?');
@@ -185,8 +186,10 @@ class SourceRuntime {
             ? selector
             : (_eval.evalFirst(doc, RuleAnalyzer(selector).parse()) ?? '');
         final resolved = _absUrl(bookUrl, target);
-        if ((Uri.tryParse(resolved)?.hasScheme ?? false) &&
-            resolved != bookUrl) {
+        final catalogUri = Uri.tryParse(resolved);
+        if (catalogUri != null &&
+            (catalogUri.scheme == 'http' || catalogUri.scheme == 'https') &&
+            catalogUri.host.isNotEmpty && resolved != bookUrl) {
           pageUrl = resolved;
           doc2 = await _fetchDoc(_request(pageUrl));
         }
