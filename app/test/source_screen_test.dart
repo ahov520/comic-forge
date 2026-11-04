@@ -453,4 +453,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SourceScreen), findsNothing);
   });
+  test('sourceMatchesQuery searches source name, group and URL', () {
+    final source = ComicSource.fromPpcatFlat({
+      'bookSourceName': '星河漫画',
+      'bookSourceUrl': 'https://starlight.example',
+      'bookSourceGroup': '国漫',
+    });
+    expect(sourceMatchesQuery(source, ' 星河 '), isTrue);
+    expect(sourceMatchesQuery(source, '国漫'), isTrue);
+    expect(sourceMatchesQuery(source, 'STARLIGHT'), isTrue);
+    expect(sourceMatchesQuery(source, 'unrelated'), isFalse);
+    expect(sourceMatchesQuery(source, ''), isTrue);
+  });
+
+  testWidgets('源搜索过滤列表，清空后恢复全部', (tester) async {
+    await state.addSourceManual(
+      _src(name: '星河漫画', url: 'https://starlight.example'),
+    );
+    await state.addSourceManual(
+      _src(name: '另一来源', url: 'https://other.example'),
+    );
+    await _show(tester, state);
+    expect(find.text('星河漫画'), findsOneWidget);
+    expect(find.text('另一来源'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('source-search-input')),
+      'starlight',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('星河漫画'), findsOneWidget);
+    expect(find.text('另一来源'), findsNothing);
+    await tester.tap(find.byTooltip('清空源搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('另一来源'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
 }
