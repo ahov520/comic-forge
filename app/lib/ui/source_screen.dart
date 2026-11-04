@@ -52,6 +52,16 @@ String repoFailureLabel(String? error) {
   return '上次失败：$msg';
 }
 
+/// 在社区源中按名称、分组或地址查找，无额外网络请求。
+bool sourceMatchesQuery(ComicSource source, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  return source.name.toLowerCase().contains(q) ||
+      source.group.toLowerCase().contains(q) ||
+      source.url.toLowerCase().contains(q) ||
+      source.id.toLowerCase().contains(q);
+}
+
 /// 源列表健康筛选：全部 / 连续失败≥3 / 已停用。
 enum SourceHealthFilter { all, unhealthy, disabled }
 
@@ -89,10 +99,13 @@ class _SourceScreenState extends State<SourceScreen> {
   String? _refreshingRepo;
   bool _probing = false;
   SourceHealthFilter _healthFilter = SourceHealthFilter.all;
+  final TextEditingController _sourceSearch = TextEditingController();
+  String _sourceQuery = '';
 
   @override
   void dispose() {
     _feedback.dispose();
+    _sourceSearch.dispose();
     super.dispose();
   }
 
@@ -473,7 +486,8 @@ class _SourceScreenState extends State<SourceScreen> {
     final repos = widget.state.repos;
     final sources = widget.state.sources;
     final visible = sources
-        .where((s) => sourceMatchesHealthFilter(s, _healthFilter))
+        .where((s) => sourceMatchesHealthFilter(s, _healthFilter) &&
+            sourceMatchesQuery(s, _sourceQuery))
         .toList();
     final unhealthyCount = sources.where((s) => s.isUnhealthy).length;
     final disabledCount = sources.where((s) => !s.enabled).length;
@@ -537,6 +551,35 @@ class _SourceScreenState extends State<SourceScreen> {
                               _enableDisabled(unhealthyOnly: false),
                         ),
                       ),
+                    if (sources.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                          child: TextField(
+                            key: const Key('source-search-input'),
+                            controller: _sourceSearch,
+                            onChanged: (text) =>
+                                setState(() => _sourceQuery = text),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              prefixIcon: const Icon(Icons.search),
+                              hintText: '搜索源名称、分组或地址',
+                              border: const OutlineInputBorder(),
+                              suffixIcon: _sourceQuery.trim().isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: '清空源搜索',
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () {
+                                        _sourceSearch.clear();
+                                        setState(() => _sourceQuery = '');
+                                      },
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (sources.isEmpty)
                       SliverFillRemaining(
                         hasScrollBody: false,
@@ -555,16 +598,24 @@ class _SourceScreenState extends State<SourceScreen> {
                         hasScrollBody: false,
                         child: EmptyStateView(
                           icon: Icons.filter_list_outlined,
-                          title: _healthFilter == SourceHealthFilter.unhealthy
+                          title: _sourceQuery.trim().isNotEmpty
+                              ? '没有匹配的源'
+                              : _healthFilter == SourceHealthFilter.unhealthy
                               ? '没有失效源'
                               : '没有已停用的源',
-                          message: _healthFilter == SourceHealthFilter.unhealthy
+                          message: _sourceQuery.trim().isNotEmpty
+                              ? '试试其它关键词，或清空搜索后查看全部源。'
+                              : _healthFilter == SourceHealthFilter.unhealthy
                               ? '连续失败达到 3 次的源会列在这里，可一键禁用或重新启用。'
                               : '关掉开关或禁用失效源后，它们会出现在这里。',
                           actionLabel: '查看全部',
-                          onAction: () => setState(
-                            () => _healthFilter = SourceHealthFilter.all,
-                          ),
+                          onAction: () {
+                            _sourceSearch.clear();
+                            setState(() {
+                              _sourceQuery = '';
+                              _healthFilter = SourceHealthFilter.all;
+                            });
+                          },
                         ),
                       )
                     else
