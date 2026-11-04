@@ -41,6 +41,10 @@ ComicSource _src(String id, String host) => ComicSource.fromPpcatFlat({
       'ruleSearchUrl': '/search?q=searchKey',
       'ruleSearchList': 'class.item',
       'ruleSearchName': 'class.t@text',
+      'ruleSearchNoteUrl': 'class.t@href',
+      'ruleChapterList': '.chapters a',
+      'ruleChapterName': 'text',
+      'ruleContentUrl': 'href',
     });
 
 void main() {
@@ -62,6 +66,8 @@ void main() {
 
       final fetcher = FakeFetcher({
         'https://good.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _searchPage,
+        'https://good.example.com/c/1':
+            '<div class="chapters"><a href="/read/1">第1话</a></div>',
         // bad 域名无路由 → 失败
       });
       SourceRuntime rt(ComicSource s) =>
@@ -99,6 +105,8 @@ void main() {
 
       final fetcher = FakeFetcher({
         'https://ok1.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86': _searchPage,
+        'https://ok1.example.com/c/1':
+            '<div class="chapters"><a href="/read/1">第1话</a></div>',
       });
       var built = 0;
       final (ok, total) = await st.probeSources(
