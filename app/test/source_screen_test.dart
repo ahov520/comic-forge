@@ -489,4 +489,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('复制诊断摘要聚合失败数，避免泄露请求 URL 与 Cookie', () {
+    final source = _src(name: '异常漫画源', url: 'https://secret.example/token?key=abc');
+    source.failCount = 4;
+    source.lastError = 'HTTP 403 for https://secret.example/token?key=abc';
+    final report = sourceHealthReport([source]);
+    expect(report, contains('异常漫画源'));
+    expect(report, contains('HTTP 403'));
+    expect(report, contains('连续失败≥3：1'));
+    expect(report, isNot(contains('secret.example')));
+    expect(report, isNot(contains('key=abc')));
+  });
+
 }
