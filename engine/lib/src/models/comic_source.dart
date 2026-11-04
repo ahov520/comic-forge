@@ -297,6 +297,7 @@ class ComicSource {
       }
     });
     s._applyLegadoRuleSections(j);
+    s._applyChapterUrlFallback(j);
     return s;
   }
 
@@ -352,6 +353,7 @@ class ComicSource {
     });
     s.rules.apply(fields);
     s._applyLegadoRuleSections(j);
+    s._applyChapterUrlFallback(j);
     // raw 保存原始平铺 JSON（此前误存合成 map，导出/分享会丢规则）
     s.raw = Map<String, dynamic>.from(j);
     return s;
@@ -413,6 +415,15 @@ class ComicSource {
       'content': 'contentUrl',
       'nextContentUrl': 'contentUrlNext',
     });
+  }
+
+  void _applyChapterUrlFallback(Map<String, dynamic> j) {
+    // Older sources use ruleChapterUrl as a chapter URL fallback when
+    // ruleContentUrl is missing. Keep that behavior alongside chapterPageUrl.
+    final fallback = j['ruleChapterUrl'];
+    if (rules.chapterUrl.isEmpty && fallback is String) {
+      _setRule('chapterUrl', fallback);
+    }
   }
 
   void _setRule(String nestedKey, String value) {
