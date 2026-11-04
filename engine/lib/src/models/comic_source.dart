@@ -21,6 +21,8 @@ class RuleSet {
 
   String chapterList = '', chapterName = '', chapterCoverUrl = '', chapterTime = '';
   String chapterGroup = '', chapterUrl = '', chapterUrlNext = '', chapterInit = '';
+  /// A separate catalog page link/selector (ppcat ruleChapterUrl).
+  String chapterPageUrl = '';
 
   String contentInit = '', contentUrl = '', contentUrlNext = '', contentWebUrl = '';
 
@@ -68,6 +70,7 @@ class RuleSet {
     'ruleChapterTime': 'chapterTime',
     'ruleChapterGroup': 'chapterGroup',
     'ruleContentUrl': 'chapterUrl',
+    'ruleChapterUrl': 'chapterPageUrl',
     'ruleChapterUrlNext': 'chapterUrlNext',
     'ruleChapterInit': 'chapterInit',
     'ruleContentInit': 'contentInit',
@@ -114,6 +117,7 @@ class RuleSet {
         if (chapterTime.isNotEmpty) 'chapterTime': chapterTime,
         if (chapterGroup.isNotEmpty) 'chapterGroup': chapterGroup,
         if (chapterUrl.isNotEmpty) 'chapterUrl': chapterUrl,
+        if (chapterPageUrl.isNotEmpty) 'chapterPageUrl': chapterPageUrl,
         if (chapterUrlNext.isNotEmpty) 'chapterUrlNext': chapterUrlNext,
         if (chapterInit.isNotEmpty) 'chapterInit': chapterInit,
         if (contentInit.isNotEmpty) 'contentInit': contentInit,
@@ -160,6 +164,7 @@ class RuleSet {
       'chapterTime': (v) => chapterTime = v,
       'chapterGroup': (v) => chapterGroup = v,
       'chapterUrl': (v) => chapterUrl = v,
+      'chapterPageUrl': (v) => chapterPageUrl = v,
       'chapterUrlNext': (v) => chapterUrlNext = v,
       'chapterInit': (v) => chapterInit = v,
       'contentInit': (v) => contentInit = v,
@@ -277,7 +282,6 @@ class ComicSource {
       }
     });
     s._applyLegadoRuleSections(j);
-    s._applyChapterUrlFallback(j);
     return s;
   }
 
@@ -333,7 +337,6 @@ class ComicSource {
     });
     s.rules.apply(fields);
     s._applyLegadoRuleSections(j);
-    s._applyChapterUrlFallback(j);
     // raw 保存原始平铺 JSON（此前误存合成 map，导出/分享会丢规则）
     s.raw = Map<String, dynamic>.from(j);
     return s;
@@ -395,14 +398,6 @@ class ComicSource {
       'content': 'contentUrl',
       'nextContentUrl': 'contentUrlNext',
     });
-  }
-
-  void _applyChapterUrlFallback(Map<String, dynamic> j) {
-    // 双字段源的 ruleChapterUrl 可能是展开目录入口，不能覆盖逐章链接。
-    final fallback = j['ruleChapterUrl'];
-    if (rules.chapterUrl.isEmpty && fallback is String) {
-      _setRule('chapterUrl', fallback);
-    }
   }
 
   void _setRule(String nestedKey, String value) {
