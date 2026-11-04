@@ -74,7 +74,7 @@ void main() {
     await _showSettings(
       tester,
       state,
-      size: const Size(340, 1200),
+      size: const Size(340, 1400),
       textScale: 1,
     );
     expect(find.text('源订阅'), findsOneWidget);
