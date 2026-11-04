@@ -126,6 +126,11 @@ void main() {
       'Comic Forge v0.1.0',
     ]) {
       final title = find.text(label);
+      // Settings may grow as new toggles are introduced; test each tile
+      // after making it visible rather than relying on one viewport height.
+      await tester.scrollUntilVisible(title, 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
       final tile = find.widgetWithText(ListTile, label);
       final leading = find
           .descendant(of: tile, matching: find.byType(Icon))
@@ -141,6 +146,9 @@ void main() {
         14,
       );
     }
+    await tester.scrollUntilVisible(find.text('深色模式'), -220,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     final arrow = tester.getRect(
       find.descendant(
         of: find.widgetWithText(ListTile, 'WebDAV 备份 / 恢复'),
