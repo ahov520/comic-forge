@@ -157,6 +157,7 @@ class AppState extends ChangeNotifier {
   static const _kReaderBrightness = 'cf.readerBrightness';
   static const _kReaderMode = 'cf.readerMode';
   static const _kReaderVolumeKeys = 'cf.readerVolumeKeys';
+  static const _kIncognitoMode = 'cf.incognitoMode';
   static const _kScrollOffsets = 'cf.scrollOffsets';
   static const _kReaderPages = 'cf.readerPages';
   static const _kLastAutoProbe = 'cf.lastAutoProbe';
@@ -211,6 +212,20 @@ class AppState extends ChangeNotifier {
   /// WebDAV 配置（url/user/pass/path；明文存本地，仅本机使用）。
   Map<String, String>? webDavConfig;
   bool darkMode = true;
+
+  /// 无痕阅读：不新增搜索历史、阅读进度/历史、阅读统计或章内位置。
+  /// 不影响已有记录、用户主动添加的书签/收藏和网络图片缓存。
+  bool incognitoMode = false;
+
+  Future<void> setIncognitoMode(bool enabled) async {
+    if (incognitoMode == enabled) return;
+    incognitoMode = enabled;
+    // Notify synchronously before awaiting persistence, so an open reader
+    // immediately stops recording its active reading session.
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBoolSafe(_kIncognitoMode, enabled);
+  }
 
   /// 阅读器遮罩亮度（0.15~1.0，1 = 不加暗）。
   double readerBrightness = 1.0;
@@ -315,6 +330,7 @@ class AppState extends ChangeNotifier {
             (k, v) => MapEntry(k, v.toString()),
           );
     darkMode = sp.getBool(_kDark) ?? true;
+    incognitoMode = sp.getBool(_kIncognitoMode) ?? false;
     readerBrightness = sp.getDouble(_kReaderBrightness) ?? 1.0;
     scrollOffsets.clear();
     final offs = sp.getString(_kScrollOffsets);
@@ -392,7 +408,7 @@ class AppState extends ChangeNotifier {
   /// 仅在提交搜索时记录；再次搜索已有词会移到最前。
   Future<void> recordSearch(String query) async {
     final trimmed = query.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty || incognitoMode) return;
     _searchHistory
       ..remove(trimmed)
       ..insert(0, trimmed);
@@ -452,6 +468,7 @@ class AppState extends ChangeNotifier {
     required int chapterIndex,
     required int chapterCount,
   }) async {
+    if (incognitoMode) return;
     final reading = ReadingProgress(
       bookUrl: book.bookUrl,
       sourceId: book.sourceId ?? '',
@@ -913,7 +930,7 @@ class AppState extends ChangeNotifier {
     double? viewportWidth,
     double topInset = 0,
   }) async {
-    if (chapterUrl.isEmpty || !offset.isFinite) return;
+    if (incognitoMode || chapterUrl.isEmpty || !offset.isFinite) return;
     scrollOffsets[chapterUrl] = (
       offset: offset < 0 ? 0 : offset,
       at: DateTime.now().millisecondsSinceEpoch,
@@ -997,7 +1014,7 @@ class AppState extends ChangeNotifier {
 
   /// 保存从 0 开始的章内页码；页数上限由阅读器取得图片列表后校正。
   Future<void> saveReaderPage(String chapterUrl, int page) async {
-    if (chapterUrl.isEmpty || page < 0) return;
+    if (incognitoMode || chapterUrl.isEmpty || page < 0) return;
     _readerPages.remove(chapterUrl);
     _readerPages[chapterUrl] = page;
     _trimReaderPages();
