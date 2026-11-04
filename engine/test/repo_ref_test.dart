@@ -41,7 +41,8 @@ void main() {
       requests.add(request.url.toString());
       return http.Response(
           '[{"bookSourceName":"合法源","bookSourceUrl":"https://comic.example"}]',
-          200);
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'});
     });
     addTearDown(client.close);
     final bundle = await RepoClient(fetcher: HttpFetcher(client: client))
@@ -68,7 +69,8 @@ void main() {
       if (request.url.path.endsWith('/store')) {
         return http.Response(
             '{"sources":[{"name":"纯文本源","url":"https://comic.example"}]}',
-            200);
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'});
       }
       return http.Response('not found', 404);
     });
