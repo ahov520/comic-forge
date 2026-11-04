@@ -237,12 +237,12 @@ class ComicSource {
   /// 从明文仓库（Track A）JSON 构建。
   static ComicSource fromJson(Map<String, dynamic> j) {
     final s = ComicSource(
-      id: (j['id'] ?? j['sourceUrl'] ?? j['url'] ?? j['sourceName'] ?? '') as String,
-      name: (j['name'] ?? j['sourceName'] ?? '') as String,
-      group: (j['group'] ?? j['sourceGroup'] ?? '') as String,
-      icon: (j['icon'] ?? j['sourceIcon'] ?? '') as String,
-      url: (j['url'] ?? j['sourceUrl'] ?? '') as String,
-      comment: (j['comment'] ?? j['sourceComment'] ?? '') as String,
+      id: (j['id'] ?? j['sourceUrl'] ?? j['url'] ?? j['sourceName'] ?? '').toString(),
+      name: (j['name'] ?? j['sourceName'] ?? '').toString(),
+      group: (j['group'] ?? j['sourceGroup'] ?? '').toString(),
+      icon: (j['icon'] ?? j['sourceIcon'] ?? '').toString(),
+      url: (j['url'] ?? j['sourceUrl'] ?? '').toString(),
+      comment: (j['comment'] ?? j['sourceComment'] ?? '').toString(),
       enabled: (j['enabled'] ?? j['enable'] ?? true) != false,
       weight: (j['weight'] ?? 0) is int ? (j['weight'] ?? 0) as int : 0,
     );
