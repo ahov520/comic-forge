@@ -95,6 +95,43 @@ void main() {
       expect(b.lastError, isNotEmpty);
     });
 
+    test('搜索为空是待确认，不增加失效次数', () async {
+      final state = AppState();
+      addTearDown(state.dispose);
+      final source = _src('empty', 'empty.example.com');
+      await state.addSourceManual(source);
+      final fetcher = FakeFetcher({
+        'https://empty.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86':
+            '<html><body>没有结果</body></html>',
+      });
+      final (ok, total) = await state.probeSources(
+        runtimeBuilder: (s) => SourceRuntime(source: s, fetcher: fetcher),
+      );
+      expect((ok, total), (0, 1));
+      expect(source.lastCheckStatus, 'unknown');
+      expect(source.failCount, 0);
+      expect(source.lastCheckedAt, greaterThan(0));
+    });
+
+    test('搜索成功但目录为空，必须判为异常源', () async {
+      final state = AppState();
+      addTearDown(state.dispose);
+      final source = _src('nocatalog', 'nocatalog.example.com');
+      await state.addSourceManual(source);
+      final fetcher = FakeFetcher({
+        'https://nocatalog.example.com/search?q=%E6%96%97%E7%BD%97%E5%A4%A7%E9%99%86':
+            _searchPage,
+        'https://nocatalog.example.com/c/1': '<div>暂无目录</div>',
+      });
+      final (ok, total) = await state.probeSources(
+        runtimeBuilder: (s) => SourceRuntime(source: s, fetcher: fetcher),
+      );
+      expect((ok, total), (0, 1));
+      expect(source.lastCheckStatus, 'broken');
+      expect(source.lastCheckNote, contains('目录为空'));
+      expect(source.failCount, 1);
+    });
+
     test('并发受限也能全部完成；禁用源不参与体检', () async {
       final st = AppState();
       final good = _src('g1', 'ok1.example.com');
