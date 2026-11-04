@@ -831,10 +831,18 @@ class _SourceScreenState extends State<SourceScreen> {
   Widget _sourceRow(ComicSource s, ColorScheme scheme) {
     final unhealthy = s.isUnhealthy;
     final recentlyFailed = s.failCount > 0 && s.lastError.isNotEmpty;
+    final status = switch (s.lastCheckStatus) {
+      'ok' => '已验证搜索及目录',
+      'broken' => '异常：${s.lastCheckNote}',
+      'unknown' => '待确认：${s.lastCheckNote}',
+      _ => '',
+    };
     final subtitle = [
       if (s.group.isNotEmpty) s.group,
       s.url,
-      if (recentlyFailed) '最近失败(${s.failCount}): ${s.lastError}',
+      if (status.isNotEmpty) status,
+      if (recentlyFailed && s.lastCheckStatus != 'broken')
+        '最近失败(${s.failCount}): ${s.lastError}',
     ].where((e) => e.isNotEmpty).join(' · ');
     final name = s.name.isEmpty ? s.id : s.name;
     final iconColor = unhealthy
