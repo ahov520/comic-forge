@@ -240,6 +240,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           await widget.appState.reportSourceHealth(
             chapters.isNotEmpty ? [source.id] : const <String>[],
             chapters.isEmpty ? {source.id: '漫画详情加载成功，但章节目录为空'} : {},
+            catalogVerified: true,
             observedSources: [source],
           );
         }
@@ -251,7 +252,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         await widget.appState.reportSourceHealth(
           const <String>[],
           {source.id: '漫画详情或目录请求失败'},
-          observedSources: [source],
+          catalogVerified: true,
+            observedSources: [source],
         );
       }
       rethrow;
